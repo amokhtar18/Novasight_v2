@@ -239,3 +239,19 @@ async def get_principal(
         claims = await _verify_oidc(token, auth_cfg)
 
     return _build_principal(claims, auth_cfg.tenant_claim, auth_cfg.roles_claim)
+
+
+async def require_platform_admin(
+    principal: Principal = Depends(get_principal),  # noqa: B008
+    settings: Settings = Depends(get_settings),  # noqa: B008
+) -> Principal:
+    """Dependency: authorize a control-plane (platform-admin) caller.
+
+    Gates the not-tenant-scoped provisioning endpoints. The required role name comes
+    from ``settings.auth.platform_admin_role`` (golden rule 1), never a literal here.
+    Fails closed with 403 when the principal lacks the role.
+    """
+    if settings.auth.platform_admin_role not in principal.roles:
+        logger.warning("Principal sub=%r lacks platform-admin role", principal.subject)
+        raise HTTPException(status_code=403, detail="Platform admin role required")
+    return principal

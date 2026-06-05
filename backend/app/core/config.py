@@ -200,6 +200,13 @@ class AuthSettings(BaseSettings):
     # gate access to decrypted sensitive columns (see EncryptionSettings).
     roles_claim: str = "roles"
 
+    # Role (from the roles claim) a principal must hold to operate the control plane
+    # (provision / de-provision tenants). An environment-identical convention with a
+    # safe default, overridable via AUTH__PLATFORM_ADMIN_ROLE — never a code literal at
+    # the call site (golden rule 1). This is a *platform* role, not a tenant role:
+    # control-plane endpoints are not tenant-scoped.
+    platform_admin_role: str = "platform_admin"
+
     @model_validator(mode="after")
     def _require_mode_config(self) -> AuthSettings:
         """Fail closed at startup if the selected auth mode is misconfigured.
