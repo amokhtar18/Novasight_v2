@@ -15,7 +15,7 @@
  */
 
 import { useRef, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BarChart3, SlidersHorizontal } from "lucide-react";
 
 import { useDatasetQuery } from "@/api/hooks";
 import { useAppStore } from "@/store/appStore";
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { ChartSpec, ChartType, QueryRequest } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -102,7 +103,6 @@ export function ResultsScreen() {
   }
 
   // Build the query and spec from current controls.
-  const safeId = selectedDatasetId ?? "";
   const queryRequest = buildDefaultQuery(toIdentifier(dimension), DEFAULT_LIMIT);
   const spec = buildDefaultSpec(
     toIdentifier(dimension),
@@ -138,10 +138,12 @@ export function ResultsScreen() {
       <div ref={manualSectionRef} tabIndex={-1} className="outline-none">
       <Card>
         <CardHeader>
-          <CardTitle>Query &amp; Chart</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            Build it yourself
+          </CardTitle>
           <CardDescription>
-            Dataset ID:{" "}
-            <code className="text-xs bg-muted px-1 rounded">{safeId}</code>
+            Prefer to point and click? Choose a column to group by and a chart type.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -198,7 +200,7 @@ export function ResultsScreen() {
             </Alert>
           )}
 
-          {data && (
+          {data && data.row_count > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
                 {data.row_count} row{data.row_count !== 1 ? "s" : ""} returned
@@ -210,6 +212,14 @@ export function ResultsScreen() {
                 className="h-96"
               />
             </div>
+          )}
+
+          {data && data.row_count === 0 && (
+            <EmptyState
+              icon={<BarChart3 className="h-6 w-6" />}
+              title="No data to chart yet"
+              description={`Nothing grouped by "${dimension}". Check the column name matches a header in your CSV, then try again.`}
+            />
           )}
         </CardContent>
       </Card>

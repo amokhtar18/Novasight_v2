@@ -196,7 +196,7 @@ frontend/
       chart/
         ChartRenderer.tsx  # ECharts renderer driven by ChartSpec
       ui/
-        button.tsx, card.tsx, label.tsx, alert.tsx  # shadcn-style primitives
+        button.tsx, card.tsx, label.tsx, alert.tsx, empty-state.tsx  # shadcn-style primitives
     lib/
       config.ts         # loadConfig() — runtime config accessor
       cn.ts             # Tailwind class merge helper

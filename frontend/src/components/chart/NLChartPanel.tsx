@@ -43,6 +43,11 @@ interface NLChartPanelProps {
    * keep the manual builder visible/accessible so the user can proceed.
    */
   onFallback?: () => void;
+  /**
+   * Example prompts surfaced as one-click chips, so a non-technical user has a
+   * starting point instead of a blank box. Defaults to a generic starter set.
+   */
+  suggestions?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +56,14 @@ interface NLChartPanelProps {
 
 const MAX_CHARS = 2000;
 
-export function NLChartPanel({ onFallback }: NLChartPanelProps) {
+/** Generic starter prompts that work for most datasets. */
+const DEFAULT_SUGGESTIONS = [
+  "Top 10 by total sales as a bar chart",
+  "Trend over time as a line chart",
+  "Share by category as a pie chart",
+];
+
+export function NLChartPanel({ onFallback, suggestions = DEFAULT_SUGGESTIONS }: NLChartPanelProps) {
   const [prompt, setPrompt] = useState("");
   // Holds the last successful AI result so the chart persists while the user
   // edits the prompt for a follow-up.
@@ -127,6 +139,26 @@ export function NLChartPanel({ onFallback }: NLChartPanelProps) {
             </span>
           </div>
 
+          {/* Contextual example prompts — click to fill the box. */}
+          {suggestions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Try one of these:</span>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Example prompts">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setPrompt(s)}
+                    disabled={isPending}
+                    className="rounded-full border border-input bg-background px-3 py-1 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Button
             type="submit"
             disabled={isPending || prompt.trim().length === 0}
@@ -146,7 +178,7 @@ export function NLChartPanel({ onFallback }: NLChartPanelProps) {
         {/* 422 fallback — role="alert" so screen-reader users are notified the
             chart failed (a user-triggered error is as important as the 503 case). */}
         {isUngroundable && (
-          <Alert role="alert" aria-live="polite">
+          <Alert role="alert">
             <AlertTitle>Could not generate that chart</AlertTitle>
             <AlertDescription>
               {nlError.message

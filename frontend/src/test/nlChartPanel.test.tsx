@@ -274,6 +274,30 @@ describe("NLChartPanel — loading state", () => {
   });
 });
 
+describe("NLChartPanel — contextual prompt suggestions", () => {
+  it("clicking a suggestion fills the textarea and enables submit", () => {
+    mockUseNLChart.mockReturnValue(
+      // @ts-expect-error: partial mock
+      makeMutationReturn({})
+    );
+
+    render(<NLChartPanel suggestions={["Revenue by quarter as a line chart"]} />);
+
+    // Submit starts disabled (empty prompt).
+    expect(screen.getByRole("button", { name: /generate chart/i })).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /revenue by quarter as a line chart/i })
+    );
+
+    const textarea = screen.getByRole("textbox", {
+      name: /chart description/i,
+    }) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("Revenue by quarter as a line chart");
+    expect(screen.getByRole("button", { name: /generate chart/i })).not.toBeDisabled();
+  });
+});
+
 describe("NLChartPanel — input validation", () => {
   it("submit button is disabled when the prompt is empty", () => {
     mockUseNLChart.mockReturnValue(
