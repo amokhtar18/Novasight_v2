@@ -178,6 +178,33 @@ class AlertSettings(BaseSettings):
     subject_prefix: str = "[Analytica][ALERT] "
 
 
+class ObservabilitySettings(BaseSettings):
+    """Metrics + tracing knobs (Phase 6.4).
+
+    Conventions carry safe, environment-identical defaults; the one value that points
+    at infrastructure — the OTLP collector endpoint — has no default and tracing stays
+    OFF until it is supplied (golden rule 1: endpoints/exporters come from the
+    environment, never a literal). Env vars use the ``OBSERVABILITY__`` group, e.g.
+    ``OBSERVABILITY__OTLP_ENDPOINT``.
+    """
+
+    # Prometheus metrics.
+    metrics_enabled: bool = True
+    metrics_path: str = "/metrics"
+    # Port the worker exposes its metrics on via an embedded HTTP server (the API
+    # serves metrics on its own port at ``metrics_path``; workers have no HTTP server
+    # of their own, so they start a tiny one just for scraping).
+    worker_metrics_port: int = 9100
+
+    # OpenTelemetry tracing. Disabled unless explicitly enabled AND an endpoint is set.
+    tracing_enabled: bool = False
+    otlp_endpoint: str = ""  # e.g. http://otel-collector:4318 — OTLP/HTTP base URL
+    # Base service name; each process refines it (…-api, …-worker) at startup.
+    service_name: str = "analytica"
+    # Head sampling ratio in [0, 1]; 1.0 = sample every trace.
+    trace_sample_ratio: float = 1.0
+
+
 class AuthSettings(BaseSettings):
     # OIDC / RS256 settings. These point at deployment infrastructure, so they have
     # NO standalone default; the mode validator below makes them required whenever
@@ -291,6 +318,9 @@ class Settings(BaseSettings):
     # error rather than emailing nothing.
     reporting: ReportingSettings = ReportingSettings()
     alerts: AlertSettings = AlertSettings()
+    # Observability (metrics + tracing). All-default conventions; tracing stays off
+    # until an OTLP endpoint is configured.
+    observability: ObservabilitySettings = ObservabilitySettings()
     smtp: SmtpSettings | None = None
     # Column-level encryption. Optional — only required once a dataset tags a column
     # sensitive; the ingestion/serving paths validate its presence at point of use.

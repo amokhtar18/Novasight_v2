@@ -17,6 +17,7 @@ from app.ai.semantic.client import close_http_client
 from app.api.v1 import v1_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.observability import setup_fastapi_observability
 
 
 @asynccontextmanager
@@ -41,3 +42,7 @@ app = FastAPI(
 )
 
 app.include_router(v1_router)
+
+# Metrics middleware + /metrics endpoint, and OpenTelemetry tracing (no-op until an
+# OTLP endpoint is configured). Wired at import so it is in the ASGI stack at startup.
+setup_fastapi_observability(app, service_name="analytica-api")

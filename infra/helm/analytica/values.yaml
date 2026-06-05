@@ -118,6 +118,15 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# Observability (Phase 6.4). Metrics/tracing are CONFIGURED via the generic config map
+# (set OBSERVABILITY__* keys in `config:` — e.g. OBSERVABILITY__TRACING_ENABLED and
+# OBSERVABILITY__OTLP_ENDPOINT). These flags only control the Prometheus *scrape*
+# annotations the chart stamps on the API and worker pods.
+observability:
+  prometheusScrape: true
+  # Must match OBSERVABILITY__WORKER_METRICS_PORT (Dramatiq's metrics exporter port).
+  workerMetricsPort: 9100
+
 # -----------------------------------------------------------------------------
 # Bundled stateful dependencies. Minimal, single-replica deployments for on-prem /
 # dev. Disable them in cloud and point .Values.config at managed services — that is

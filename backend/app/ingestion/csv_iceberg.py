@@ -52,6 +52,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import time
 import uuid
 from typing import TYPE_CHECKING
 
@@ -60,6 +61,7 @@ from fastapi import Depends
 from app.core.config import Settings, get_settings
 from app.core.crypto import KmsProvider, build_kms_provider
 from app.core.iceberg_catalog import build_catalog_properties
+from app.core.metrics import INGEST_DURATION, INGEST_ROWS
 from app.core.object_store import ObjectStore, get_object_store
 from app.ingestion.encryption import encrypt_arrow_columns
 from app.tenancy.context import TenantContext
@@ -152,13 +154,22 @@ class CsvIcebergPipeline:
         # land as ciphertext at rest. Tolerate stand-ins without the attribute.
         sensitive_columns = list(getattr(dataset, "sensitive_columns", None) or [])
 
-        self._write_iceberg_table(
-            raw_bytes=raw_bytes,
-            table_name=table_name,
-            sensitive_columns=sensitive_columns,
-        )
+        # Pipeline metrics: time the write and count rows; label by outcome only (no
+        # tenant id — keeps cardinality bounded and tenant identity off the scrape).
+        start = time.perf_counter()
+        try:
+            num_rows = self._write_iceberg_table(
+                raw_bytes=raw_bytes,
+                table_name=table_name,
+                sensitive_columns=sensitive_columns,
+            )
+        except Exception:
+            INGEST_DURATION.labels(status="error").observe(time.perf_counter() - start)
+            raise
+        INGEST_DURATION.labels(status="success").observe(time.perf_counter() - start)
+        INGEST_ROWS.labels(status="success").inc(num_rows)
 
-        logger.info("Iceberg table created/replaced: %s", table_id)
+        logger.info("Iceberg table created/replaced: %s (%d rows)", table_id, num_rows)
         return table_id
 
     # ------------------------------------------------------------------
@@ -171,8 +182,10 @@ class CsvIcebergPipeline:
         raw_bytes: bytes,
         table_name: str,
         sensitive_columns: list[str] | None = None,
-    ) -> None:
+    ) -> int:
         """Parse the CSV, build a catalog from settings, and write (overwrite) the table.
+
+        Returns the number of rows written (for pipeline metrics).
 
         This is the synchronous, Iceberg-specific layer.  It is separated from
         ``run()`` so it can be called from a thread executor if async wrapping is
@@ -223,6 +236,8 @@ class CsvIcebergPipeline:
                 schema=arrow_table.schema,
             )
             iceberg_table.overwrite(arrow_table)
+
+        return int(arrow_table.num_rows)
 
     def _build_catalog_properties(self) -> dict[str, str]:
         """Return a pyiceberg ``load_catalog`` properties dict built from Settings.

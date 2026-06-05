@@ -16,8 +16,13 @@ hence the deliberate import order below.
 from __future__ import annotations
 
 from app.core.broker import configure_broker
+from app.reporting.observability import setup_worker_observability
 
 configure_broker()
+
+# Metrics (Dramatiq's fork-safe Prometheus middleware) + tracing. Wired after the
+# broker exists and before the actor modules are imported.
+setup_worker_observability()
 
 # Import after the broker is set so actor registration binds to it. This single
 # worker entrypoint hosts both reporting (5.1) and KPI-alert (5.2) actors/schedules.

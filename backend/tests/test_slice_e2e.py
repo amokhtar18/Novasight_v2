@@ -338,6 +338,7 @@ async def test_full_vertical_slice_single_tenant(
     with patch.object(
         CsvIcebergPipeline, "_write_iceberg_table", autospec=True
     ) as mock_write:
+        mock_write.return_value = 1  # row count, for pipeline metrics
         table_id = await pipeline.run(dataset_row)
 
     # Return value is "<namespace>.<table_name>".

@@ -36,6 +36,14 @@ dependencies = [
     "periodiq>=0.13",
     # Excel rendering for scheduled reports.
     "xlsxwriter>=3.2",
+    # Observability (Phase 6.4): Prometheus metrics + OpenTelemetry tracing. The OTLP
+    # exporter endpoint and toggles come from settings (golden rule 1).
+    "prometheus-client>=0.20",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-http>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-httpx>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
 ]
 
 [project.optional-dependencies]
@@ -150,6 +158,17 @@ ignore_missing_imports = true
 # to app/reporting/excel.py.
 [[tool.mypy.overrides]]
 module = "xlsxwriter.*"
+ignore_missing_imports = true
+
+# Observability SDKs: the OpenTelemetry instrumentation packages and the Dramatiq
+# Prometheus middleware are dynamically typed / partially stubbed. Their use is
+# isolated to app/core/{metrics,tracing,observability}.py and app/reporting/observability.py.
+[[tool.mypy.overrides]]
+module = [
+    "opentelemetry.*",
+    "prometheus_client.*",
+    "dramatiq.middleware.prometheus.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -185,6 +185,7 @@ async def test_pipeline_targets_tenant_namespace_and_table() -> None:
     with patch.object(
         CsvIcebergPipeline, "_write_iceberg_table", autospec=True
     ) as mock_write:
+        mock_write.return_value = 2  # row count, for pipeline metrics
         result = await pipeline.run(dataset)  # type: ignore[arg-type]
 
     # Return value is <namespace>.<table_name>
@@ -344,8 +345,9 @@ async def test_isolation_namespace_never_crosses_tenants() -> None:
             raw_bytes: bytes,
             table_name: str,
             sensitive_columns: list[str] | None = None,
-        ) -> None:
+        ) -> int:
             captured["table_name"] = table_name
+            return 0  # row count, for pipeline metrics
 
         with patch.object(CsvIcebergPipeline, "_write_iceberg_table", _capture):
             result = await pipeline.run(dataset)  # type: ignore[arg-type]
