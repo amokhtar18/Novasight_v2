@@ -75,6 +75,9 @@ _JWT_TTL_SECONDS = 3600
 # Cube load endpoint path (always relative to base_url — never hardcoded host).
 _LOAD_PATH = "/cubejs-api/v1/load"
 
+# Cube meta endpoint path — returns governed cubes, measures, and dimensions.
+_META_PATH = "/cubejs-api/v1/meta"
+
 # ---------------------------------------------------------------------------
 # Public result types
 # ---------------------------------------------------------------------------
@@ -138,6 +141,70 @@ class SemanticLayerClient:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    async def meta(self, ctx: TenantContext) -> dict[str, Any]:
+        """Return the governed semantic-layer schema for the current tenant.
+
+        Calls ``GET {base_url}/cubejs-api/v1/meta`` with a per-tenant JWT so
+        Cube scopes the response to ``ctx.clickhouse_db``.  The response is a
+        dict with a ``cubes`` key listing every accessible cube together with
+        its measures and dimensions.
+
+        The LLM grounding stage uses this response exclusively — the LLM never
+        learns about raw physical tables, only about the governed objects Cube
+        exposes here.
+
+        Args:
+            ctx: Server-resolved tenant context (from ``get_tenant_context``).
+                The JWT's ``clickhouse_db`` claim is populated only from here.
+
+        Returns:
+            The parsed JSON body as returned by Cube (dict with ``cubes`` list).
+
+        Raises:
+            CubeAuthError: If Cube returns 403 (bad/missing JWT).
+            CubeQueryError: If Cube returns any other non-200 status.
+        """
+        token = self._mint_jwt(ctx)
+
+        logger.info(
+            "Cube meta tenant_id=%r clickhouse_db=%r",
+            ctx.tenant_id,
+            ctx.clickhouse_db,
+        )
+
+        url = self._cfg.base_url.rstrip("/") + _META_PATH
+        response = await self._http.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+        )
+
+        if response.status_code == 403:
+            logger.warning(
+                "Cube /meta returned 403 for tenant_id=%r clickhouse_db=%r",
+                ctx.tenant_id,
+                ctx.clickhouse_db,
+            )
+            raise CubeAuthError(response.status_code, response.text)
+
+        if response.status_code != 200:
+            logger.error(
+                "Cube /meta returned unexpected status %d for tenant_id=%r",
+                response.status_code,
+                ctx.tenant_id,
+            )
+            raise CubeQueryError(response.status_code, response.text)
+
+        body: dict[str, Any] = response.json()
+        cubes: list[Any] = body.get("cubes", [])
+        logger.info(
+            "Cube meta returned %d cube(s) for tenant_id=%r",
+            len(cubes),
+            ctx.tenant_id,
+        )
+        return body
 
     async def query(
         self,

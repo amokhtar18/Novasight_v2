@@ -30,7 +30,7 @@ from app.tenancy import resources_for_slug
 # Fake environment — extends the health-test baseline with AUTH__ dev-stub vars.
 # ---------------------------------------------------------------------------
 
-_DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"  # noqa: S105
+_DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"
 
 _FAKE_ENV: dict[str, str] = {
     "ENVIRONMENT": "test",
@@ -196,7 +196,7 @@ def test_get_me_expired_token(client_with_db: TestClient) -> None:
 
 def test_get_me_wrong_secret(client_with_db: TestClient) -> None:
     """A token signed with a different secret is rejected with 401."""
-    wrong_secret = "wrong-secret-value-that-does-not-match"  # noqa: S105
+    wrong_secret = "wrong-secret-value-that-does-not-match"
     token = _make_token("acmecorp", secret=wrong_secret)
     response = client_with_db.get(
         "/api/v1/me",

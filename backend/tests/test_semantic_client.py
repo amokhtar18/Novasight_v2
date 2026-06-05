@@ -53,7 +53,7 @@ from app.tenancy.resources import resources_for_slug
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SECRET = "test-secret-at-least-32-chars-long!"  # noqa: S105
+_SECRET = "test-secret-at-least-32-chars-long!"
 _BASE_URL = "http://cube-test:4000"
 
 

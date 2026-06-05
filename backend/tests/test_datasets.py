@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.clickhouse import QueryResult
 from app.tenancy import resources_for_slug
 
-_DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"  # noqa: S105
+_DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"
 
 _FAKE_ENV: dict[str, str] = {
     "ENVIRONMENT": "test",

@@ -26,6 +26,8 @@ dependencies = [
     "clickhouse-connect>=0.8",
     # Anthropic SDK — used by the Anthropic LLM provider in app/ai/gateway/
     "anthropic>=0.50",
+    # SQL parser — validates generated SQL (read-only check, allow-list, tenant isolation)
+    "sqlglot>=25.0",
 ]
 
 [project.optional-dependencies]
@@ -74,6 +76,8 @@ ignore = [
 "tests/**/*.py" = [
     "S101",    # assert is fine in tests
     "ANN",     # no annotation enforcement in tests
+    "S608",    # SQL injection false-positives in test fixtures (controlled test strings)
+    "S105",    # hardcoded passwords are test secrets, not production credentials
 ]
 # Alembic migrations are generated/boilerplate: long DDL lines and the Alembic
 # import-ordering idiom are expected and not worth fighting.

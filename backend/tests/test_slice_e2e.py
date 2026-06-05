@@ -50,7 +50,7 @@ from app.tenancy.context import TenantContext
 # Shared constants
 # ---------------------------------------------------------------------------
 
-_DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"  # noqa: S105
+_DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"
 
 _FAKE_ENV: dict[str, str] = {
     "ENVIRONMENT": "test",

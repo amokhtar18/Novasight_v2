@@ -68,6 +68,8 @@ class AISettings(BaseSettings):
     prompt_template_dir: str        # versioned prompt templates on disk
 
 
+
+
 class CubeSettings(BaseSettings):
     """Cube semantic-layer connection.  The backend mints per-tenant JWTs and POSTs
     to the load endpoint; Cube verifies the signature with the same secret.
@@ -165,6 +167,13 @@ class Settings(BaseSettings):
     default_page_size: int = 50
     max_query_rows: int = 100_000
     max_upload_mb: int = 100
+
+    # Governed serving-table allow-list for NL→SQL validation.  Uses the same env
+    # var that Dagster and Cube consume so the physical table name has one source of
+    # truth across all layers.  A safe default is allowed because the name is
+    # identical in every environment unless an operator explicitly renames the table.
+    serving_regional_sales_table: str = "serving_regional_sales"
+    # env: SERVING_REGIONAL_SALES_TABLE
 
     postgres: PostgresSettings
     redis: RedisSettings
