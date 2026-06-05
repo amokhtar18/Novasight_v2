@@ -1,0 +1,16 @@
+# Keep the build context small and never ship local/dev artifacts or secrets.
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Tests are not part of the runtime image.
+tests/
+# Never copy local environment files into the image (golden rule 1: config at runtime).
+.env
+.env.*
+!.env.example
+# Docs / scratch
+*.md

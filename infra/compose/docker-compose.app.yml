@@ -1,0 +1,133 @@
+# Analytica — application overlay (API, workers, Dagster) on top of the infra stack.
+#
+# The base docker-compose.yml runs only infrastructure (postgres, redis, minio,
+# clickhouse, cube, openmetadata). This overlay builds and runs the application
+# images from Task 6.1 against that infrastructure, proving they start reading
+# config FROM THE ENVIRONMENT ONLY (golden rule 1).
+#
+# Bring up the full stack (run from the repo root so the root .env is auto-loaded):
+#   docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.app.yml up -d --build
+#
+# Every secret and credential comes from the root .env (the SAME vars the backend
+# reads). The only values set inline here are in-container network conventions —
+# the infra hostnames are the compose service names, not localhost — plus the
+# image-internal prompt-template path. None are secrets or per-tenant.
+
+# Anchors shared by the three backend roles (one image, different commands).
+x-backend-build: &backend-build
+  context: ../../backend
+  dockerfile: Dockerfile
+
+x-backend-env: &backend-env
+  # All application config (POSTGRES__*, REDIS__*, OBJECT_STORE__*, CLICKHOUSE__*,
+  # AI__*, AUTH__*, CUBE__*, ICEBERG__*, SEED_TENANT__*, SMTP__*, ENCRYPTION__*, ...)
+  # is read from the root .env, exactly as the app's Settings expects.
+  env_file:
+    - ../../.env
+  environment:
+    # Reach infrastructure by compose service name, not the host's localhost.
+    POSTGRES__HOST: postgres
+    REDIS__HOST: redis
+    CLICKHOUSE__HOST: clickhouse
+    OBJECT_STORE__ENDPOINT_URL: http://minio:9000
+    CUBE__BASE_URL: http://cube:4000
+    # Prompt templates bundled in the image (overrides any host-oriented .env value).
+    AI__PROMPT_TEMPLATE_DIR: /app/app/ai/prompts
+
+services:
+  # One-shot DB migration. Runs to completion, then exits; the API waits on it.
+  migrate:
+    build: *backend-build
+    <<: *backend-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: *backend-build
+    <<: *backend-env
+    ports:
+      - "${API__PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Dramatiq worker: reporting (5.1) + KPI alerts (5.2) actors.
+  worker:
+    build: *backend-build
+    <<: *backend-env
+    command: ["dramatiq", "app.reporting.worker"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # periodiq scheduler: fires the dispatcher heartbeats for reports + alerts.
+  scheduler:
+    build: *backend-build
+    <<: *backend-env
+    command: ["periodiq", "app.reporting.worker"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Dagster webserver — serves the code location (dlt ingestion + dbt assets).
+  dagster:
+    build:
+      context: ../../data-platform
+      dockerfile: orchestration/Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      CLICKHOUSE__HOST: clickhouse
+      # Catalog ingestion (5.3) talks to the in-network OpenMetadata server.
+      OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
+    ports:
+      - "${DAGSTER__PORT:-3000}:3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      # Shared instance home so the webserver and daemon agree on run/schedule storage.
+      - dagster-home:/opt/dagster/home
+
+  # Dagster daemon — schedules, sensors, and the run queue.
+  dagster-daemon:
+    build:
+      context: ../../data-platform
+      dockerfile: orchestration/Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      CLICKHOUSE__HOST: clickhouse
+      # Catalog ingestion (5.3) talks to the in-network OpenMetadata server.
+      OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
+    command: ["dagster-daemon", "run"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - dagster-home:/opt/dagster/home
+
+volumes:
+  dagster-home:
