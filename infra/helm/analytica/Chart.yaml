@@ -1,0 +1,14 @@
+apiVersion: v2
+name: analytica
+description: >-
+  Analytica — managed low-code data analytics & BI platform. One chart deploys the
+  API, the Dramatiq worker + periodiq scheduler, and the Dagster code location +
+  daemon, with optional bundled stateful dependencies (Postgres, Redis, MinIO,
+  ClickHouse). On-prem (single-tenant) and cloud (multi-tenant) differ ONLY in the
+  values file: configuration + storage backend (MinIO vs S3), per the architecture's
+  portability seam. No infrastructure value is ever hardcoded in a template
+  (golden rule 1).
+type: application
+version: 0.1.0
+# Matches the application images' version; image tags default to this when unset.
+appVersion: "0.1.0"

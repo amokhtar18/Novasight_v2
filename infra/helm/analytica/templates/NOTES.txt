@@ -1,0 +1,27 @@
+Analytica {{ .Chart.AppVersion }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Workloads:
+  - API           ({{ include "analytica.fullname" . }}-api)        service :{{ .Values.api.service.port }}
+  - worker        (dramatiq actors: reporting + KPI alerts)
+  - scheduler     (periodiq heartbeat, singleton)
+  - dagster-web   ({{ include "analytica.fullname" . }}-dagster-web) service :{{ .Values.dagster.web.service.port }}
+  - dagster-daemon (singleton)
+
+Bundled dependencies enabled:
+  postgresql={{ .Values.postgresql.enabled }} redis={{ .Values.redis.enabled }} minio={{ .Values.minio.enabled }} clickhouse={{ .Values.clickhouse.enabled }}
+
+DB migrations run automatically as a pre-install/pre-upgrade Helm hook Job.
+
+{{- if .Values.api.ingress.enabled }}
+API ingress hosts:
+{{- range .Values.api.ingress.hosts }}
+  - http{{ if $.Values.api.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+The API Service is {{ .Values.api.service.type }}. Port-forward to reach it locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "analytica.fullname" . }}-api {{ .Values.api.service.port }}:{{ .Values.api.service.port }}
+{{- end }}
+
+Reminder: secrets (passwords, API keys, signing secrets) must be supplied at install
+time (e.g. --set-string secrets.AI__API_KEY=... or an external/sealed Secret) — they
+are never baked into the chart.

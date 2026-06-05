@@ -1,0 +1,94 @@
+{{- if .Values.clickhouse.enabled -}}
+{{- $name := include "analytica.clickhouse.fullname" . -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "analytica.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  ports:
+    - name: http
+      port: 8123
+      targetPort: http
+  selector:
+    {{- include "analytica.selectorLabels" (dict "ctx" . "component" "clickhouse") | nindent 4 }}
+---
+{{- if .Values.clickhouse.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "analytica.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.clickhouse.persistence.size }}
+  {{- with .Values.clickhouse.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "analytica.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "analytica.selectorLabels" (dict "ctx" . "component" "clickhouse") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "analytica.selectorLabels" (dict "ctx" . "component" "clickhouse") | nindent 8 }}
+    spec:
+      containers:
+        - name: clickhouse
+          image: {{ .Values.clickhouse.image }}
+          ports:
+            - name: http
+              containerPort: 8123
+          env:
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "analytica.configMapName" . }}
+                  key: CLICKHOUSE__USER
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "analytica.secretName" . }}
+                  key: CLICKHOUSE__PASSWORD
+            # Lets the configured user manage one database per tenant (golden rule 2).
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+          resources:
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.clickhouse.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $name }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

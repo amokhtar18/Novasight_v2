@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "analytica.fullname" . }}-dagster-web
+  labels:
+    {{- include "analytica.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dagster-web
+spec:
+  replicas: {{ .Values.dagster.web.replicaCount }}
+  {{- if .Values.dagster.persistence.enabled }}
+  # RWO instance home shared with the daemon -> singletons co-scheduled on one node.
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "analytica.selectorLabels" (dict "ctx" . "component" "dagster-web") | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "analytica.selectorLabels" (dict "ctx" . "component" "dagster-web") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "analytica.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: dagster-web
+          image: {{ include "analytica.image" (dict "ctx" . "key" "dagster") }}
+          imagePullPolicy: {{ .Values.images.dagster.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: {{ toJson .Values.dagster.web.command }}
+          envFrom:
+            {{- include "analytica.envFrom" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.dagster.web.containerPort }}
+          {{- if .Values.dagster.persistence.enabled }}
+          volumeMounts:
+            - name: dagster-home
+              mountPath: /opt/dagster/home
+          {{- end }}
+          resources:
+            {{- toYaml .Values.dagster.web.resources | nindent 12 }}
+      {{- if .Values.dagster.persistence.enabled }}
+      volumes:
+        - name: dagster-home
+          persistentVolumeClaim:
+            claimName: {{ include "analytica.fullname" . }}-dagster-home
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

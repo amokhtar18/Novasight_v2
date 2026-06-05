@@ -97,4 +97,57 @@ docker compose --env-file .env \
 ```
 
 This brings up `migrate` (one-shot) → `api`, plus `worker`, `scheduler`, `dagster`,
-and `dagster-daemon`. The Kubernetes/Helm packaging of these same images is Phase 6.2.
+and `dagster-daemon`.
+
+# Kubernetes / Helm (Phase 6.2)
+
+The same two images are packaged by one umbrella chart,
+[`infra/helm/analytica`](../infra/helm/analytica). It deploys the API, the worker, the
+(singleton) scheduler, the Dagster webserver, and the (singleton) Dagster daemon, runs
+DB migrations as a `pre-install`/`pre-upgrade` hook Job, and can optionally bundle the
+stateful dependencies (Postgres, Redis, MinIO, ClickHouse).
+
+**No infrastructure value is hardcoded in any template** (golden rule 1). All config
+flows through two objects built entirely from values:
+
+- a **ConfigMap** of non-secret env (`config:` in values), and
+- a **Secret** of secret env (`secrets:` in values),
+
+both injected into every workload via `envFrom`. Connection endpoints for any *enabled*
+bundled dependency are filled in automatically from the in-cluster Service DNS; anything
+set in `config:` overrides them. The bundled deps read their own credentials from the
+**same** ConfigMap/Secret, so there is a single source of truth.
+
+## The portability seam: one chart, two profiles
+
+On-prem and cloud differ **only** in the values file — configuration + storage backend
+(MinIO vs S3), per `ARCHITECTURE.md`. The templates are identical.
+
+| | [`values-onprem.yaml`](../infra/helm/analytica/values-onprem.yaml) | [`values-cloud.yaml`](../infra/helm/analytica/values-cloud.yaml) |
+|---|---|---|
+| Tenancy | single-tenant | multi-tenant |
+| Stateful deps | bundled in-cluster | disabled → managed (RDS, ElastiCache, managed ClickHouse) |
+| Object store | bundled **MinIO** | **S3** (same S3-compatible seam) + SSE |
+| API | 1 replica, ClusterIP | 3 replicas, HPA, Ingress + TLS |
+
+Render either profile (the acceptance check):
+
+```bash
+helm template analytica infra/helm/analytica -f infra/helm/analytica/values-onprem.yaml
+helm template analytica infra/helm/analytica -f infra/helm/analytica/values-cloud.yaml
+```
+
+Install (supply real secrets at install time — never commit them):
+
+```bash
+helm upgrade --install analytica infra/helm/analytica \
+  -f infra/helm/analytica/values-onprem.yaml \
+  --set-string secrets.POSTGRES__PASSWORD=... \
+  --set-string secrets.AI__API_KEY=... \
+  --set-string secrets.CUBE__API_SECRET=...   # etc.
+```
+
+> Cube and OpenMetadata have their own multi-container charts; deploy them separately
+> and point `CUBE__BASE_URL` / `OPENMETADATA__HOST_PORT` at them via `config:`.
+> Tenant provisioning (Iceberg namespace + ClickHouse DB + dbt schema + registry) is
+> Phase 6.3.
