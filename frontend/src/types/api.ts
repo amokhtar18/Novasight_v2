@@ -113,3 +113,28 @@ export interface ChartSpec {
   encoding: ChartEncoding;
   options?: ChartOptions;
 }
+
+// ---------------------------------------------------------------------------
+// NL→chart endpoint — POST /api/v1/ai/chart (Task 4.4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Request body for the NL→chart endpoint.
+ * Mirrors backend `NLChartRequest` schema (snake_case wire shape).
+ */
+export interface NLChartRequest {
+  /** Natural-language description of the desired chart (1–2000 chars, non-empty). */
+  request: string;
+}
+
+/**
+ * Success (200) response from the NL→chart endpoint.
+ * `spec` is the AI-generated ChartSpec; `data` is the pre-fetched QueryResponse
+ * whose columns align to the encoding fields in `spec`.
+ * Both are fed directly into `ChartRenderer` — the same renderer used for
+ * manually-configured charts.
+ */
+export interface NLChartResponse {
+  spec: ChartSpec;
+  data: QueryResponse;
+}

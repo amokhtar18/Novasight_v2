@@ -1,18 +1,26 @@
 /**
  * ResultsScreen — query a dataset and render a chart.
  *
- * The default query does a COUNT(*) grouped by the first column the user can pick.
- * A simple spec editor (dimension + chart type) lets the user iterate.
- * The chart is driven entirely by a ChartSpec — the renderer is agnostic to
- * how the spec was produced (manual here; AI in future phases).
+ * The screen exposes two paths to a chart:
+ *
+ * 1. AI path (NLChartPanel) — the user types a natural-language description;
+ *    the backend generates a ChartSpec + pre-fetched QueryResponse and the
+ *    SAME ChartRenderer displays it.
+ * 2. Manual path — the user picks a dimension and chart type; the screen
+ *    runs a structured query and feeds the result into ChartRenderer.
+ *
+ * The manual builder is always visible and serves as the graceful fallback when
+ * the AI path returns a 422 (ungroundable spec). The NLChartPanel calls the
+ * `onFallback` prop which scrolls focus to / highlights the manual section.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { useDatasetQuery } from "@/api/hooks";
 import { useAppStore } from "@/store/appStore";
 import { ChartRenderer } from "@/components/chart/ChartRenderer";
+import { NLChartPanel } from "@/components/chart/NLChartPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -81,6 +89,18 @@ export function ResultsScreen() {
   const [dimension, setDimension] = useState("category");
   const [chartType, setChartType] = useState<ChartType>("bar");
 
+  // Ref to the manual builder section — used to scroll it into view when
+  // the AI path falls back (422 ungroundable spec).
+  const manualSectionRef = useRef<HTMLDivElement>(null);
+
+  function handleAIFallback() {
+    manualSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    manualSectionRef.current?.focus({ preventScroll: true });
+  }
+
   // Build the query and spec from current controls.
   const safeId = selectedDatasetId ?? "";
   const queryRequest = buildDefaultQuery(toIdentifier(dimension), DEFAULT_LIMIT);
@@ -111,6 +131,11 @@ export function ResultsScreen() {
         </Button>
       </div>
 
+      {/* AI-powered NL→chart panel */}
+      <NLChartPanel onFallback={handleAIFallback} />
+
+      {/* Manual builder — always visible; serves as the graceful fallback */}
+      <div ref={manualSectionRef} tabIndex={-1} className="outline-none">
       <Card>
         <CardHeader>
           <CardTitle>Query &amp; Chart</CardTitle>
@@ -188,6 +213,7 @@ export function ResultsScreen() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

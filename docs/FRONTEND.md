@@ -217,6 +217,105 @@ frontend/
 
 ---
 
+---
+
+## NL→chart flow (Task 4.4)
+
+### Overview
+
+The `NLChartPanel` component lets users describe a chart in plain English. It
+calls `POST /api/v1/ai/chart` and renders the response with the **same**
+`ChartRenderer` that powers the manual builder — the shared `ChartSpec` +
+`QueryResponse` contract is the load-bearing seam.
+
+```
+User types prompt
+      │
+      ▼
+useNLChart() mutation  ──▶  POST /api/v1/ai/chart
+      │                         { "request": "total sales by region as bar" }
+      │
+  200 OK ──────────────────▶  { spec: ChartSpec, data: QueryResponse }
+      │                              │
+      │                              ▼
+      │                        ChartRenderer (same as manual path)
+      │
+  422 ────────────────────▶  fallback message + onFallback() callback
+      │                       → parent scrolls to manual builder
+      │
+  503 ────────────────────▶  "service unavailable, try again" message
+```
+
+### Shared renderer reuse
+
+The AI endpoint returns `{ spec: ChartSpec, data: QueryResponse }` — exactly
+the two props `ChartRenderer` expects. No translation layer is needed:
+
+```tsx
+<ChartRenderer
+  spec={aiResult.spec}
+  data={aiResult.data}
+  title={aiResult.spec.options?.title ?? "AI-generated chart"}
+/>
+```
+
+The manual builder builds the same `{ spec, data }` pair from user controls and
+a `useDatasetQuery` result. Both paths share one renderer.
+
+### Graceful fallback
+
+| Status | Meaning | UI behaviour |
+|--------|---------|--------------|
+| 200 | Success | Chart rendered via `ChartRenderer` |
+| 422 | Ungroundable / invalid spec | Friendly message; `onFallback()` called; manual builder scrolled into view |
+| 503 | LLM / Cube unavailable | Transient error alert with retry prompt |
+| other | Unexpected | Generic error alert |
+
+A 422 never crashes the app and never renders a partial chart. The manual
+builder (`ResultsScreen`'s Query & Chart card) remains fully usable at all
+times — it is not hidden behind the AI panel.
+
+### New types (`src/types/api.ts`)
+
+```ts
+interface NLChartRequest {
+  request: string;   // 1–2000 chars, non-empty
+}
+
+interface NLChartResponse {
+  spec: ChartSpec;
+  data: QueryResponse;
+}
+```
+
+### New client function (`src/api/client.ts`)
+
+```ts
+async function postNLChart(request: NLChartRequest): Promise<NLChartResponse>
+```
+
+Throws `NLChartError` (a subclass of `Error`) with `.kind`:
+- `"ungroundable"` — 422
+- `"service_unavailable"` — 503
+- `"unknown"` — other non-2xx
+
+### New hook (`src/api/hooks.ts`)
+
+```ts
+function useNLChart(): UseMutationResult<NLChartResponse, Error, NLChartRequest>
+```
+
+A TanStack Query mutation (not a query) because it is user-triggered and not
+idempotent. Callers read `error` and cast to `NLChartError` to branch on kind.
+
+### Where the input lives
+
+`NLChartPanel` is rendered at the top of `ResultsScreen`, above the existing
+manual Query & Chart card. Both are always visible; the AI panel's `onFallback`
+prop scrolls the manual card into focus when a 422 is returned.
+
+---
+
 ## Running checks
 
 ```bash
