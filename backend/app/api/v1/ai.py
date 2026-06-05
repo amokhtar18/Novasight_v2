@@ -1,4 +1,4 @@
-"""AI endpoints — NL→SQL (Task 4.3) and NL→Chart (Task 4.4).
+"""AI endpoints — NL→SQL (Task 4.3), NL→Chart (Task 4.4), insights & suggestions (Task 4.5).
 
 Thin router: validates requests via Pydantic, delegates all work to the
 service layer.  The tenant scope is resolved by ``get_tenant_context`` from
@@ -15,16 +15,28 @@ the authenticated JWT — never from the request body.
 - On ANY validation failure: FAIL CLOSED — return 422 with a safe message;
   NEVER execute/resolve unvalidated output.
 - Raw LLM provider errors and API keys are never leaked to the client.
+- Insight summaries: the no-invented-numbers guardrail is enforced; any
+  number in the summary not traceable to the result set triggers a 422.
+- Suggestions: dataset ownership is verified server-side before profiling;
+  only columns present in the profiled schema may appear in suggestions.
 """
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.ai.gateway.provider import LLMProviderError
+from app.ai.insights import (
+    InsightGuardrailError,
+    InsightService,
+    SuggestionsService,
+    get_insight_service,
+    get_suggestions_service,
+)
 from app.ai.nl_chart import (
     ChartValidationError,
     NLToChartService,
@@ -327,3 +339,288 @@ async def nl_chart(
         ) from exc
 
     return NLChartResponse(spec=spec, data=data)
+
+
+# ---------------------------------------------------------------------------
+# Insight summaries (Task 4.5a): request / response schemas
+# ---------------------------------------------------------------------------
+
+
+# Hard cap on rows accepted by /ai/insights. A request larger than this is
+# rejected at deserialisation (422) before any work — a safe-everywhere bound
+# that prevents an oversized payload from tying up the event loop. The summary
+# only ever sees a small preview of the result set anyway.
+_MAX_INSIGHT_ROWS = 10_000
+
+
+class InsightRequest(BaseModel):
+    """Request body for POST /ai/insights.
+
+    The caller supplies an already-computed result set (columns + rows) — the
+    same shape as ``QueryResponse``.  The endpoint does NOT re-query data; it
+    generates a summary from the provided values only.
+
+    Attributes:
+        columns: Ordered column names in the result set.
+        rows: Data rows (each row is a list of values aligned with columns).
+        context_hint: Optional free-text context (e.g. the dashboard title or
+            the original question that produced the result set).  Used to
+            orient the summary; never used to re-query data.
+    """
+
+    columns: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Ordered column names in the result set.",
+    )
+    rows: list[list[Any]] = Field(
+        ...,
+        max_length=_MAX_INSIGHT_ROWS,
+        description="Data rows; each row is a list aligned with columns.",
+    )
+    context_hint: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional context (e.g. dashboard title or generating question).",
+    )
+
+
+class InsightResponse(BaseModel):
+    """Response for POST /ai/insights on success.
+
+    Attributes:
+        summary: A 2-4 sentence plain-text summary whose numbers are all
+            traceable to the supplied result set (guardrail enforced).
+    """
+
+    summary: str = Field(description="Validated insight summary (2-4 sentences).")
+
+
+class InsightError(BaseModel):
+    """Structured error body for POST /ai/insights.
+
+    Attributes:
+        detail: Human-readable reason (safe to display to the user).
+        code: Machine-readable error code.
+    """
+
+    detail: str
+    code: str
+
+
+# ---------------------------------------------------------------------------
+# Insight summaries endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/insights",
+    response_model=InsightResponse,
+    status_code=200,
+    responses={
+        422: {
+            "model": InsightError,
+            "description": (
+                "Summary generation failed the no-invented-numbers guardrail. "
+                "All numbers in the generated summary must be traceable to the "
+                "supplied result set."
+            ),
+        },
+        503: {"description": "LLM provider temporarily unavailable"},
+    },
+    summary="Generate a validated insight summary from an already-computed result set",
+    description=(
+        "Accepts an already-computed result set (columns + rows, same shape as QueryResponse) "
+        "and generates a 2-4 sentence natural-language summary via the LLM.\n\n"
+        "**No-invented-numbers guardrail**: after generation, every numeric token in the "
+        "summary is verified against the supplied data. If the summary contains a number "
+        "that cannot be traced to any cell value (allowing for thousands separators, "
+        "currency symbols, percentages, and sensible rounding), the endpoint fails closed "
+        "with a 422 error. One bounded regeneration is attempted before failing.\n\n"
+        "The tenant scope is resolved from the authenticated JWT — the caller cannot "
+        "influence the tenant context via the request body."
+    ),
+)
+async def generate_insight(
+    payload: InsightRequest,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: InsightService = Depends(get_insight_service),  # noqa: B008
+) -> InsightResponse:
+    """Generate a validated 2-4 sentence insight summary from a result set.
+
+    Fail-closed contract:
+    - Guardrail failure (invented number) → 422 with a safe message.
+    - LLM provider error → 503 with a safe message; key never leaked.
+    """
+    try:
+        summary = await svc.summarise(
+            ctx,
+            columns=payload.columns,
+            rows=payload.rows,
+            context_hint=payload.context_hint,
+        )
+    except InsightGuardrailError as exc:
+        logger.info(
+            "Insight guardrail rejected: tenant_id=%r reason=%r",
+            ctx.tenant_id,
+            exc.reason,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=exc.reason,
+        ) from exc
+    except LLMProviderError as exc:
+        logger.error(
+            "Insight LLM provider error: tenant_id=%r provider=%r status=%r",
+            ctx.tenant_id,
+            exc.provider,
+            exc.status_code,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is temporarily unavailable. Please try again.",
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # fail closed; never leak internals
+        # Any other failure (template load, unexpected error) is surfaced as a
+        # generic 503 — the internal message (which may contain infra detail) is
+        # logged, never returned to the client.
+        logger.exception("Insight generation failed: tenant_id=%r", ctx.tenant_id)
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is temporarily unavailable. Please try again.",
+        ) from exc
+
+    return InsightResponse(summary=summary)
+
+
+# ---------------------------------------------------------------------------
+# Dataset suggestions (Task 4.5b): request / response schemas
+# ---------------------------------------------------------------------------
+
+
+class SuggestionItem(BaseModel):
+    """One validated chart suggestion.
+
+    Attributes:
+        title: Short human-readable title for the suggested chart.
+        rationale: One sentence explaining why this chart is useful.
+        spec: A fully validated ``ChartSpec`` using the inline dataset path
+            (``query.dataset_id`` + ``query.query``).  Column references are
+            guaranteed to exist in the dataset's profiled schema.
+    """
+
+    title: str = Field(description="Short human-readable chart title.")
+    rationale: str = Field(description="One-sentence rationale for the suggestion.")
+    spec: ChartSpec = Field(description="Validated ChartSpec (inline dataset path).")
+
+
+class SuggestionsResponse(BaseModel):
+    """Response for POST /ai/datasets/{dataset_id}/suggestions.
+
+    Attributes:
+        suggestions: The validated chart suggestions.  May be an empty list if
+            the dataset profile did not yield any valid suggestions (not an error).
+        note: Optional note when no suggestions survived validation.
+    """
+
+    suggestions: list[SuggestionItem] = Field(
+        description="Validated chart suggestions (may be empty)."
+    )
+    note: str | None = Field(
+        default=None,
+        description="Optional note when no suggestions were generated.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dataset suggestions endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/datasets/{dataset_id}/suggestions",
+    response_model=SuggestionsResponse,
+    status_code=200,
+    responses={
+        404: {"description": "Dataset not found or not owned by the authenticated tenant"},
+        503: {"description": "LLM provider or ClickHouse temporarily unavailable"},
+    },
+    summary="Generate chart suggestions for a connected dataset",
+    description=(
+        "Profiles a tenant-owned dataset (column names/types, cardinality, numeric "
+        "stats, PII-capped sample values) and generates 3-5 validated ChartSpec "
+        "suggestions grounded on the profile.\n\n"
+        "**Ownership enforcement**: the dataset is resolved via "
+        "``DatasetService.get_for_tenant`` before any profiling occurs.  A dataset "
+        "not owned by the authenticated tenant returns 404 (indistinguishable from "
+        "not-found, to prevent cross-tenant existence leaks).\n\n"
+        "**Column allow-list**: every column referenced in a suggested ChartSpec must "
+        "exist in the profiled schema.  Suggestions referencing invented columns are "
+        "silently dropped.  If none survive, an empty suggestions list is returned "
+        "with a note — the endpoint never 500s.\n\n"
+        "The tenant scope and dataset ownership are resolved entirely from the "
+        "authenticated JWT + server-side DB — never from the request body."
+    ),
+)
+async def dataset_suggestions(
+    dataset_id: uuid.UUID,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: SuggestionsService = Depends(get_suggestions_service),  # noqa: B008
+) -> SuggestionsResponse:
+    """Generate validated chart suggestions for a tenant-owned dataset.
+
+    Fail-closed contract:
+    - Dataset not found / not owned by tenant → 404 (raised by DatasetService).
+    - LLM provider error → 503 with a safe message; key never leaked.
+    - Invalid suggestions → dropped silently; empty list returned with note.
+    """
+    try:
+        validated_suggestions = await svc.suggest(ctx, dataset_id=dataset_id)
+    except LLMProviderError as exc:
+        logger.error(
+            "Suggestions LLM provider error: tenant_id=%r dataset_id=%r "
+            "provider=%r status=%r",
+            ctx.tenant_id,
+            dataset_id,
+            exc.provider,
+            exc.status_code,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is temporarily unavailable. Please try again.",
+        ) from exc
+    except HTTPException:
+        # e.g. the 404 raised by DatasetService when the dataset is not owned by
+        # this tenant — preserve it (do not mask as 503).
+        raise
+    except Exception as exc:  # fail closed; never leak internals
+        # Profiling can hit ClickHouse / infra errors whose messages may contain
+        # schema names or query fragments. Log them, return a generic 503.
+        logger.exception(
+            "Suggestions failed: tenant_id=%r dataset_id=%r", ctx.tenant_id, dataset_id
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is temporarily unavailable. Please try again.",
+        ) from exc
+
+    items = [
+        SuggestionItem(title=s.title, rationale=s.rationale, spec=s.spec)
+        for s in validated_suggestions
+    ]
+
+    note: str | None = None
+    if not items:
+        note = (
+            "No chart suggestions could be generated for this dataset. "
+            "The dataset may not have sufficient structure for automatic suggestions."
+        )
+        logger.info(
+            "Suggestions: tenant_id=%r dataset_id=%r — no valid suggestions returned",
+            ctx.tenant_id,
+            dataset_id,
+        )
+
+    return SuggestionsResponse(suggestions=items, note=note)

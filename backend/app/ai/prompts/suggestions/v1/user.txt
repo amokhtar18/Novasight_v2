@@ -1,0 +1,4 @@
+Propose 3–5 chart suggestions for the dataset described above.
+
+Return only a JSON array of suggestion objects following the schema in the system prompt.
+Each suggestion must use only the column names listed in the dataset profile.
