@@ -1,0 +1,12 @@
+# Python venv & caches
+.venv/
+__pycache__/
+*.pyc
+
+# Dagster local instance (DAGSTER_HOME) — run history, logs, compute artifacts
+.dagster/
+dagster_home/
+tmp*/
+
+# dlt local pipeline working dir
+.dlt/

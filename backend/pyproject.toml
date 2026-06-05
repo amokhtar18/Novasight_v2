@@ -1,0 +1,133 @@
+[project]
+name = "analytica-backend"
+version = "0.1.0"
+description = "Analytica backend — managed data analytics & BI platform"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "asyncpg>=0.29",
+    "redis>=5.0",
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.8",
+    "aioboto3>=13.0",
+    "python-multipart>=0.0.9",
+    # Ingestion: dlt with filesystem + iceberg extras for CSV→Iceberg pipeline
+    "dlt[filesystem,iceberg,parquet]>=1.27.2",
+    # Iceberg table management via REST catalog; s3fs provides the FsspecFileIO
+    "pyiceberg[s3fs]>=0.11.1",
+    # Arrow columnar format used by both dlt's parquet path and pyiceberg writes
+    "pyarrow>=14.0",
+    # ClickHouse serving-tier client (HTTP) for registration DDL + read-only queries
+    "clickhouse-connect>=0.8",
+    # Anthropic SDK — used by the Anthropic LLM provider in app/ai/gateway/
+    "anthropic>=0.50",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.14",
+    "anyio>=4.0",
+    "aiosqlite>=0.20",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "ANN",  # flake8-annotations (enforce type hints)
+    "S",    # flake8-bandit (security)
+    "RUF",  # ruff-native rules
+]
+# TCH (type-checking imports) is omitted: pydantic field types like SecretStr must
+# be available at runtime; moving them into TYPE_CHECKING blocks would break them.
+ignore = [
+    "S101",    # use of assert — allowed in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # assert is fine in tests
+    "ANN",     # no annotation enforcement in tests
+]
+# Alembic migrations are generated/boilerplate: long DDL lines and the Alembic
+# import-ordering idiom are expected and not worth fighting.
+"alembic/versions/*.py" = [
+    "E501",    # DDL column definitions run long
+    "ANN",     # revision identifier module vars need no annotations beyond given
+]
+"alembic/env.py" = [
+    "E402",    # imports follow Alembic's config bootstrap by design
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+# pydantic-settings generates __init__ signatures that mypy can't see without the plugin
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "pydantic_settings.*"
+ignore_missing_imports = true
+
+# aioboto3 / aiobotocore ship no type information; the S3 client is created and
+# called dynamically, so its surface is opaque to mypy. We isolate that to the
+# object-store adapter and treat the import as untyped here.
+[[tool.mypy.overrides]]
+module = "aioboto3.*"
+ignore_missing_imports = true
+
+# pyiceberg ships no py.typed marker; treat all imports as untyped.
+[[tool.mypy.overrides]]
+module = "pyiceberg.*"
+ignore_missing_imports = true
+
+# pyarrow ships stubs but some sub-modules (pyarrow.csv) are not fully exported.
+[[tool.mypy.overrides]]
+module = "pyarrow.*"
+ignore_missing_imports = true
+no_implicit_reexport = false
+
+# clickhouse-connect ships no py.typed marker; the client surface is dynamic and
+# isolated to the ClickHouse adapter, so we treat its imports as untyped.
+[[tool.mypy.overrides]]
+module = "clickhouse_connect.*"
+ignore_missing_imports = true
+
+# anthropic SDK ships py.typed but some dynamic surfaces (e.g. content block
+# types, usage objects) are not fully resolvable in strict mode.  The provider
+# implementation is isolated to app/ai/gateway/providers/anthropic.py.
+[[tool.mypy.overrides]]
+module = "anthropic.*"
+ignore_missing_imports = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

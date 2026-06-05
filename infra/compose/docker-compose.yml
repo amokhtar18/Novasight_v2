@@ -1,0 +1,214 @@
+# Analytica — local dev / single-tenant on-prem stack.
+#
+# Golden rule (config-management skill): nothing environment-specific is hardcoded.
+# Every credential, port, database name, and bucket below is interpolated from the
+# repo-root .env file — the SAME variables the backend reads via app/core/config.py,
+# so the stack and the app stay in lockstep from one source of truth.
+#
+# Bring up:   docker compose -f infra/compose/docker-compose.yml up -d
+# (run from the repo root so the root .env is picked up; see infra/compose/README.md)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES__USER:?set POSTGRES__USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES__PASSWORD:?set POSTGRES__PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES__DB:?set POSTGRES__DB in .env}
+    ports:
+      - "${POSTGRES__PORT}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS__PORT}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORE__ACCESS_KEY:?set OBJECT_STORE__ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORE__SECRET_KEY:?set OBJECT_STORE__SECRET_KEY in .env}
+    ports:
+      - "${MINIO__API_PORT}:9000"       # S3 API
+      - "${MINIO__CONSOLE_PORT}:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # Acceptance criterion: MinIO liveness probe must pass.
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # One-shot: create the lake bucket, then exit. Re-running is a no-op.
+  minio-setup:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 \
+          "${OBJECT_STORE__ACCESS_KEY}" "${OBJECT_STORE__SECRET_KEY}" &&
+        mc mb --ignore-existing "local/${OBJECT_STORE__BUCKET:?set OBJECT_STORE__BUCKET in .env}" &&
+        echo "bucket ready: ${OBJECT_STORE__BUCKET}"
+    restart: "no"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE__USER:?set CLICKHOUSE__USER in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE__PASSWORD:?set CLICKHOUSE__PASSWORD in .env}
+      # Lets the configured user manage databases per tenant (one DB per tenant).
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "${CLICKHOUSE__PORT}:8123"   # HTTP interface (/ping lives here)
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      # Acceptance criterion: ClickHouse /ping must return "Ok.".
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Cube semantic layer
+  #
+  # Golden rule 1 — config-driven: every credential, host, port, and table name
+  # is interpolated from the repo-root .env.  No literal values appear here.
+  #
+  # Golden rule 2 — tenant isolation: Cube enforces per-tenant compiled-schema
+  # caching via the clickhouse_db claim in the caller's JWT (see
+  # data-platform/semantic/config/cube.js).  The container itself has NO knowledge
+  # of any individual tenant; isolation lives in the model + config layer.
+  #
+  # ClickHouse driver: HTTP only (port 8123).  Cube's clickhouse driver must use
+  # CUBEJS_DB_TYPE=clickhouse and CUBEJS_DB_PORT pointing at the HTTP interface —
+  # never the native TCP port 9000, which is not exposed in this stack.
+  # ---------------------------------------------------------------------------
+  cube:
+    # Pinned (not :latest) for reproducibility — matches every other image in this
+    # stack. This is the version the Task 4.1 end-to-end check was verified against;
+    # Cube's release cadence is aggressive and a major bump can change the
+    # multi-tenancy / driver contract without any code change. Bump deliberately.
+    image: cubejs/cube:v1.6.55
+    restart: unless-stopped
+    ports:
+      - "${CUBE__PORT:?set CUBE__PORT in .env}:4000"
+    environment:
+      # --- Database (ClickHouse over HTTP) ---
+      CUBEJS_DB_TYPE: clickhouse
+      CUBEJS_DB_HOST: clickhouse                    # Docker Compose service name
+      CUBEJS_DB_PORT: "${CLICKHOUSE__PORT:?set CLICKHOUSE__PORT in .env}"
+      CUBEJS_DB_USER: "${CLICKHOUSE__USER:?set CLICKHOUSE__USER in .env}"
+      CUBEJS_DB_PASS: "${CLICKHOUSE__PASSWORD:?set CLICKHOUSE__PASSWORD in .env}"
+      CUBEJS_DB_SSL: "false"
+
+      # --- Cube Store (required cache/queue layer in production mode) ---
+      # Without this, Cube runs in production mode but has no embedded store and
+      # rejects every query ("Cube Store was specified as queue/cache driver").
+      # Points at the dedicated cubestore service below by its Compose name.
+      CUBEJS_CUBESTORE_HOST: cubestore
+      CUBEJS_CUBESTORE_PORT: "3030"
+
+      # --- Cube API ---
+      # Shared HS256 secret — the backend signs tenant JWTs with this same secret.
+      # The JWT must carry { "clickhouse_db": "<tenant_db>" }.
+      CUBEJS_API_SECRET: "${CUBE__API_SECRET:?set CUBE__API_SECRET in .env}"
+
+      # --- Serving table name (config-driven; no literal) ---
+      # Consumed by the data model via COMPILE_CONTEXT.env.CUBEJS_SERVING_REGIONAL_SALES_TABLE
+      CUBEJS_SERVING_REGIONAL_SALES_TABLE: "${SERVING_REGIONAL_SALES_TABLE:?set SERVING_REGIONAL_SALES_TABLE in .env}"
+
+      # --- Schema / model path (relative to the Cube project root /cube/conf) ---
+      # Cube resolves this against the project root, so it MUST be relative
+      # ("model"), not absolute — an absolute path is joined onto the root and
+      # finds no files, silently compiling zero cubes.
+      CUBEJS_SCHEMA_PATH: model
+
+      # --- Dev mode: disable Cube Cloud telemetry in local stack ---
+      CUBEJS_TELEMETRY: "false"
+
+      # --- Base URL used by the backend client to reach Cube ---
+      # (informational: the app reads CUBE__BASE_URL from .env, not this var)
+      CUBEJS_APP: analytica
+
+    volumes:
+      # Mount the model directory (read-only) so the container sees the latest schema.
+      - ../../data-platform/semantic/model:/cube/conf/model:ro
+      # Mount the server config (cube.js) that wires multi-tenancy.
+      - ../../data-platform/semantic/config/cube.js:/cube/conf/cube.js:ro
+
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      cubestore:
+        condition: service_started
+
+    healthcheck:
+      # Probe the unauthenticated liveness endpoint. Note: /cubejs-api/v1/meta now
+      # requires a valid tenant JWT (built-in auth), so it can never pass a
+      # token-less healthcheck — /livez needs no auth. The Cube image ships neither
+      # wget nor curl, so we probe with Node (always present in the image).
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:4000/livez',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Cube Store — Cube's cache/queue/pre-aggregation store. A required component
+  # whenever Cube runs outside dev mode. Single-node here (router+worker in one);
+  # cloud deployments scale it out. No tenant data lives here permanently — it is
+  # a cache keyed by the per-tenant compiled query, so tenant isolation is
+  # preserved by the upstream security context.
+  # ---------------------------------------------------------------------------
+  cubestore:
+    # Pinned to the same Cube release as the cube service (they must be compatible).
+    image: cubejs/cubestore:v1.6.55
+    restart: unless-stopped
+    environment:
+      CUBESTORE_SERVER_NAME: cubestore:3030
+    volumes:
+      - cubestore-data:/cube/data
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  clickhouse-data:
+  cubestore-data:

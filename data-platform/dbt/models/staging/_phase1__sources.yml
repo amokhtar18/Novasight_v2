@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: phase1
+    description: >
+      Datasets ingested by the Phase 1 vertical slice. A CSV is loaded into the
+      tenant's Iceberg namespace and registered in the tenant's ClickHouse database
+      as an Iceberg-engine table named `dataset_<uuid_hex>`. dbt reads it from there.
+    # The source lives in the tenant's ClickHouse database, which equals the tenant's
+    # dbt schema (resolved from the tenant context). Same isolation boundary as the
+    # models written by this project — never another tenant's schema.
+    schema: "{{ env_var('DBT_SCHEMA') }}"
+    tables:
+      - name: regional_sales
+        description: >
+          The Phase 1 sample dataset: one row per region with its total sales amount
+          (columns `region`, `amount`). The physical table name is per-dataset runtime
+          data, supplied via DBT_PHASE1_DATASET_TABLE — never hardcoded. The empty
+          default only lets `dbt parse` run offline; `dbt build` requires it set.
+        identifier: "{{ env_var('DBT_PHASE1_DATASET_TABLE', '') }}"

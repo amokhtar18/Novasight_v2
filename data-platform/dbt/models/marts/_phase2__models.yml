@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: mart_regional_sales
+    description: >
+      Consumption-ready regional-sales mart served from ClickHouse and read by the
+      semantic layer. One row per region with its sales amount, share of total, and
+      sales rank. The dbt-expectations range check below is the quality gate that
+      guards the serving table before it is exposed (dbt-dagster-workflow skill).
+    columns:
+      - name: region
+        description: "Sales region (trimmed, lower-cased). Natural key — one row per region."
+        data_tests:
+          - not_null
+          - unique
+      - name: amount
+        description: "Total sales amount for the region."
+        data_tests:
+          - not_null
+          # Sales amounts are non-negative — a negative value signals bad source data.
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                strictly: false
+      - name: amount_share_pct
+        description: "Region's share of total sales, as a percentage in [0, 100]."
+        data_tests:
+          - not_null
+          # Expectation/range check: a share percentage must fall within 0–100.
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+                strictly: false
+      - name: sales_rank
+        description: "Dense rank by amount descending — 1 = highest-selling region."
+        data_tests:
+          - not_null
+          - unique

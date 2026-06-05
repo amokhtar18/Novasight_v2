@@ -1,0 +1,66 @@
+"""Async SQLAlchemy engine and session factory.
+
+The engine is created lazily from settings so that the module can be imported
+without live infrastructure.  Session lifecycle is managed per-request via the
+``get_db`` FastAPI dependency.
+
+Usage::
+
+    from app.core.db import get_db
+    # In a FastAPI endpoint:
+    db: AsyncSession = Depends(get_db)
+"""
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from app.core.config import Settings, get_settings
+
+# Module-level singletons; initialised on first call to get_engine().
+_engine: AsyncEngine | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+def get_engine(settings: Settings) -> AsyncEngine:
+    """Return (or create) the shared async engine."""
+    global _engine
+    if _engine is None:
+        _engine = create_async_engine(
+            settings.postgres.url,
+            echo=False,
+            pool_pre_ping=True,
+        )
+    return _engine
+
+
+def _get_session_factory(settings: Settings) -> async_sessionmaker[AsyncSession]:
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = async_sessionmaker(
+            bind=get_engine(settings),
+            expire_on_commit=False,
+            autoflush=False,
+        )
+    return _session_factory
+
+
+async def get_db(
+    settings: Settings = Depends(get_settings),  # noqa: B008
+) -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI dependency: yield an ``AsyncSession``, commit on success, rollback on error."""
+    factory = _get_session_factory(settings)
+    async with factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

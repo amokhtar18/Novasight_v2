@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: int_regional_sales_enriched
+    description: >
+      Reusable building block over the regional-sales staging view: one row per region
+      with its share of total sales (`amount_share_pct`). Ephemeral — inlined into the
+      mart, never written to the tenant schema. Tests here are a data-quality gate (run
+      as Dagster asset checks in Task 2.3); a failure blocks the downstream mart.
+    columns:
+      - name: region
+        description: "Sales region (trimmed, lower-cased). Natural key — one row per region."
+        data_tests:
+          - not_null
+          - unique
+      - name: amount
+        description: "Total sales amount for the region."
+        data_tests:
+          - not_null
+      - name: amount_share_pct
+        description: "Region's share of total sales, as a percentage (0–100)."
+        data_tests:
+          - not_null

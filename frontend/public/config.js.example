@@ -1,0 +1,9 @@
+/**
+ * Example runtime configuration file.
+ * Copy to public/config.js and fill in real values for local development.
+ * The real config.js is git-ignored and never committed.
+ */
+window.__APP_CONFIG__ = {
+  apiBaseUrl: "/api/v1",
+  authToken: "REPLACE_WITH_DEV_TOKEN",
+};

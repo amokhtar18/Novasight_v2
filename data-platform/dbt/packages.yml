@@ -1,0 +1,10 @@
+# dbt package dependencies.
+#
+# dbt-expectations gives us Great-Expectations-style data tests (range/expectation
+# checks) used as the quality gate on marts before they are served from ClickHouse
+# (see the dbt-dagster-workflow skill: "Quality gate before serving"). It pulls in
+# dbt_utils transitively. Pin to a compatible minor range so `dbt deps` is
+# reproducible across dev / on-prem / cloud (golden rule 1: same codebase everywhere).
+packages:
+  - package: metaplane/dbt_expectations
+    version: [">=0.10.0", "<0.11.0"]

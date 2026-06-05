@@ -1,0 +1,115 @@
+/**
+ * TypeScript counterparts to backend Pydantic schemas.
+ * Source of truth: backend/app/schemas/{dataset,query}.py
+ * Keep these in sync when the backend schemas change.
+ */
+
+// ---------------------------------------------------------------------------
+// Dataset
+// ---------------------------------------------------------------------------
+
+export interface DatasetRead {
+  id: string; // uuid — serialised as string
+  name: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  status: string;
+  created_at: string; // ISO-8601 datetime string
+}
+
+// ---------------------------------------------------------------------------
+// Query
+// ---------------------------------------------------------------------------
+
+export type AggFunction = "count" | "sum" | "avg" | "min" | "max";
+export type FilterOp = "=" | "!=" | "<" | "<=" | ">" | ">=";
+
+export interface Metric {
+  function: AggFunction;
+  /** Required for every function except "count". */
+  column?: string;
+  alias?: string;
+}
+
+export interface Filter {
+  column: string;
+  op: FilterOp;
+  value: string | number | boolean;
+}
+
+export interface QueryRequest {
+  dimensions: string[];
+  metrics: Metric[];
+  filters?: Filter[];
+  limit?: number;
+}
+
+export interface QueryResponse {
+  columns: string[];
+  rows: unknown[][];
+  row_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Chart spec — the shared contract (Task 3.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Declarative description of one chart. The SAME shape is produced by manual
+ * configuration (the builder / explore view) and by the AI NL→chart endpoint,
+ * so manual and AI charts share one renderer.
+ *
+ * This mirrors `backend/app/schemas/chart.py` field-for-field (snake_case, so the
+ * JSON is identical on both sides). The contract is documented in
+ * `docs/CHART_SPEC.md`. The spec carries no SQL: `query` describes a structured
+ * aggregation, and encoding `field` values are display references to columns in a
+ * `QueryResponse`.
+ */
+export type ChartType = "bar" | "line" | "area" | "pie" | "table";
+
+/** Where a chart's data comes from. At least one source must be present. */
+export interface ChartQuery {
+  /** Dataset the inline query runs against (Phase 1 path). */
+  dataset_id?: string | null; // uuid
+  /** Inline structured aggregation, compiled to safe read-only SQL server-side. */
+  query?: QueryRequest | null;
+  /** Governed metric names resolved by the semantic layer (AI path). */
+  metric_refs?: string[];
+}
+
+/** One plotted series: which result column to read, and how to label it. */
+export interface SeriesEncoding {
+  /** Column name in QueryResponse.columns to read values from. */
+  field: string;
+  /** Legend label; defaults to `field` when omitted. */
+  name?: string | null;
+  /** Optional explicit colour (e.g. "#3b82f6"); the renderer picks one if null. */
+  color?: string | null;
+}
+
+/** How query columns map onto the chart's visual channels. */
+export interface ChartEncoding {
+  /** Category axis (x for bar/line/area, slice label for pie). Optional for table. */
+  x?: string | null;
+  /** Value series (for a table, the columns to display). At least one. */
+  series: SeriesEncoding[];
+}
+
+/** Display-only options. None of these affect the query or the data. */
+export interface ChartOptions {
+  title?: string | null;
+  stacked?: boolean;
+  show_legend?: boolean;
+  x_axis_label?: string | null;
+  y_axis_label?: string | null;
+}
+
+export interface ChartSpec {
+  /** Contract version. Current: "1". */
+  version?: string;
+  type: ChartType;
+  query: ChartQuery;
+  encoding: ChartEncoding;
+  options?: ChartOptions;
+}

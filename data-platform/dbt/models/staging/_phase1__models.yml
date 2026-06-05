@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: stg_phase1__regional_sales
+    description: >
+      Cleaned, typed staging view over the Phase 1 regional-sales dataset.
+      Grain: one row per region. These tests are the first data-quality gate
+      (run as Dagster asset checks in Task 2.2) — a failure blocks downstream marts.
+    columns:
+      - name: region
+        description: "Sales region, trimmed and lower-cased. Natural key (one row per region)."
+        data_tests:
+          - not_null
+          - unique
+      - name: amount
+        description: "Total sales amount for the region."
+        data_tests:
+          - not_null

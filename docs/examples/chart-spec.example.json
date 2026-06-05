@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "type": "bar",
+  "query": {
+    "dataset_id": "3f8c8b1e-7c2a-4e5d-9a1b-2c3d4e5f6a7b",
+    "query": {
+      "dimensions": ["month"],
+      "metrics": [
+        { "function": "sum", "column": "sales", "alias": "sales" },
+        { "function": "sum", "column": "returns", "alias": "returns" }
+      ],
+      "filters": [],
+      "limit": 50
+    },
+    "metric_refs": []
+  },
+  "encoding": {
+    "x": "month",
+    "series": [
+      { "field": "sales", "name": "Sales", "color": "#3b82f6" },
+      { "field": "returns", "name": "Returns", "color": null }
+    ]
+  },
+  "options": {
+    "title": "Monthly sales vs returns",
+    "stacked": false,
+    "show_legend": true,
+    "x_axis_label": "Month",
+    "y_axis_label": "Amount"
+  }
+}

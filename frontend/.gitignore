@@ -1,0 +1,28 @@
+# Build output
+dist
+dist-ssr
+
+# Dependencies
+node_modules
+
+# Vite local overrides
+*.local
+
+# Env files (real values — never commit these)
+.env
+.env.local
+.env.*.local
+
+# Runtime config with real tokens/URLs — NEVER commit the real one
+public/config.js
+
+# Keep the example
+!public/config.js.example
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Test coverage
+coverage

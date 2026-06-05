@@ -1,0 +1,42 @@
+# Analytica dbt project.
+#
+# One codebase across environments (golden rule 1): this file contains NO hosts,
+# credentials, buckets, or tenant-specific values. The connection comes from the
+# env-driven `profiles.yml`; the target schema is the tenant's dbt schema, resolved
+# from the tenant context at invocation time (see `tenancy-isolation`).
+#
+# Layering (see the `dbt-dagster-workflow` skill):
+#   staging/      1:1 with sources, light cleaning + typing  -> view
+#   intermediate/ reusable joins / business logic            -> ephemeral
+#   marts/        consumption-ready, loaded into ClickHouse   -> table
+name: analytica
+version: 1.0.0
+config-version: 2
+
+# Profile name resolved from profiles.yml (env-driven; no secrets in files).
+profile: analytica
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+
+clean-targets: ["target", "dbt_packages", "logs"]
+
+require-dbt-version: [">=1.8.0", "<2.0.0"]
+
+# Models land directly in the target schema (the tenant's ClickHouse database), so
+# isolation holds: no custom +schema suffixes that would scatter a tenant's models.
+#   staging      -> view      (recomputed on read, 1:1 with sources)
+#   intermediate -> ephemeral (inlined building blocks, never materialized)
+#   marts        -> table     (consumption-ready, served from ClickHouse)
+models:
+  analytica:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table

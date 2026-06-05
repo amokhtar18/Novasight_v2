@@ -1,0 +1,7 @@
+# dbt build artifacts — never committed.
+target/
+dbt_packages/
+logs/
+.user.yml
+# Local dbt virtualenv used to run dbt (created by the developer; not part of the repo).
+.dbt-venv/

@@ -1,0 +1,37 @@
+# Analytica orchestration — the Dagster code location.
+#
+# Separate deployable from the backend and the dbt project, but it reads the SAME
+# env-driven configuration (CLICKHOUSE__*, DBT_SCHEMA, ...) so dev / on-prem / cloud
+# share one codebase and differ only in configuration (golden rule 1).
+[project]
+name = "analytica-orchestration"
+version = "0.1.0"
+description = "Dagster assets for the Analytica data platform (dlt ingestion + dbt models)."
+requires-python = ">=3.12"
+dependencies = [
+    "dagster>=1.9,<1.12",
+    "dagster-webserver>=1.9,<1.12",
+    "dagster-dbt>=0.25,<0.28",
+    "dbt-clickhouse>=1.10,<1.11",
+    "dlt[clickhouse]>=1.27",
+    "clickhouse-connect>=0.8",
+    "pydantic-settings>=2.5",
+    "pyarrow>=17",
+]
+
+[project.optional-dependencies]
+# Test-only deps; the gate's logic is unit-tested without a live warehouse.
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# `dagster dev` discovers the code location from here.
+[tool.dagster]
+module_name = "analytica_orchestration.definitions"
+code_location_name = "analytica_orchestration"
+
+[tool.setuptools.packages.find]
+include = ["analytica_orchestration*"]

@@ -1,0 +1,12 @@
+# Secrets — never commit a real .env (placeholders live in .env.example)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
