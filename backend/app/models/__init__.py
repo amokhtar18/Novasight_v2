@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from app.models.base import Base, TimestampMixin
 from app.models.dataset import Dataset
+from app.models.kpi_threshold import KpiThreshold
+from app.models.report_definition import ReportDefinition
 from app.models.tenant import Tenant
 from app.models.tenant_resource_map import TenantResourceMap
 from app.models.user import User
@@ -16,6 +18,8 @@ from app.models.user import User
 __all__ = [
     "Base",
     "Dataset",
+    "KpiThreshold",
+    "ReportDefinition",
     "Tenant",
     "TenantResourceMap",
     "TimestampMixin",

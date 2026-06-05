@@ -206,9 +206,88 @@ services:
     volumes:
       - cubestore-data:/cube/data
 
+  # ---------------------------------------------------------------------------
+  # OpenMetadata — data catalog + lineage (Phase 5.3)
+  #
+  # Golden rule 1 — config-driven: every infrastructure value (DB host/creds,
+  # search host, ports, server URL, ingestion JWT) is interpolated from the
+  # repo-root .env. The OpenMetadata server reuses the existing `postgres` service
+  # for its metadata store (a dedicated database) and a dedicated Elasticsearch for
+  # search/lineage. The catalog_metadata Dagster asset (data-platform/orchestration)
+  # then ingests the tenant's ClickHouse tables + dbt lineage into this server.
+  #
+  # Pinned (not :latest) for reproducibility, like every other image in this stack.
+  # Bringing OpenMetadata up runs schema migrations first (the openmetadata-migrate
+  # one-shot) before the server starts; see infra/compose/README.md and docs/CATALOG.md.
+  # ---------------------------------------------------------------------------
+  openmetadata-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.4
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ports:
+      - "${OPENMETADATA__ES_PORT:-9200}:9200"
+    volumes:
+      - openmetadata-es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # One-shot: run OpenMetadata schema migrations against Postgres, then exit.
+  openmetadata-migrate:
+    image: docker.getcollate.io/openmetadata/server:1.6.5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openmetadata-elasticsearch:
+        condition: service_healthy
+    environment: &openmetadata-env
+      # --- Metadata store (reuse the stack's Postgres; dedicated database) ---
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: "${POSTGRES__USER:?set POSTGRES__USER in .env}"
+      DB_USER_PASSWORD: "${POSTGRES__PASSWORD:?set POSTGRES__PASSWORD in .env}"
+      OM_DATABASE: "${OPENMETADATA__DB:-openmetadata}"
+      # --- Search backend ---
+      SEARCH_TYPE: elasticsearch
+      ELASTICSEARCH_HOST: openmetadata-elasticsearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: http
+      # --- Server base URL the UI/clients use (matches OPENMETADATA__HOST_PORT) ---
+      OPENMETADATA_CLUSTER_NAME: analytica
+      SERVER_HOST_API_URL: "${OPENMETADATA__SERVER_URL:-http://openmetadata-server:8585/api}"
+    command: ["./bootstrap/openmetadata-ops.sh", "migrate"]
+    restart: "no"
+
+  openmetadata-server:
+    image: docker.getcollate.io/openmetadata/server:1.6.5
+    restart: unless-stopped
+    depends_on:
+      openmetadata-migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *openmetadata-env
+    ports:
+      - "${OPENMETADATA__SERVER_PORT:-8585}:8585"
+      - "${OPENMETADATA__SERVER_ADMIN_PORT:-8586}:8586"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8586/healthcheck | grep -q '\"healthy\":true'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
 volumes:
   postgres-data:
   redis-data:
   minio-data:
   clickhouse-data:
   cubestore-data:
+  openmetadata-es-data:

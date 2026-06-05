@@ -14,6 +14,7 @@ Coverage:
 """
 from __future__ import annotations
 
+import base64
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,6 +28,9 @@ from app.core.clickhouse import QueryResult
 from app.tenancy import resources_for_slug
 
 _DEV_STUB_SECRET = "test-dev-stub-secret-do-not-use-in-production"
+# Fixed base64-encoded 32-byte AES key for the local encryption provider in tests.
+_ENCRYPTION_KEY_BYTES = b"\x00" * 32
+_ENCRYPTION_KEY_B64 = base64.b64encode(_ENCRYPTION_KEY_BYTES).decode("ascii")
 
 _FAKE_ENV: dict[str, str] = {
     "ENVIRONMENT": "test",
@@ -58,18 +62,26 @@ _FAKE_ENV: dict[str, str] = {
     "SEED_TENANT__SLUG": "local",
     "SEED_TENANT__NAME": "Local Tenant",
     "SEED_TENANT__ADMIN_EMAIL": "admin@local.test",
+    # Column-level encryption (Phase 5.4) — local provider with a fixed test key.
+    "ENCRYPTION__PROVIDER": "local",
+    "ENCRYPTION__KEY": _ENCRYPTION_KEY_B64,
+    "ENCRYPTION__SENSITIVE_VIEW_ROLE": "sensitive_viewer",
 }
 
 
-def _make_token(tenant_slug: str, *, exp_offset: int = 3600) -> str:
-    """Sign an HS256 dev-stub JWT carrying the tenant claim."""
-    payload = {
+def _make_token(
+    tenant_slug: str, *, exp_offset: int = 3600, roles: list[str] | None = None
+) -> str:
+    """Sign an HS256 dev-stub JWT carrying the tenant (and optional roles) claim."""
+    payload: dict[str, Any] = {
         "sub": "user-sub-123",
         "email": "user@example.com",
         "tenant": tenant_slug,
         "exp": int(time.time()) + exp_offset,
         "iat": int(time.time()),
     }
+    if roles is not None:
+        payload["roles"] = roles
     return jwt.encode(payload, _DEV_STUB_SECRET, algorithm="HS256")
 
 
@@ -477,3 +489,91 @@ async def test_tenant_cannot_query_other_tenants_dataset(
     assert fake_clickhouse.queries[0]["database"] == (
         resources_for_slug("tenant_alpha").clickhouse_db
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5.4 — sensitive columns are masked unless the principal is authorized
+# ---------------------------------------------------------------------------
+
+
+async def _tag_sensitive(session: AsyncSession, dataset_id: str, columns: list[str]) -> None:
+    """Mark ``columns`` sensitive on an existing dataset (same session the app uses)."""
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from app.models.dataset import Dataset
+
+    result = await session.execute(
+        select(Dataset).where(Dataset.id == _uuid.UUID(dataset_id))
+    )
+    dataset = result.scalar_one()
+    dataset.sensitive_columns = columns
+    await session.flush()
+
+
+def _encrypted(value: str) -> str:
+    from app.core.crypto import LocalAesGcmProvider, encrypt_value
+
+    return encrypt_value(LocalAesGcmProvider(_ENCRYPTION_KEY_BYTES), value)
+
+
+@pytest.mark.asyncio
+async def test_query_masks_sensitive_columns_without_role(
+    client_with_db: TestClient,
+    session: AsyncSession,
+    make_tenant: Any,
+    fake_clickhouse: _FakeClickHouse,
+) -> None:
+    secret = "123-45-6789"
+    ciphertext = _encrypted(secret)
+    fake_clickhouse.column_names = ["ssn", "n"]
+    fake_clickhouse.rows = [(ciphertext, 5)]
+
+    await make_tenant("acmecorp")
+    token = _make_token("acmecorp")  # no roles claim
+    dataset_id = _upload(client_with_db, token, name="people.csv").json()["id"]
+    await _tag_sensitive(session, dataset_id, ["ssn"])
+
+    resp = _query(
+        client_with_db,
+        token,
+        dataset_id,
+        {"dimensions": ["ssn"], "metrics": [{"function": "count", "alias": "n"}]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["rows"] == [["***", 5]]
+    # Neither plaintext nor ciphertext leaves the server for an unauthorized caller.
+    assert secret not in resp.text
+    assert ciphertext not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_query_reveals_sensitive_columns_with_role(
+    client_with_db: TestClient,
+    session: AsyncSession,
+    make_tenant: Any,
+    fake_clickhouse: _FakeClickHouse,
+) -> None:
+    secret = "123-45-6789"
+    ciphertext = _encrypted(secret)
+    fake_clickhouse.column_names = ["ssn", "n"]
+    fake_clickhouse.rows = [(ciphertext, 5)]
+
+    await make_tenant("acmecorp")
+    token = _make_token("acmecorp", roles=["sensitive_viewer"])
+    dataset_id = _upload(client_with_db, token, name="people.csv").json()["id"]
+    await _tag_sensitive(session, dataset_id, ["ssn"])
+
+    resp = _query(
+        client_with_db,
+        token,
+        dataset_id,
+        {"dimensions": ["ssn"], "metrics": [{"function": "count", "alias": "n"}]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    # An authorized principal sees decrypted plaintext (never the raw ciphertext).
+    assert resp.json()["rows"] == [[secret, 5]]
+    assert ciphertext not in resp.text

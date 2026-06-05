@@ -338,7 +338,13 @@ async def test_isolation_namespace_never_crosses_tenants() -> None:
         pipeline = CsvIcebergPipeline(ctx=ctx, store=store, settings=settings)
         captured: dict[str, Any] = {}
 
-        def _capture(self_: Any, *, raw_bytes: bytes, table_name: str) -> None:
+        def _capture(
+            self_: Any,
+            *,
+            raw_bytes: bytes,
+            table_name: str,
+            sensitive_columns: list[str] | None = None,
+        ) -> None:
             captured["table_name"] = table_name
 
         with patch.object(CsvIcebergPipeline, "_write_iceberg_table", _capture):

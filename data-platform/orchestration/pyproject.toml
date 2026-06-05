@@ -24,6 +24,12 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+# Catalog/lineage ingestion (Phase 5.3). Optional: only the worker that runs the
+# catalog_metadata asset needs the OpenMetadata ingestion SDK. The config builders
+# and the asset's logic are unit-tested without it (the workflow run is injected).
+catalog = [
+    "openmetadata-ingestion[clickhouse]>=1.5,<1.7",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

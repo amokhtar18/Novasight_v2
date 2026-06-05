@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, String, Uuid
+from sqlalchemy import JSON, BigInteger, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -49,6 +49,10 @@ class Dataset(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="uploaded", server_default="uploaded"
     )
+    # Logical column names tagged sensitive. These are encrypted at rest on ingest
+    # and masked/revealed on read (Phase 5.4). ``None`` means no sensitive columns;
+    # nullable (rather than a JSON server-default) keeps the migration dialect-portable.
+    sensitive_columns: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     tenant: Mapped[Tenant] = relationship()
 

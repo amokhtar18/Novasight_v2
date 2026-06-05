@@ -64,12 +64,18 @@ class S3ObjectStore:
         )
 
     async def put_object(self, *, key: str, body: bytes, content_type: str) -> None:
+        extra: dict[str, str] = {}
+        # Request server-side (at-rest) encryption when configured, so confirmation
+        # of at-rest encryption does not depend on a bucket default policy.
+        if self._cfg.server_side_encryption:
+            extra["ServerSideEncryption"] = self._cfg.server_side_encryption
         async with self._client() as client:
             await client.put_object(
                 Bucket=self._cfg.bucket,
                 Key=key,
                 Body=body,
                 ContentType=content_type,
+                **extra,
             )
 
     async def get_object(self, *, key: str) -> bytes:

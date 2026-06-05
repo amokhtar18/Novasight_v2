@@ -28,6 +28,22 @@ class ClickHouseSettings(BaseSettings):
     password: SecretStr
 
 
+class CatalogSettings(BaseSettings):
+    """OpenMetadata connection for catalog + lineage ingestion (Phase 5.3).
+
+    Uses ``OPENMETADATA__*`` env, mirroring the ``CLICKHOUSE__*`` convention. The two
+    fields that point at deployment infrastructure (the server URL and the ingestion
+    bot's JWT) have no defaults; the OM *service* name under which our ClickHouse is
+    registered is an environment-identical convention, so it carries a safe default.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="OPENMETADATA__", extra="ignore")
+
+    host_port: str            # OM REST API base, e.g. http://openmetadata:8585/api
+    jwt_token: SecretStr      # ingestion-bot JWT used to authenticate to the OM server
+    service_name: str = "analytica_clickhouse"  # OM service entity name for ClickHouse
+
+
 class OrchestrationSettings(BaseSettings):
     """Top-level orchestration settings, composed from the environment."""
 
@@ -50,6 +66,10 @@ class OrchestrationSettings(BaseSettings):
     @property
     def clickhouse(self) -> ClickHouseSettings:
         return ClickHouseSettings()  # type: ignore[call-arg]  # values come from env
+
+    @property
+    def catalog(self) -> CatalogSettings:
+        return CatalogSettings()  # type: ignore[call-arg]  # values come from env
 
 
 @lru_cache

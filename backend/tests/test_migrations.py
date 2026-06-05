@@ -35,15 +35,38 @@ def test_upgrade_head_builds_schema(tmp_path: Path) -> None:
     try:
         inspector = inspect(engine)
         tables = set(inspector.get_table_names())
-        assert {"tenants", "tenant_resource_maps", "users", "datasets"} <= tables
+        assert {
+            "tenants",
+            "tenant_resource_maps",
+            "users",
+            "datasets",
+            "report_definitions",
+            "kpi_thresholds",
+        } <= tables
         # The migration was actually stamped.
         assert "alembic_version" in tables
+
+        report_cols = {c["name"] for c in inspector.get_columns("report_definitions")}
+        assert {
+            "tenant_id",
+            "dataset_id",
+            "query_spec",
+            "schedule",
+            "recipients",
+            "enabled",
+        } <= report_cols
 
         cols = {c["name"] for c in inspector.get_columns("tenant_resource_maps")}
         assert {"iceberg_namespace", "clickhouse_db", "dbt_schema"} <= cols
 
         dataset_cols = {c["name"] for c in inspector.get_columns("datasets")}
-        assert {"tenant_id", "object_key", "size_bytes", "status"} <= dataset_cols
+        assert {
+            "tenant_id",
+            "object_key",
+            "size_bytes",
+            "status",
+            "sensitive_columns",
+        } <= dataset_cols
     finally:
         engine.dispose()
 
@@ -62,5 +85,7 @@ def test_downgrade_base_drops_schema(tmp_path: Path) -> None:
         assert "users" not in tables
         assert "tenant_resource_maps" not in tables
         assert "datasets" not in tables
+        assert "report_definitions" not in tables
+        assert "kpi_thresholds" not in tables
     finally:
         engine.dispose()

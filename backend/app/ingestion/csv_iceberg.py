@@ -58,8 +58,10 @@ from typing import TYPE_CHECKING
 from fastapi import Depends
 
 from app.core.config import Settings, get_settings
+from app.core.crypto import KmsProvider, build_kms_provider
 from app.core.iceberg_catalog import build_catalog_properties
 from app.core.object_store import ObjectStore, get_object_store
+from app.ingestion.encryption import encrypt_arrow_columns
 from app.tenancy.context import TenantContext
 
 if TYPE_CHECKING:
@@ -99,10 +101,14 @@ class CsvIcebergPipeline:
         ctx: TenantContext,
         store: ObjectStore,
         settings: Settings,
+        provider: KmsProvider | None = None,
     ) -> None:
         self._ctx = ctx
         self._store = store
         self._settings = settings
+        # Optional KMS provider for column encryption; built lazily from settings on
+        # first use if a dataset actually tags a column sensitive.
+        self._provider = provider
 
     async def run(self, dataset: Dataset) -> str:
         """Load ``dataset`` CSV into the tenant's Iceberg namespace.
@@ -142,7 +148,15 @@ class CsvIcebergPipeline:
         table_name = _table_name_for_dataset(dataset.id)
         table_id = f"{self._ctx.iceberg_namespace}.{table_name}"
 
-        self._write_iceberg_table(raw_bytes=raw_bytes, table_name=table_name)
+        # Columns tagged sensitive are encrypted before the table is written, so they
+        # land as ciphertext at rest. Tolerate stand-ins without the attribute.
+        sensitive_columns = list(getattr(dataset, "sensitive_columns", None) or [])
+
+        self._write_iceberg_table(
+            raw_bytes=raw_bytes,
+            table_name=table_name,
+            sensitive_columns=sensitive_columns,
+        )
 
         logger.info("Iceberg table created/replaced: %s", table_id)
         return table_id
@@ -156,12 +170,14 @@ class CsvIcebergPipeline:
         *,
         raw_bytes: bytes,
         table_name: str,
+        sensitive_columns: list[str] | None = None,
     ) -> None:
         """Parse the CSV, build a catalog from settings, and write (overwrite) the table.
 
         This is the synchronous, Iceberg-specific layer.  It is separated from
         ``run()`` so it can be called from a thread executor if async wrapping is
-        needed in the future.
+        needed in the future. Columns named in ``sensitive_columns`` are encrypted
+        before the write so they are ciphertext at rest.
         """
         import pyarrow.csv as pa_csv
         from pyiceberg.catalog import load_catalog
@@ -172,6 +188,11 @@ class CsvIcebergPipeline:
 
         # Parse CSV bytes to an Arrow table for schema inference and typed writing.
         arrow_table = pa_csv.read_csv(io.BytesIO(raw_bytes))
+
+        # Encrypt tagged columns before writing (fail closed if encryption is unset).
+        if sensitive_columns:
+            provider = self._provider or build_kms_provider(self._settings)
+            arrow_table = encrypt_arrow_columns(arrow_table, sensitive_columns, provider)
 
         # Build catalog config entirely from Settings — no literals, no files.
         catalog_props = self._build_catalog_properties()

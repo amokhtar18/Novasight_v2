@@ -54,6 +54,7 @@ class Principal:
     subject: str          # JWT ``sub`` claim
     tenant_key: str       # Value of the configured tenant claim (e.g. the tenant slug)
     email: str            # ``email`` claim (falls back to ``sub`` if absent)
+    roles: frozenset[str] = frozenset()  # values of the configured roles claim
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +173,23 @@ def _verify_dev_stub(token: str, auth_cfg: AuthSettings) -> dict[str, object]:
     return claims
 
 
-def _build_principal(claims: dict[str, object], tenant_claim: str) -> Principal:
+def _extract_roles(claims: dict[str, object], roles_claim: str) -> frozenset[str]:
+    """Read the roles claim as a set of strings; tolerate absence or a scalar.
+
+    A missing claim yields an empty set (no privileges). A list yields its string
+    members; a single string is treated as one role.
+    """
+    raw = claims.get(roles_claim)
+    if isinstance(raw, str):
+        return frozenset({raw})
+    if isinstance(raw, (list, tuple)):
+        return frozenset(item for item in raw if isinstance(item, str))
+    return frozenset()
+
+
+def _build_principal(
+    claims: dict[str, object], tenant_claim: str, roles_claim: str
+) -> Principal:
     """Extract ``Principal`` fields from verified claims.
 
     Raises ``HTTPException(401)`` if ``sub`` or the tenant claim are absent.
@@ -190,7 +207,12 @@ def _build_principal(claims: dict[str, object], tenant_claim: str) -> Principal:
 
     email_val = claims.get("email")
     email: str = email_val if isinstance(email_val, str) else subject
-    return Principal(subject=subject, tenant_key=tenant_key, email=email)
+    return Principal(
+        subject=subject,
+        tenant_key=tenant_key,
+        email=email,
+        roles=_extract_roles(claims, roles_claim),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -216,4 +238,4 @@ async def get_principal(
     else:
         claims = await _verify_oidc(token, auth_cfg)
 
-    return _build_principal(claims, auth_cfg.tenant_claim)
+    return _build_principal(claims, auth_cfg.tenant_claim, auth_cfg.roles_claim)

@@ -9,22 +9,30 @@ Asset graph (lineage shown in the Dagster UI):
         -> int_regional_sales_enriched     (dbt, ephemeral)
         -> mart_regional_sales             (dbt, table; validated by the quality gate)
         -> mart_regional_sales_serving     (loads the validated mart -> tenant serving table)
+        -> catalog_metadata                (ingests tables + dbt lineage into OpenMetadata)
 
 dbt tests are surfaced as asset checks (``dbt build`` in ``dbt_assets.py``); the serving
-asset adds a post-load integrity check (``serving.py``).
+asset adds a post-load integrity check (``serving.py``); the catalog asset publishes the
+end-to-end lineage to OpenMetadata (``catalog.py``).
 """
 from __future__ import annotations
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource
 
+from .catalog import catalog_metadata
 from .dbt_assets import analytica_dbt_assets
 from .dbt_resource import dbt_project
 from .ingestion import regional_sales_raw
 from .serving import mart_regional_sales_serving
 
 defs = Definitions(
-    assets=[regional_sales_raw, analytica_dbt_assets, mart_regional_sales_serving],
+    assets=[
+        regional_sales_raw,
+        analytica_dbt_assets,
+        mart_regional_sales_serving,
+        catalog_metadata,
+    ],
     resources={
         # The dbt CLI inherits the Dagster process environment, so the env-driven
         # profiles.yml (CLICKHOUSE__*, DBT_SCHEMA, DBT_PHASE1_DATASET_TABLE) resolves

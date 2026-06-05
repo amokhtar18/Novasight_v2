@@ -28,6 +28,14 @@ dependencies = [
     "anthropic>=0.50",
     # SQL parser — validates generated SQL (read-only check, allow-list, tenant isolation)
     "sqlglot>=25.0",
+    # Background jobs: Dramatiq actors on the same Redis the app already uses, with
+    # periodiq as the cron-style scheduler (Phase 5 reporting + KPI alerts). The
+    # Redis client comes from the top-level ``redis`` dependency above (not the
+    # ``dramatiq[redis]`` extra, which pins an older redis-py than the app uses).
+    "dramatiq>=1.16",
+    "periodiq>=0.13",
+    # Excel rendering for scheduled reports.
+    "xlsxwriter>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -131,6 +139,18 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "anthropic.*"
 ignore_missing_imports = false
+
+# periodiq ships no type information; its cron parser is used only at the worker
+# entrypoint, isolated to app/reporting/.
+[[tool.mypy.overrides]]
+module = "periodiq.*"
+ignore_missing_imports = true
+
+# XlsxWriter ships no py.typed marker; the Workbook surface is dynamic and isolated
+# to app/reporting/excel.py.
+[[tool.mypy.overrides]]
+module = "xlsxwriter.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

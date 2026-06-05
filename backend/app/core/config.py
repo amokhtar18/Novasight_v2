@@ -43,6 +43,11 @@ class ObjectStoreSettings(BaseSettings):
     access_key: SecretStr
     secret_key: SecretStr
     bucket: str
+    # Server-side encryption algorithm for objects at rest (e.g. "AES256" for SSE-S3,
+    # "aws:kms" for SSE-KMS). ``None`` (default) sends no SSE header — appropriate when
+    # the bucket enforces default encryption itself. When set, it is passed on every
+    # write so confirmation of at-rest encryption does not depend on bucket policy.
+    server_side_encryption: str | None = None
 
 
 class IcebergSettings(BaseSettings):
@@ -88,6 +93,91 @@ class CubeSettings(BaseSettings):
     api_secret: SecretStr           # HS256 signing secret    (env: CUBE__API_SECRET)
 
 
+class EncryptionSettings(BaseSettings):
+    """Column-level encryption for fields tagged sensitive (Phase 5.4).
+
+    The provider is an abstraction over the key authority: ``local`` keeps a
+    symmetric master key in settings (dev / on-prem); cloud deployments select a
+    KMS-backed provider. The whole group is *optional* on ``Settings`` — only
+    required once a dataset actually tags a column sensitive, at which point the
+    ingestion/serving paths fail closed with a clear error if it is absent.
+
+    ``key`` has no default (it is a secret, environment-specific). For the local
+    provider it is a base64-encoded 32-byte AES key.
+    """
+
+    provider: str = "local"         # "local" | (future) "aws-kms" | "gcp-kms" | ...
+    key: SecretStr                  # base64 32-byte key for the local provider
+    # Role (from the JWT roles claim) a principal must hold to see decrypted
+    # sensitive values; everyone else gets masked output.
+    sensitive_view_role: str = "sensitive_viewer"
+
+
+class SmtpSettings(BaseSettings):
+    """SMTP relay the reporting worker uses to email rendered reports.
+
+    Infrastructure-pointing values (host, sender address, credentials) have NO
+    defaults. The whole group is *optional* on ``Settings`` (default ``None``) so
+    installs that don't use scheduled reporting need not configure a relay; when
+    any ``SMTP__*`` var is set, the required fields must all be present (fail
+    closed). Port and TLS carry safe, environment-identical defaults.
+    """
+
+    host: str                       # e.g. smtp.example.com  (env: SMTP__HOST)
+    port: int = 587
+    username: str | None = None     # omit for relays that don't require auth
+    password: SecretStr | None = None
+    use_tls: bool = True            # STARTTLS on connect
+    from_address: str               # From: header / envelope sender (SMTP__FROM_ADDRESS)
+    # TLS trust configuration for STARTTLS. ``tls_verify`` (default True) keeps
+    # certificate + hostname verification on; ``ca_bundle`` points at a CA file for
+    # an internal/self-signed relay (common on-prem). Both are deployment-specific,
+    # so they come from settings — never a code literal (golden rule 1).
+    tls_verify: bool = True
+    ca_bundle: str | None = None    # path to a CA bundle (PEM) for the relay's cert
+
+
+class ReportingSettings(BaseSettings):
+    """Knobs for the scheduled-report worker.
+
+    Every value here is an environment-identical *convention*, not infrastructure,
+    so each carries a safe default. The things that are genuinely per-deployment or
+    per-tenant — the SMTP relay (``SmtpSettings``) and each report's schedule and
+    recipients — live elsewhere (settings / the ``report_definitions`` registry),
+    never as literals in code (golden rule 1).
+    """
+
+    # Object-store key prefix under which a tenant's rendered reports are written.
+    # Always combined with the tenant's own namespace prefix, so it never breaks
+    # isolation on its own.
+    storage_prefix: str = "reports"
+    # Cron expression for the dispatcher heartbeat (periodiq fires it); the
+    # dispatcher then matches each report's own cron against the tick.
+    dispatch_cron: str = "* * * * *"
+    # Hard cap on rows pulled into a single report workbook.
+    max_rows: int = 100_000
+    # Subject-line prefix for report emails.
+    subject_prefix: str = "[Analytica] "
+
+
+class AlertSettings(BaseSettings):
+    """KPI-alert worker conventions (Phase 5.2).
+
+    Every value is an environment-identical convention with a safe default; the
+    genuinely per-tenant parts — each KPI's threshold, schedule, channel, and
+    recipients/webhook — live in the ``kpi_thresholds`` registry, never here
+    (golden rule 1). The delivery relay (SMTP) is shared with reporting.
+    """
+
+    # Cron for the dispatcher heartbeat (periodiq); each KPI's own cron is matched
+    # against the tick, mirroring the reporting dispatcher.
+    dispatch_cron: str = "* * * * *"
+    # Timeout for webhook POSTs.
+    webhook_timeout_seconds: float = 10.0
+    # Subject-line prefix for alert emails.
+    subject_prefix: str = "[Analytica][ALERT] "
+
+
 class AuthSettings(BaseSettings):
     # OIDC / RS256 settings. These point at deployment infrastructure, so they have
     # NO standalone default; the mode validator below makes them required whenever
@@ -105,6 +195,10 @@ class AuthSettings(BaseSettings):
     # The JWT claim name that carries the tenant identifier (e.g. "tenant").
     # Matches whatever our OIDC provider / token issuance convention sets.
     tenant_claim: str = "tenant"
+
+    # The JWT claim name carrying the principal's roles (a list of strings). Used to
+    # gate access to decrypted sensitive columns (see EncryptionSettings).
+    roles_claim: str = "roles"
 
     @model_validator(mode="after")
     def _require_mode_config(self) -> AuthSettings:
@@ -184,6 +278,16 @@ class Settings(BaseSettings):
     cube: CubeSettings
     auth: AuthSettings
     seed_tenant: SeedTenantSettings
+    # Background reporting. ``reporting`` is always present (all-default conventions);
+    # ``smtp`` is optional — only required when scheduled reporting is actually used,
+    # and validated at the point of use so the app/worker fails closed with a clear
+    # error rather than emailing nothing.
+    reporting: ReportingSettings = ReportingSettings()
+    alerts: AlertSettings = AlertSettings()
+    smtp: SmtpSettings | None = None
+    # Column-level encryption. Optional — only required once a dataset tags a column
+    # sensitive; the ingestion/serving paths validate its presence at point of use.
+    encryption: EncryptionSettings | None = None
 
 
 @lru_cache

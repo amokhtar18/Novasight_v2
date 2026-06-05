@@ -11,6 +11,10 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
+from app.core.config import Settings, get_settings
+from app.core.crypto import build_kms_provider
+from app.core.security import Principal, get_principal
+from app.core.sensitive import apply_to_rows, may_view_sensitive
 from app.schemas.dataset import DatasetRead
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.clickhouse_datasets import (
@@ -49,8 +53,10 @@ async def query_dataset(
     dataset_id: uuid.UUID,
     request: QueryRequest,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    principal: Principal = Depends(get_principal),  # noqa: B008
     svc: DatasetService = Depends(get_dataset_service),  # noqa: B008
     ch_svc: ClickHouseDatasetService = Depends(get_clickhouse_dataset_service),  # noqa: B008
+    settings: Settings = Depends(get_settings),  # noqa: B008
 ) -> QueryResponse:
     """Run a safe, read-only aggregation over one of the tenant's datasets.
 
@@ -59,11 +65,25 @@ async def query_dataset(
     runs bound to the tenant's ClickHouse database. The ``dataset_id`` in the path is
     only ever resolved within the tenant scope — it can never reach another tenant's
     data.
+
+    Sensitive columns come back encrypted from the lake; they are decrypted only for
+    a principal holding the configured ``sensitive_view_role`` and masked otherwise.
     """
     dataset = await svc.get_for_tenant(ctx, dataset_id)
     result = ch_svc.run_aggregation(ctx, dataset, request)
+
+    sensitive = set(dataset.sensitive_columns or [])
+    if sensitive:
+        reveal = may_view_sensitive(principal, settings)
+        provider = build_kms_provider(settings) if reveal else None
+        rows = apply_to_rows(
+            result.column_names, result.rows, sensitive, reveal=reveal, provider=provider
+        )
+    else:
+        rows = [list(row) for row in result.rows]
+
     return QueryResponse(
         columns=result.column_names,
-        rows=[list(row) for row in result.rows],
-        row_count=len(result.rows),
+        rows=rows,
+        row_count=len(rows),
     )

@@ -12,7 +12,8 @@ Usage::
 """
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import (
@@ -57,6 +58,27 @@ async def get_db(
 ) -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency: yield an ``AsyncSession``, commit on success, rollback on error."""
     factory = _get_session_factory(settings)
+    async with factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+@asynccontextmanager
+async def session_scope(
+    settings: Settings | None = None,
+) -> AsyncIterator[AsyncSession]:
+    """Yield an ``AsyncSession`` for code outside the request cycle (e.g. workers).
+
+    Mirrors ``get_db``'s commit-on-success / rollback-on-error contract but is a
+    plain async context manager rather than a FastAPI dependency, so background
+    jobs (the reporting worker) can open a session without a request. Settings are
+    read from the environment unless injected (tests).
+    """
+    factory = _get_session_factory(settings or get_settings())
     async with factory() as session:
         try:
             yield session
