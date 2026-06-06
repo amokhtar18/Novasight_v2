@@ -15,7 +15,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from analytica_orchestration.serving import (
+from novasight_orchestration.serving import (
     MART_TABLE,
     SERVING_CHECK_NAME,
     build_serving_check,

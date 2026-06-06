@@ -1,9 +1,15 @@
 # Frontend
 
-React + TypeScript + Vite single-page application for the Analytica low-code BI
-platform. This document covers how to run the dev server, the runtime-config
-mechanism, the Vite proxy setup, authentication for local development, and the
-`ChartSpec` shape.
+React + TypeScript + Vite single-page application for the NovaSight low-code BI
+platform. It is a full **portal**: an app shell (sidebar + topbar) over routed
+sections that expose every backend capability — connecting data, asking
+questions (NL→SQL), building charts, assembling dashboards, generating insights,
+and platform administration — so users never need to open an infrastructure UI
+(ClickHouse, Dagster, Grafana, the control plane).
+
+This document covers running the dev server, the runtime-config mechanism, the
+Vite proxy, local auth, the information architecture, the design system, the
+`ChartSpec` shape, and client-side dashboard persistence.
 
 ---
 
@@ -21,7 +27,23 @@ pnpm install
 pnpm dev
 ```
 
-Before starting, complete the two config steps below (runtime config and auth token).
+Before starting, set the runtime config (`apiBaseUrl`) below. Authentication is
+handled by the in-app login — no token in config.
+
+---
+
+## Authentication (login)
+
+Users sign in at `/login`; the app posts to `POST /api/v1/auth/login` and stores
+the returned access + refresh tokens and identity in the **auth store**
+(`src/store/authStore.ts`, persisted to localStorage). The API client
+(`src/api/client.ts`) attaches the access token to every request and, on a 401,
+silently refreshes once and retries — clearing the session (→ redirect to
+`/login`) if the refresh fails. Routes are gated by `RequireAuth` in `App.tsx`;
+sign-out is in the account menu. See `docs/AUTH.md` for the backend contract.
+
+> The token is no longer injected via `config.js`. A leftover `authToken` there is
+> ignored once the user logs in.
 
 ---
 
@@ -33,26 +55,24 @@ server serves `public/config.js` before the app loads. That script sets
 
 ```js
 window.__APP_CONFIG__ = {
-  apiBaseUrl: "/api/v1",   // relative path works behind the Vite proxy
-  authToken: "...",        // Bearer token (see Auth section below)
+  apiBaseUrl: "/api/v1",   // relative path works behind the reverse proxy / Vite proxy
 };
 ```
 
 The app calls `loadConfig()` at startup (`src/lib/config.ts`), which reads this
-object and fails loudly if required values are absent or still set to their
-placeholder values. This is the frontend equivalent of the backend's
-`pydantic-settings` object — one source of truth, nothing environment-specific
-in source.
+object and fails loudly if `apiBaseUrl` is absent. This is the frontend
+equivalent of the backend's `pydantic-settings` object — one source of truth,
+nothing environment-specific in source.
 
 ### Setup for local development
 
 ```bash
 cp frontend/public/config.js.example frontend/public/config.js
-# Edit config.js and replace REPLACE_WITH_DEV_TOKEN with your dev stub token.
+# config.js only needs apiBaseUrl; sign in via the /login screen.
 ```
 
 `public/config.js` is git-ignored (the example is committed). Never commit a
-real token or URL.
+real URL.
 
 ### Production / on-prem deployment
 
@@ -182,6 +202,52 @@ if they do not.
 
 ---
 
+## Information architecture & routing
+
+Routing uses `react-router-dom`. Every page renders inside `AppShell` (sidebar +
+topbar) via `<Outlet>`; pages are lazy-loaded so each route is its own chunk
+(ECharts only loads on charting routes — first paint stays lean).
+
+| Route | Page | Purpose |
+|-------|------|---------|
+| `/` | Overview | Greeting, live system health, counts, quick actions, recents |
+| `/data` | Data sources | Upload CSVs; browse datasets with status |
+| `/data/:datasetId` | Dataset detail | AI chart suggestions for a dataset |
+| `/explore` | Ask AI | NL→SQL: question → validated SQL + table + visualize + summarize |
+| `/build` | Chart builder | Low-code manual builder + NL→chart; save to dashboard |
+| `/dashboards` | Dashboards | List / create dashboards |
+| `/dashboards/:dashboardId` | Dashboard detail | dnd-kit grid: reorder/resize/remove tiles |
+| `/insights` | Insights | Guardrailed AI narrative for a metric |
+| `/admin` | Admin | System health detail + tenant provisioning (platform admin) |
+| `/settings` | Settings | Theme + resolved tenant context |
+
+The sidebar's **Admin** entry is shown only when the (display-only) decoded JWT
+carries an admin-ish role (`src/lib/identity.ts`). Authorization is always
+enforced by the backend — the client decode only affects what the UI *shows*.
+
+## Design system & theming
+
+- Tokens live in `src/index.css` as raw HSL channels: light theme in `:root`,
+  dark theme in `.dark`. A categorical chart palette (`--chart-1..8`) is read at
+  runtime by the renderer (`src/lib/chartTheme.ts`) so charts follow the theme.
+- `ThemeProvider` (`src/lib/theme.tsx`) is **dark-first**: it defaults to dark,
+  persists the choice in `localStorage`, and follows the OS in "system" mode.
+- UI primitives in `src/components/ui/` are hand-rolled shadcn-style components
+  (button, card, alert, badge, input, select, switch, tabs, dialog,
+  dropdown-menu, skeleton, spinner, separator, empty-state).
+- The brand is the infinity/Möbius mark (`src/components/BrandMark.tsx`, themed
+  via a gradient) and the matching favicon.
+
+## Dashboards (client-side persistence)
+
+There is no backend dashboard endpoint yet, so dashboards are persisted in the
+browser via a Zustand `persist` store (`src/store/dashboardsStore.ts`),
+**partitioned per tenant** (`byTenant[tenantId]`) under the `novasight.dashboards`
+localStorage key. The tenant id comes from `/me` (`useTenantId`). Each tile holds
+a `ChartSpec`; re-runnable inline-dataset specs re-fetch live, while AI/NL specs
+carry a data snapshot captured at save time. The store's call sites are
+backend-friendly: swap to TanStack Query mutations when a persistence API lands.
+
 ## Project structure
 
 ```
@@ -191,31 +257,32 @@ frontend/
   src/
     api/
       client.ts         # typed API client (all fetch logic here, not in components)
-      hooks.ts          # TanStack Query hooks
+      hooks.ts          # TanStack Query hooks (me, health, datasets, AI, tenants)
     components/
-      chart/
-        ChartRenderer.tsx  # ECharts renderer driven by ChartSpec
-      ui/
-        button.tsx, card.tsx, label.tsx, alert.tsx, empty-state.tsx  # shadcn-style primitives
+      BrandMark.tsx     # infinity/Möbius brand mark (SVG)
+      chart/            # ChartRenderer (ECharts), TableRenderer, SpecChart, NLChartPanel
+      dashboard/        # AddToDashboard, DashboardGrid + DashboardCardTile (dnd-kit)
+      data/             # UploadCard (drag-drop CSV + validation)
+      layout/           # AppShell, Sidebar, TopBar, PageHeader, nav
+      ui/               # hand-rolled shadcn-style primitives
     lib/
       config.ts         # loadConfig() — runtime config accessor
-      cn.ts             # Tailwind class merge helper
-    screens/
-      UploadScreen.tsx  # Upload CSV → get dataset id
-      ResultsScreen.tsx # Query dataset → render chart
+      theme.tsx         # ThemeProvider / useTheme (dark-first)
+      identity.ts, jwt.ts  # display-only JWT decode (tenant + roles)
+      chartTheme.ts, format.ts, useTenantId.ts, cn.ts
+    pages/              # one component per route (see table above)
     store/
-      appStore.ts       # Zustand store (UI / navigation state only)
+      uiStore.ts        # sidebar / mobile-nav UI state
+      dashboardsStore.ts # persisted, per-tenant dashboards
     types/
       api.ts            # TypeScript mirrors of backend Pydantic schemas + ChartSpec
-    main.tsx            # Entry point: bootstrap config, TanStack Query, mount app
-    App.tsx             # Root component: upload ↔ results routing
+    main.tsx            # Entry: config, TanStack Query, ThemeProvider, BrowserRouter
+    App.tsx             # Routes inside AppShell (lazy-loaded pages)
   .env.example          # Vite env vars (copy to .env for local dev)
   eslint.config.js
   vitest.config.ts
   vite.config.ts
 ```
-
----
 
 ---
 
@@ -310,9 +377,11 @@ idempotent. Callers read `error` and cast to `NLChartError` to branch on kind.
 
 ### Where the input lives
 
-`NLChartPanel` is rendered at the top of `ResultsScreen`, above the existing
-manual Query & Chart card. Both are always visible; the AI panel's `onFallback`
-prop scrolls the manual card into focus when a 422 is returned.
+`NLChartPanel` is embedded in the **Chart builder** page (`/build`) alongside the
+manual builder; both are always available. On success it calls `onResult` so the
+page can offer "Add to dashboard" on the AI chart. The same NL→SQL flow (with SQL
+transparency and one-click summarize/visualize) lives on the **Ask AI** page
+(`/explore`).
 
 ---
 

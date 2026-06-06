@@ -21,3 +21,17 @@ class TenantContextRead(BaseModel):
     iceberg_namespace: str
     clickhouse_db: str
     dbt_schema: str
+
+
+class MeRead(TenantContextRead):
+    """Tenant context plus the verified caller identity (from the JWT).
+
+    Lets the frontend render the signed-in user from a server-verified source
+    instead of decoding the token client-side. ``roles`` drives which admin/
+    superuser UI is shown — the backend remains the real authorization gate.
+    """
+
+    subject: str
+    email: str
+    tenant: str
+    roles: list[str]

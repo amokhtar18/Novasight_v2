@@ -1,7 +1,7 @@
 ---
 name: nl-to-sql-grounding
 description: >
-  The mandatory safety pattern for every AI feature in Analytica (NL→SQL, NL→chart,
+  The mandatory safety pattern for every AI feature in NovaSight (NL→SQL, NL→chart,
   insights, suggestions). Apply when writing or reviewing anything in backend/app/ai/.
   Enforces grounding on the governed semantic layer, read-only validated execution, and
   strict tenant scoping.

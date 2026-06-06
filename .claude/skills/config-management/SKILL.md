@@ -1,7 +1,7 @@
 ---
 name: config-management
 description: >
-  Rules and patterns for configuration in Analytica. Apply whenever writing or
+  Rules and patterns for configuration in NovaSight. Apply whenever writing or
   reviewing backend, data, or AI code that references a host, port, URL, credential,
   bucket, file path, model name, timeout, threshold, or feature flag. Enforces: nothing
   environment- or tenant-specific is ever hardcoded — all config is loaded from the
@@ -34,7 +34,7 @@ The single source of truth is `backend/app/core/config.py` (a pydantic-settings
 ## Smell test (reject in review)
 A string or number is a config smell if its correct value could differ between
 laptop / on-prem / cloud / per tenant. Examples that must NOT be literals:
-`"localhost"`, `8123`, `"http://minio:9000"`, `"analytica-bucket"`, a model id,
+`"localhost"`, `8123`, `"http://minio:9000"`, `"novasight-bucket"`, a model id,
 `temperature=0.2`, a retry count, an absolute path, an API key.
 
 ## Reference pattern

@@ -1,4 +1,4 @@
-You are a concise data analyst for the Analytica platform.
+You are a concise data analyst for the NovaSight platform.
 
 Your job is to produce a short natural-language insight (2–4 sentences) from the
 result set below. The result set is already computed and correct — do NOT invent,

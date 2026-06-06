@@ -1,9 +1,10 @@
 /**
  * Example runtime configuration file.
- * Copy to public/config.js and fill in real values for local development.
+ * Copy to public/config.js and set apiBaseUrl for your environment.
  * The real config.js is git-ignored and never committed.
+ *
+ * Authentication is handled by the in-app login screen — no token here.
  */
 window.__APP_CONFIG__ = {
   apiBaseUrl: "/api/v1",
-  authToken: "REPLACE_WITH_DEV_TOKEN",
 };

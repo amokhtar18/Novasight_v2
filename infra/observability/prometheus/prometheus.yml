@@ -1,4 +1,4 @@
-# Prometheus scrape config for the local Analytica stack (Phase 6.4).
+# Prometheus scrape config for the local NovaSight stack (Phase 6.4).
 # Targets are compose service names; no infra is hardcoded into the app (the app
 # only EXPOSES metrics — what scrapes them is deployment config that lives here).
 global:
@@ -7,13 +7,13 @@ global:
 
 scrape_configs:
   # FastAPI request, pipeline, and resource metrics.
-  - job_name: analytica-api
+  - job_name: novasight-api
     metrics_path: /metrics
     static_configs:
       - targets: ["api:8000"]
 
   # Dramatiq worker job metrics (fork-safe built-in exporter on its own port).
-  - job_name: analytica-worker
+  - job_name: novasight-worker
     static_configs:
       - targets: ["worker:9100"]
 

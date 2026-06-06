@@ -1,4 +1,4 @@
-# Analytica — observability overlay (Phase 6.4): Prometheus + Grafana + Jaeger.
+# NovaSight — observability overlay (Phase 6.4): Prometheus + Grafana + Jaeger.
 #
 # Layers on top of the base infra + app overlays and (a) scrapes the API and worker
 # metrics, (b) collects OTLP traces from the API and workers, and (c) serves Grafana

@@ -1,0 +1,76 @@
+# On-prem profile — single-tenant, single-server posture.
+#
+# The portability seam (golden rule, ARCHITECTURE.md): storage is bundled MinIO and
+# the data stores run in-cluster. The ONLY difference from cloud is THIS file —
+# configuration + storage backend. Templates are identical.
+#
+# Secrets below are CHANGE-ME placeholders so the chart renders; supply real values at
+# install (e.g. --set-string secrets.AI__API_KEY=...), never commit them.
+
+# Bundle the stateful dependencies in-cluster.
+postgresql:
+  enabled: true
+redis:
+  enabled: true
+minio:
+  enabled: true
+clickhouse:
+  enabled: true
+
+api:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+
+# Non-secret application config. Endpoints for the bundled deps (Postgres/Redis/MinIO/
+# ClickHouse hosts) are filled in automatically by Service DNS; only the rest is here.
+config:
+  ENVIRONMENT: onprem
+  LOG_LEVEL: INFO
+
+  # Bundled Postgres identity (the dep reads these too).
+  POSTGRES__USER: novasight
+  POSTGRES__DB: novasight
+
+  # Object store = bundled MinIO. Endpoint is auto-filled; bucket + region here.
+  OBJECT_STORE__REGION: us-east-1
+  OBJECT_STORE__BUCKET: novasight-lake
+
+  # Iceberg REST catalog (operator-provided infrastructure).
+  ICEBERG__CATALOG_URI: http://nessie:19120/iceberg
+  ICEBERG__WAREHOUSE: s3://novasight-lake/warehouse
+
+  CLICKHOUSE__USER: default
+
+  # AI gateway (model id is config, never hardcoded — golden rule 1).
+  AI__PROVIDER: anthropic
+  AI__MODEL: claude-opus-4-8
+  AI__PROMPT_TEMPLATE_DIR: /app/app/ai/prompts
+
+  # Cube semantic layer (operator-provided).
+  CUBE__BASE_URL: http://cube:4000
+
+  # Auth — real OIDC (dev_stub must never be on in a real deployment).
+  AUTH__DEV_STUB: "false"
+  AUTH__OIDC_ISSUER: https://CHANGE-ME.example.com/
+  AUTH__OIDC_AUDIENCE: novasight
+  AUTH__JWKS_URL: https://CHANGE-ME.example.com/.well-known/jwks.json
+  AUTH__TENANT_CLAIM: tenant
+  AUTH__ROLES_CLAIM: roles
+
+  # Single bootstrap tenant.
+  SEED_TENANT__SLUG: default
+  SEED_TENANT__NAME: Default
+  SEED_TENANT__ADMIN_EMAIL: admin@CHANGE-ME.example.com
+
+  # Dagster / dbt: the single tenant's schema == its ClickHouse database.
+  DBT_SCHEMA: default
+
+# Secrets — placeholders; override at install time.
+secrets:
+  POSTGRES__PASSWORD: CHANGE-ME
+  OBJECT_STORE__ACCESS_KEY: CHANGE-ME
+  OBJECT_STORE__SECRET_KEY: CHANGE-ME
+  CLICKHOUSE__PASSWORD: CHANGE-ME
+  AI__API_KEY: CHANGE-ME
+  CUBE__API_SECRET: CHANGE-ME

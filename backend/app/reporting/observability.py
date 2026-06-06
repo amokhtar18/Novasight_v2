@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def setup_worker_observability(
-    settings: Settings | None = None, *, service_name: str = "analytica-worker"
+    settings: Settings | None = None, *, service_name: str = "novasight-worker"
 ) -> None:
     """Wire worker metrics (Dramatiq Prometheus middleware) + tracing.
 

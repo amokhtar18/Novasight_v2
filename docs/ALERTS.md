@@ -1,6 +1,6 @@
 # KPI alerts (Phase 5.2)
 
-Analytica evaluates per-tenant KPI thresholds on a schedule and fires an alert
+NovaSight evaluates per-tenant KPI thresholds on a schedule and fires an alert
 (email or webhook) when a metric breaches. It runs on the same Dramatiq worker as
 reporting, is tenant-scoped, and de-duplicates so a breach alerts **exactly once**.
 

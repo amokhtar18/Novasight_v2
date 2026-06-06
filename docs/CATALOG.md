@@ -1,6 +1,6 @@
 # Data catalog & lineage — OpenMetadata (Phase 5.3)
 
-Analytica publishes its datasets and end-to-end lineage to **OpenMetadata** so users
+NovaSight publishes its datasets and end-to-end lineage to **OpenMetadata** so users
 can browse a catalog and trace data from raw source to serving table. Ingestion runs
 as a Dagster asset at the tail of the pipeline; connection is entirely config-driven.
 
@@ -8,8 +8,8 @@ as a Dagster asset at the tail of the pipeline; connection is entirely config-dr
 
 | Concern | Where | Responsibility |
 |---------|-------|----------------|
-| Connection | [`settings.py`](../data-platform/orchestration/analytica_orchestration/settings.py) `CatalogSettings` | OM server URL + ingestion JWT + service name from `OPENMETADATA__*`. |
-| Ingestion logic | [`catalog.py`](../data-platform/orchestration/analytica_orchestration/catalog.py) | Pure config builders + injected workflow runner + the `catalog_metadata` asset. |
+| Connection | [`settings.py`](../data-platform/orchestration/novasight_orchestration/settings.py) `CatalogSettings` | OM server URL + ingestion JWT + service name from `OPENMETADATA__*`. |
+| Ingestion logic | [`catalog.py`](../data-platform/orchestration/novasight_orchestration/catalog.py) | Pure config builders + injected workflow runner + the `catalog_metadata` asset. |
 | Server + search | [`infra/compose/docker-compose.yml`](../infra/compose/docker-compose.yml) | `openmetadata-server`, `openmetadata-migrate`, `openmetadata-elasticsearch`. |
 
 ## How end-to-end lineage is produced

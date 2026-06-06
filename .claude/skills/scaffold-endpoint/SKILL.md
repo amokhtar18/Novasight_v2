@@ -6,7 +6,7 @@ description: >
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
-Scaffold a new API resource named **$ARGUMENTS** for the Analytica backend.
+Scaffold a new API resource named **$ARGUMENTS** for the NovaSight backend.
 
 Follow the `fastapi-conventions`, `tenancy-isolation`, and `config-management` skills.
 Create, in `backend/app/`:

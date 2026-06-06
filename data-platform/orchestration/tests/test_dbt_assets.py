@@ -21,7 +21,7 @@ from typing import Any
 
 from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey, Output
 
-from analytica_orchestration.dbt_assets import _gate_stream
+from novasight_orchestration.dbt_assets import _gate_stream
 
 TENANT = "tenant_local"
 STAGING = AssetKey(["stg_phase1__regional_sales"])

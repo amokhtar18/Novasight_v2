@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "novasight.configMapName" . }}
+  labels:
+    {{- include "novasight.labels" . | nindent 4 }}
+data:
+  {{- /* All values rendered as strings; ConfigMap data must be string-valued. */}}
+  {{- $config := include "novasight.effectiveConfig" . | fromYaml }}
+  {{- range $k, $v := $config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

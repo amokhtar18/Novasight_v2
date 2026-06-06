@@ -44,6 +44,11 @@ interface NLChartPanelProps {
    */
   onFallback?: () => void;
   /**
+   * Called with the validated {spec, data} on success — lets the parent offer
+   * follow-up actions (e.g. "Add to dashboard") on the AI-generated chart.
+   */
+  onResult?: (result: NLChartResponse) => void;
+  /**
    * Example prompts surfaced as one-click chips, so a non-technical user has a
    * starting point instead of a blank box. Defaults to a generic starter set.
    */
@@ -63,7 +68,11 @@ const DEFAULT_SUGGESTIONS = [
   "Share by category as a pie chart",
 ];
 
-export function NLChartPanel({ onFallback, suggestions = DEFAULT_SUGGESTIONS }: NLChartPanelProps) {
+export function NLChartPanel({
+  onFallback,
+  onResult,
+  suggestions = DEFAULT_SUGGESTIONS,
+}: NLChartPanelProps) {
   const [prompt, setPrompt] = useState("");
   // Holds the last successful AI result so the chart persists while the user
   // edits the prompt for a follow-up.
@@ -85,6 +94,7 @@ export function NLChartPanel({ onFallback, suggestions = DEFAULT_SUGGESTIONS }: 
       {
         onSuccess: (result) => {
           setAiResult(result);
+          onResult?.(result);
         },
         onError: (err) => {
           if (err instanceof NLChartError && err.kind === "ungroundable") {

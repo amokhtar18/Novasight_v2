@@ -1,62 +1,118 @@
 @import "tailwindcss";
 
 /*
-  CSS custom properties for the shadcn/ui design system.
-  These map to the Tailwind CSS variables used in component classes.
+  NovaSight design system — dark-first premium analytics aesthetic.
+
+  Tokens are stored as raw HSL channels (e.g. "224 39% 6%") so they can be used
+  as `hsl(var(--token))` and composed with opacity modifiers. The light theme
+  lives in :root; the dark theme (the default experience) lives in .dark, which
+  the ThemeProvider (src/lib/theme.tsx) toggles on <html>.
+
+  The categorical chart palette (--chart-1..8) is read at runtime by the
+  ChartRenderer so ECharts series follow the active theme.
 */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Light theme — clean, airy, professional. */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --popover-foreground: 222 47% 11%;
+    --primary: 256 84% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 30% 94%;
+    --secondary-foreground: 222 47% 18%;
+    --muted: 220 30% 94%;
+    --muted-foreground: 215 16% 42%;
+    --accent: 256 84% 95%;
+    --accent-foreground: 256 60% 32%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 56% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 33 90% 45%;
+    --warning-foreground: 0 0% 100%;
+    --info: 205 85% 45%;
+    --info-foreground: 0 0% 100%;
+    --silver: 220 9% 46%;
+    --border: 220 20% 88%;
+    --input: 220 20% 86%;
+    --ring: 256 84% 56%;
+    --radius: 0.6rem;
+
+    --chart-1: 256 84% 56%;
+    --chart-2: 199 89% 48%;
+    --chart-3: 160 70% 40%;
+    --chart-4: 33 92% 52%;
+    --chart-5: 330 78% 58%;
+    --chart-6: 280 70% 58%;
+    --chart-7: 12 80% 56%;
+    --chart-8: 188 70% 42%;
+
+    --backdrop: radial-gradient(
+      1200px 600px at 100% -10%,
+      hsl(256 84% 56% / 0.06),
+      transparent 60%
+    );
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Dark theme — the default. Deep slate canvas, glass surfaces, neon indigo. */
+    --background: 224 41% 6%;
+    --foreground: 213 31% 94%;
+    --card: 223 33% 9%;
+    --card-foreground: 213 31% 94%;
+    --popover: 223 36% 8%;
+    --popover-foreground: 213 31% 94%;
+    --primary: 256 90% 68%;
+    --primary-foreground: 224 41% 6%;
+    --secondary: 222 24% 16%;
+    --secondary-foreground: 213 31% 94%;
+    --muted: 222 22% 14%;
+    --muted-foreground: 217 16% 62%;
+    --accent: 256 40% 22%;
+    --accent-foreground: 256 90% 88%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 58% 48%;
+    --success-foreground: 224 41% 6%;
+    --warning: 38 92% 58%;
+    --warning-foreground: 224 41% 6%;
+    --info: 199 89% 60%;
+    --info-foreground: 224 41% 6%;
+    --silver: 220 14% 78%;
+    --border: 220 20% 18%;
+    --input: 220 18% 20%;
+    --ring: 256 90% 68%;
+
+    --chart-1: 256 90% 68%;
+    --chart-2: 199 89% 60%;
+    --chart-3: 160 64% 52%;
+    --chart-4: 38 92% 60%;
+    --chart-5: 330 80% 66%;
+    --chart-6: 280 76% 70%;
+    --chart-7: 14 84% 62%;
+    --chart-8: 188 72% 54%;
+
+    --backdrop: radial-gradient(
+        900px 500px at 110% -15%,
+        hsl(256 90% 60% / 0.12),
+        transparent 55%
+      ),
+      radial-gradient(
+        800px 500px at -10% 0%,
+        hsl(199 89% 55% / 0.08),
+        transparent 55%
+      );
   }
 }
 
 /*
-  Tailwind v4 theme mapping. v4 generates utilities (bg-background, text-foreground,
-  border-border, border-input, bg-primary, text-muted-foreground, …) from --color-*
-  theme variables. We point those at the runtime CSS custom properties above (wrapped
-  in hsl()), so the shadcn tokens work as utility classes AND dark mode keeps working
-  (the .dark overrides flow through because @theme inline references the vars by name).
+  Tailwind v4 theme mapping — generates color utilities (background, foreground,
+  primary, border, …) from the runtime CSS custom properties above (wrapped in
+  hsl()), so the dark overrides flow through automatically.
 */
 @theme inline {
   --color-background: hsl(var(--background));
@@ -75,20 +131,115 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+  --color-silver: hsl(var(--silver));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    color-scheme: light dark;
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    background-image: var(--backdrop);
+    background-attachment: fixed;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Refined, theme-aware scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@layer components {
+  /* Glass surface — frosted, subtly elevated panel used by the shell + cards. */
+  .glass {
+    background-color: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: 1px solid hsl(var(--border) / 0.7);
+  }
+
+  /* Gradient text used for hero headings + the brand wordmark. */
+  .text-gradient {
+    background-image: linear-gradient(
+      120deg,
+      hsl(var(--primary)),
+      hsl(var(--info))
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@layer utilities {
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  .animate-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--foreground) / 0.06),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-in-up {
+    animation: fade-in-up 0.35s ease-out both;
   }
 }

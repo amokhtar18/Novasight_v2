@@ -1,4 +1,4 @@
-# Analytica dbt project.
+# NovaSight dbt project.
 #
 # One codebase across environments (golden rule 1): this file contains NO hosts,
 # credentials, buckets, or tenant-specific values. The connection comes from the
@@ -9,12 +9,12 @@
 #   staging/      1:1 with sources, light cleaning + typing  -> view
 #   intermediate/ reusable joins / business logic            -> ephemeral
 #   marts/        consumption-ready, loaded into ClickHouse   -> table
-name: analytica
+name: novasight
 version: 1.0.0
 config-version: 2
 
 # Profile name resolved from profiles.yml (env-driven; no secrets in files).
-profile: analytica
+profile: novasight
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
@@ -33,7 +33,7 @@ require-dbt-version: [">=1.8.0", "<2.0.0"]
 #   intermediate -> ephemeral (inlined building blocks, never materialized)
 #   marts        -> table     (consumption-ready, served from ClickHouse)
 models:
-  analytica:
+  novasight:
     staging:
       +materialized: view
     intermediate:

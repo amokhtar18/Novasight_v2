@@ -34,7 +34,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="Analytica",
+    title="NovaSight",
     description="Managed, low-code data analytics & BI platform.",
     version="0.1.0",
     lifespan=lifespan,
@@ -45,4 +45,4 @@ app.include_router(v1_router)
 
 # Metrics middleware + /metrics endpoint, and OpenTelemetry tracing (no-op until an
 # OTLP endpoint is configured). Wired at import so it is in the ASGI stack at startup.
-setup_fastapi_observability(app, service_name="analytica-api")
+setup_fastapi_observability(app, service_name="novasight-api")

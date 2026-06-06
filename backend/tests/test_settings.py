@@ -27,7 +27,7 @@ COMPLETE_ENV: dict[str, str] = {
     # postgres
     "POSTGRES__HOST": "db.example.internal",
     "POSTGRES__PORT": "5432",
-    "POSTGRES__USER": "analytica",
+    "POSTGRES__USER": "novasight",
     "POSTGRES__PASSWORD": "s3cr3t-pg",
     "POSTGRES__DB": "control_plane",
     # redis
@@ -39,10 +39,10 @@ COMPLETE_ENV: dict[str, str] = {
     "OBJECT_STORE__REGION": "us-east-1",
     "OBJECT_STORE__ACCESS_KEY": "minio-access",
     "OBJECT_STORE__SECRET_KEY": "minio-s3cr3t",
-    "OBJECT_STORE__BUCKET": "analytica-data",
+    "OBJECT_STORE__BUCKET": "novasight-data",
     # iceberg
     "ICEBERG__CATALOG_URI": "http://nessie.example.internal:19120/api/v1",
-    "ICEBERG__WAREHOUSE": "s3://analytica-data/warehouse",
+    "ICEBERG__WAREHOUSE": "s3://novasight-data/warehouse",
     # clickhouse
     "CLICKHOUSE__HOST": "ch.example.internal",
     "CLICKHOUSE__PORT": "8123",
@@ -59,9 +59,9 @@ COMPLETE_ENV: dict[str, str] = {
     "CUBE__BASE_URL": "http://cube.example.internal:4000",
     "CUBE__API_SECRET": "test-cube-secret-at-least-32-chars!",
     # auth
-    "AUTH__OIDC_ISSUER": "https://auth.example.com/realms/analytica",
-    "AUTH__OIDC_AUDIENCE": "analytica-api",
-    "AUTH__JWKS_URL": "https://auth.example.com/realms/analytica/protocol/openid-connect/certs",
+    "AUTH__OIDC_ISSUER": "https://auth.example.com/realms/novasight",
+    "AUTH__OIDC_AUDIENCE": "novasight-api",
+    "AUTH__JWKS_URL": "https://auth.example.com/realms/novasight/protocol/openid-connect/certs",
     # seed tenant (bootstrap)
     "SEED_TENANT__SLUG": "local",
     "SEED_TENANT__NAME": "Local Tenant",
@@ -99,7 +99,7 @@ class TestSettingsBuildsFromEnv:
 
         assert s.postgres.host == "db.example.internal"
         assert s.postgres.port == 5432
-        assert s.postgres.user == "analytica"
+        assert s.postgres.user == "novasight"
         assert s.postgres.db == "control_plane"
         # password must be SecretStr — .get_secret_value() needed to read it
         assert s.postgres.password.get_secret_value() == "s3cr3t-pg"
@@ -111,7 +111,7 @@ class TestSettingsBuildsFromEnv:
         s = get_settings()
 
         assert s.object_store.endpoint_url == "http://minio.example.internal:9000"
-        assert s.object_store.bucket == "analytica-data"
+        assert s.object_store.bucket == "novasight-data"
         assert s.object_store.access_key.get_secret_value() == "minio-access"
         assert s.object_store.secret_key.get_secret_value() == "minio-s3cr3t"
 
@@ -144,10 +144,10 @@ class TestSettingsBuildsFromEnv:
 
         s = get_settings()
 
-        assert s.auth.oidc_issuer == "https://auth.example.com/realms/analytica"
-        assert s.auth.oidc_audience == "analytica-api"
+        assert s.auth.oidc_issuer == "https://auth.example.com/realms/novasight"
+        assert s.auth.oidc_audience == "novasight-api"
         assert s.auth.jwks_url == (
-            "https://auth.example.com/realms/analytica"
+            "https://auth.example.com/realms/novasight"
             "/protocol/openid-connect/certs"
         )
 

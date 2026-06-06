@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Production image for the Analytica backend.
+# Production image for the NovaSight backend.
 #
 # ONE image, THREE runtime roles — they share the same code and dependencies and
 # differ only by the process they launch (golden rule 4: thin slices, no duplication):

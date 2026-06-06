@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_engine
+from app.core.passwords import hash_password
 from app.models import Tenant, TenantResourceMap, User
 from app.tenancy import resources_for_slug
 
@@ -42,6 +43,20 @@ async def seed_tenant(session: AsyncSession, settings: Settings) -> Tenant:
         return existing
 
     resources = resources_for_slug(seed.slug)
+    # When an admin password is configured (HS256/password mode), the seeded admin
+    # gets a usable login plus the platform-admin and tenant-superuser roles so the
+    # install is fully operable out of the box. Without it (OIDC mode), the admin
+    # user exists but has no local password — credentials live with the IdP.
+    if seed.admin_password is not None:
+        admin = User(
+            email=seed.admin_email,
+            name="Administrator",
+            password_hash=hash_password(seed.admin_password.get_secret_value()),
+            roles=[settings.auth.platform_admin_role, settings.auth.tenant_superuser_role],
+            is_active=True,
+        )
+    else:
+        admin = User(email=seed.admin_email, is_active=True)
     tenant = Tenant(
         slug=seed.slug,
         name=seed.name,
@@ -51,7 +66,7 @@ async def seed_tenant(session: AsyncSession, settings: Settings) -> Tenant:
             clickhouse_db=resources.clickhouse_db,
             dbt_schema=resources.dbt_schema,
         ),
-        users=[User(email=seed.admin_email, is_active=True)],
+        users=[admin],
     )
     session.add(tenant)
     await session.flush()

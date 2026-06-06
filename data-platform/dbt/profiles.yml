@@ -14,7 +14,7 @@
 # The `dev` target is the local/on-prem non-TLS target by definition, so `secure`
 # is fixed off here; a TLS cloud deployment adds its own output, it does not reuse
 # `dev`.
-analytica:
+novasight:
   target: dev
   outputs:
     dev:

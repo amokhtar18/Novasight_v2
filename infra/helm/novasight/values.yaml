@@ -1,0 +1,171 @@
+# Default values for the NovaSight chart.
+#
+# This file defines STRUCTURE and safe, environment-identical defaults only. Every
+# value that points at infrastructure or is a secret lives in a profile values file
+# (values-onprem.yaml / values-cloud.yaml) or is supplied at install time — never
+# hardcoded in a template (golden rule 1).
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Application container images built in Phase 6.1. Tag defaults to .Chart.AppVersion.
+images:
+  backend:
+    repository: novasight-backend
+    tag: ""
+    pullPolicy: IfNotPresent
+  dagster:
+    repository: novasight-dagster
+    tag: ""
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod-level security: run as the non-root user baked into the images (uid 999).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+# -----------------------------------------------------------------------------
+# Application configuration (golden rule 1: the ONLY source of app config).
+#
+# config:  non-secret env vars -> ConfigMap. Connection endpoints for ENABLED
+#          bundled deps are filled in automatically (by in-cluster Service DNS);
+#          anything set here overrides them. Cloud deployments disable the bundled
+#          deps and put the real managed endpoints here.
+# secrets: secret env vars -> Secret. NEVER commit real secrets; set per install
+#          (e.g. --set-string secrets.POSTGRES__PASSWORD=... or a sealed secret).
+# -----------------------------------------------------------------------------
+config: {}
+secrets: {}
+
+# -----------------------------------------------------------------------------
+# Application workloads. One backend image, three roles; one dagster image, two.
+# -----------------------------------------------------------------------------
+api:
+  replicaCount: 1
+  command: ["sh", "-c", "exec uvicorn app.main:app --host \"$API_HOST\" --port \"$API_PORT\""]
+  containerPort: 8000
+  service:
+    type: ClusterIP
+    port: 8000
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []          # [{ host: novasight.example.com, paths: [{ path: /, pathType: Prefix }] }]
+    tls: []
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 75
+  livenessPath: /api/v1/health
+  readinessPath: /api/v1/health
+
+worker:
+  replicaCount: 1
+  command: ["dramatiq", "app.reporting.worker"]
+  resources: {}
+
+scheduler:
+  # periodiq must be a singleton (a second scheduler double-fires heartbeats).
+  command: ["periodiq", "app.reporting.worker"]
+  resources: {}
+
+# Runs alembic before install/upgrade as a Helm hook Job.
+migrate:
+  enabled: true
+  command: ["alembic", "upgrade", "head"]
+  backoffLimit: 3
+  resources: {}
+
+dagster:
+  web:
+    replicaCount: 1
+    command: ["sh", "-c", "exec dagster-webserver -h \"$DAGSTER_HOST\" -p \"$DAGSTER_PORT\" -m novasight_orchestration.definitions"]
+    containerPort: 3000
+    service:
+      type: ClusterIP
+      port: 3000
+    resources: {}
+  daemon:
+    # The daemon is a singleton.
+    command: ["dagster-daemon", "run"]
+    resources: {}
+  # Shared instance home (schedules/runs). RWO is fine since web+daemon are singletons
+  # co-scheduled; cloud uses a RWX class or an external (Postgres) Dagster instance.
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Observability (Phase 6.4). Metrics/tracing are CONFIGURED via the generic config map
+# (set OBSERVABILITY__* keys in `config:` — e.g. OBSERVABILITY__TRACING_ENABLED and
+# OBSERVABILITY__OTLP_ENDPOINT). These flags only control the Prometheus *scrape*
+# annotations the chart stamps on the API and worker pods.
+observability:
+  prometheusScrape: true
+  # Must match OBSERVABILITY__WORKER_METRICS_PORT (Dramatiq's metrics exporter port).
+  workerMetricsPort: 9100
+
+# -----------------------------------------------------------------------------
+# Bundled stateful dependencies. Minimal, single-replica deployments for on-prem /
+# dev. Disable them in cloud and point .Values.config at managed services — that is
+# the portability seam (MinIO vs S3, in-cluster Postgres vs RDS, etc.).
+# Credentials are read from the SAME app Secret/ConfigMap so there is one source of
+# truth (e.g. the bundled Postgres uses secrets.POSTGRES__PASSWORD).
+# -----------------------------------------------------------------------------
+postgresql:
+  enabled: false
+  image: postgres:17-alpine
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+  resources: {}
+
+redis:
+  enabled: false
+  image: redis:7-alpine
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  resources: {}
+
+minio:
+  enabled: false
+  image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  resources: {}
+
+clickhouse:
+  enabled: false
+  image: clickhouse/clickhouse-server:25.3
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  resources: {}

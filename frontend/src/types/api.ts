@@ -138,3 +138,163 @@ export interface NLChartResponse {
   spec: ChartSpec;
   data: QueryResponse;
 }
+
+// ---------------------------------------------------------------------------
+// Tenant context — GET /api/v1/me  (mirrors schemas/me.py)
+// ---------------------------------------------------------------------------
+
+export interface TenantContextRead {
+  tenant_id: string;
+  iceberg_namespace: string;
+  clickhouse_db: string;
+  dbt_schema: string;
+}
+
+/** GET /api/v1/me — tenant context plus the verified caller identity. */
+export interface MeRead extends TenantContextRead {
+  subject: string;
+  email: string;
+  tenant: string;
+  roles: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Auth — /api/v1/auth/*  (mirrors schemas/auth.py)
+// ---------------------------------------------------------------------------
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+  /** Tenant slug; omit to use the seed tenant (single-tenant on-prem). */
+  tenant?: string;
+}
+
+export interface UserIdentity {
+  id: string;
+  email: string;
+  name: string | null;
+  tenant: string;
+  roles: string[];
+}
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  user: UserIdentity;
+}
+
+export interface AccessTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+// ---------------------------------------------------------------------------
+// User management — /api/v1/users  (mirrors schemas/user.py)
+// ---------------------------------------------------------------------------
+
+export interface UserRead {
+  id: string;
+  email: string;
+  name: string | null;
+  roles: string[];
+  is_active: boolean;
+}
+
+export interface UserCreate {
+  email: string;
+  password: string;
+  name?: string | null;
+  roles?: string[];
+}
+
+export interface UserUpdate {
+  name?: string | null;
+  password?: string | null;
+  roles?: string[] | null;
+  is_active?: boolean | null;
+}
+
+// ---------------------------------------------------------------------------
+// Health — GET /api/v1/health  (mirrors schemas/health.py)
+// ---------------------------------------------------------------------------
+
+export interface ComponentStatus {
+  name: string;
+  status: string; // "up" | "down"
+  detail?: string | null;
+}
+
+export interface HealthRead {
+  status: string; // "healthy" | "degraded"
+  components: ComponentStatus[];
+}
+
+// ---------------------------------------------------------------------------
+// NL→SQL — POST /api/v1/ai/query
+// ---------------------------------------------------------------------------
+
+export interface NLQueryRequest {
+  /** Natural-language question (1–2000 chars). */
+  question: string;
+}
+
+export interface NLQueryResponse {
+  /** The validated SQL that was executed (post-validation form). */
+  sql: string;
+  columns: string[];
+  rows: unknown[][];
+  row_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Insights — POST /api/v1/ai/insights
+// ---------------------------------------------------------------------------
+
+export interface InsightRequest {
+  columns: string[];
+  rows: unknown[][];
+  /** Optional context, e.g. the dashboard title or originating question. */
+  context_hint?: string | null;
+}
+
+export interface InsightResponse {
+  summary: string;
+}
+
+// ---------------------------------------------------------------------------
+// Dataset suggestions — POST /api/v1/ai/datasets/{id}/suggestions
+// ---------------------------------------------------------------------------
+
+export interface SuggestionItem {
+  title: string;
+  rationale: string;
+  spec: ChartSpec;
+}
+
+export interface SuggestionsResponse {
+  suggestions: SuggestionItem[];
+  note?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Tenant provisioning (platform admin) — /api/v1/tenants  (schemas/tenant.py)
+// ---------------------------------------------------------------------------
+
+export interface TenantProvisionRequest {
+  slug: string;
+  name: string;
+  admin_email: string;
+}
+
+export interface TenantRead {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  iceberg_namespace: string;
+  clickhouse_db: string;
+  dbt_schema: string;
+}

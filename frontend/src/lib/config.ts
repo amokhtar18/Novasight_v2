@@ -13,8 +13,12 @@
 export interface AppConfig {
   /** Base URL for all API calls, e.g. "/api/v1" or "https://api.example.com/api/v1" */
   apiBaseUrl: string;
-  /** Bearer token sent on every request. Set from the dev stub or OIDC flow. */
-  authToken: string;
+  /**
+   * Optional pre-seeded bearer token (legacy dev-stub convenience). In normal
+   * operation the token comes from the login flow, not config.js — so this is no
+   * longer required and is ignored once the user signs in.
+   */
+  authToken?: string;
 }
 
 declare global {
@@ -48,19 +52,12 @@ export function loadConfig(): AppConfig {
     throw new Error("[config] apiBaseUrl is missing from window.__APP_CONFIG__");
   }
 
-  if (!authToken) {
-    throw new Error("[config] authToken is missing from window.__APP_CONFIG__");
-  }
+  // authToken is optional: the token normally comes from the login flow. A
+  // leftover placeholder is treated as absent.
+  const token =
+    authToken && authToken !== "REPLACE_WITH_DEV_TOKEN" ? authToken : undefined;
 
-  if (authToken === "REPLACE_WITH_DEV_TOKEN") {
-    // Warn loudly in dev; don't block startup so devs see the UI.
-    console.warn(
-      "[config] authToken is still the placeholder value. " +
-        "Set a real dev stub token in public/config.js. See docs/FRONTEND.md."
-    );
-  }
-
-  _config = { apiBaseUrl, authToken };
+  _config = { apiBaseUrl, authToken: token };
   return _config;
 }
 

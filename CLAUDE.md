@@ -1,11 +1,11 @@
-# CLAUDE.md — Analytica project memory
+# CLAUDE.md — NovaSight project memory
 
 > This file is **always** in Claude Code's context. Keep it short and high-signal.
 > Detailed material lives in `docs/` and is loaded on demand.
 
 ## What we are building
 
-Analytica is a managed, low-code data analytics & BI platform. It scales from a
+NovaSight is a managed, low-code data analytics & BI platform. It scales from a
 single-server on-prem (single-tenant) install to a cloud-native multi-tenant SaaS,
 **from the same codebase**. The only things that change between deployments are
 configuration and the storage backends behind an S3-compatible seam.

@@ -23,6 +23,9 @@ import {
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 
+import { readChartTheme, type ChartTheme } from "@/lib/chartTheme";
+import { useTheme } from "@/lib/theme";
+import { TableRenderer } from "@/components/chart/TableRenderer";
 import type { ChartSpec, QueryResponse } from "@/types/api";
 
 // Register only what we use.
@@ -47,7 +50,8 @@ echarts.use([
  */
 export function buildEChartsOption(
   spec: ChartSpec,
-  data: QueryResponse
+  data: QueryResponse,
+  theme: ChartTheme = readChartTheme()
 ): EChartsOption {
   const { columns, rows } = data;
   const { x, series } = spec.encoding;
@@ -90,14 +94,26 @@ export function buildEChartsOption(
     const valIdx = colIndex(seriesSpec.field);
 
     return {
-      title: options.title ? { text: options.title } : undefined,
-      tooltip: { trigger: "item" },
-      legend: showLegend ? { orient: "vertical", left: "left" } : undefined,
+      color: theme.palette,
+      textStyle: { color: theme.text },
+      title: options.title
+        ? { text: options.title, textStyle: { color: theme.text } }
+        : undefined,
+      tooltip: {
+        trigger: "item",
+        backgroundColor: theme.tooltipBg,
+        borderColor: theme.tooltipBorder,
+        textStyle: { color: theme.text },
+      },
+      legend: showLegend
+        ? { orient: "vertical", left: "left", textStyle: { color: theme.text } }
+        : undefined,
       series: [
         {
           name: seriesLabel(seriesSpec),
           type: "pie",
-          radius: "60%",
+          radius: ["42%", "68%"],
+          itemStyle: { borderColor: theme.tooltipBg, borderWidth: 2 },
           data: rows.map((row) => ({
             name:
               row[xIdx] === null || row[xIdx] === undefined
@@ -134,16 +150,36 @@ export function buildEChartsOption(
   });
 
   return {
-    title: options.title ? { text: options.title } : undefined,
-    tooltip: { trigger: "axis" },
-    legend: showLegend ? { data: series.map(seriesLabel) } : undefined,
+    color: theme.palette,
+    textStyle: { color: theme.text },
+    title: options.title
+      ? { text: options.title, textStyle: { color: theme.text } }
+      : undefined,
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.text },
+    },
+    grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
+    legend: showLegend
+      ? { data: series.map(seriesLabel), textStyle: { color: theme.text }, top: 0 }
+      : undefined,
     xAxis: {
       type: "category",
       name: options.x_axis_label ?? undefined,
       data: categories,
-      axisLabel: { rotate: categories.length > 6 ? 45 : 0 },
+      axisLabel: { rotate: categories.length > 6 ? 45 : 0, color: theme.text },
+      axisLine: { lineStyle: { color: theme.axisLine } },
+      nameTextStyle: { color: theme.text },
     },
-    yAxis: { type: "value", name: options.y_axis_label ?? undefined },
+    yAxis: {
+      type: "value",
+      name: options.y_axis_label ?? undefined,
+      axisLabel: { color: theme.text },
+      splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
+      nameTextStyle: { color: theme.text },
+    },
     series: seriesList,
   };
 }
@@ -172,10 +208,14 @@ export function ChartRenderer({
 }: ChartRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  // Re-theme charts when the user flips light/dark.
+  const { resolvedTheme } = useTheme();
 
-  // Initialise chart instance on mount.
+  const isTable = spec.type === "table";
+
+  // Initialise chart instance on mount (skip for table specs).
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (isTable || !containerRef.current) return;
     const instance = echarts.init(containerRef.current);
     chartRef.current = instance;
 
@@ -189,18 +229,22 @@ export function ChartRenderer({
       instance.dispose();
       chartRef.current = null;
     };
-  }, []);
+  }, [isTable]);
 
-  // Update chart option whenever spec or data changes.
+  // Update chart option whenever spec, data, or theme changes.
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (isTable || !chartRef.current) return;
     try {
-      const option = buildEChartsOption(spec, data);
+      const option = buildEChartsOption(spec, data, readChartTheme());
       chartRef.current.setOption(option, true /* notMerge */);
     } catch (err) {
       console.error("[ChartRenderer] Failed to build chart option:", err);
     }
-  }, [spec, data]);
+  }, [spec, data, resolvedTheme, isTable]);
+
+  if (isTable) {
+    return <TableRenderer spec={spec} data={data} className={className} />;
+  }
 
   return (
     <div

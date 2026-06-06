@@ -1,9 +1,13 @@
-# Local stack (Docker Compose)
+# The NovaSight stack (Docker Compose)
 
-The single-tenant / on-prem shape of Analytica: **Postgres** (control-plane DB),
-**Redis** (cache + task queue), **MinIO** (S3-compatible object lake — the portability
-seam), and **ClickHouse** (serving engine). The same images run under Helm in the cloud;
-only configuration and the storage backend change.
+One unified compose file runs the **whole** product: infrastructure — **Postgres**
+(control-plane DB), **Redis** (cache + task queue), **MinIO** (S3-compatible object lake
+— the portability seam), **ClickHouse** (serving engine), **Cube** (semantic layer), and
+**OpenMetadata** (catalog) — plus the application (`migrate` → `api`, `worker`,
+`scheduler`, `dagster`, `dagster-daemon`) and the **frontend** (which also reverse-proxies
+`/api`, so the whole app is one origin). There is no separate "local" mode or app overlay.
+The same images run under Helm in the cloud; only configuration and the storage backend
+change. After it is up, open `http://localhost:${FRONTEND__PORT}` (default `8080`).
 
 Nothing is hardcoded: every credential, port, database name, and bucket is read from the
 repo-root **`.env`** — the *same* file `backend/app/core/config.py` reads — so the stack

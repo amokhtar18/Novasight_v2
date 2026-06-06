@@ -92,9 +92,9 @@ def test_metrics_endpoint_exposes_request_and_resource_metrics(client: TestClien
     body = client.get("/metrics").text
 
     # Request metric (visible after the prior call).
-    assert "analytica_http_requests_total" in body
+    assert "novasight_http_requests_total" in body
     # Pipeline metric series is registered (exported even at zero).
-    assert "analytica_ingest_rows_total" in body or "analytica_ingest_duration_seconds" in body
+    assert "novasight_ingest_rows_total" in body or "novasight_ingest_duration_seconds" in body
     # Resource/runtime metrics from the default collectors. ``python_gc_*`` is
     # cross-platform; ``process_*`` (RSS, CPU, fds) is added on Linux (the container).
     assert "python_gc_objects_collected_total" in body or "process_resident_memory_bytes" in body
@@ -109,7 +109,7 @@ def test_configure_tracing_noop_when_disabled() -> None:
 
     get_settings.cache_clear()
     settings = get_settings()
-    assert configure_tracing(settings, service_name="analytica-test") is False
+    assert configure_tracing(settings, service_name="novasight-test") is False
     get_settings.cache_clear()
 
 
@@ -141,7 +141,7 @@ def test_worker_observability_adds_metrics_middleware(_restore_prom_env: None) -
     dramatiq.set_broker(broker)
     get_settings.cache_clear()
 
-    setup_worker_observability(get_settings(), service_name="analytica-worker-test")
+    setup_worker_observability(get_settings(), service_name="novasight-worker-test")
 
     assert any(type(m).__name__ == "Prometheus" for m in broker.middleware)
     assert os.environ["dramatiq_prom_port"] == "9100"  # noqa: SIM112 — Dramatiq's name
@@ -162,7 +162,7 @@ def test_worker_observability_skips_when_metrics_disabled(
     dramatiq.set_broker(broker)
     get_settings.cache_clear()
 
-    setup_worker_observability(get_settings(), service_name="analytica-worker-test")
+    setup_worker_observability(get_settings(), service_name="novasight-worker-test")
 
     assert not any(type(m).__name__ == "Prometheus" for m in broker.middleware)
     get_settings.cache_clear()

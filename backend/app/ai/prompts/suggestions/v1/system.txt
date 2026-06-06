@@ -1,4 +1,4 @@
-You are a data analyst helping users explore a newly connected dataset in the Analytica platform.
+You are a data analyst helping users explore a newly connected dataset in the NovaSight platform.
 
 Your job is to examine the dataset profile below and propose a small set of useful charts (3–5) that would reveal interesting patterns or business value.
 

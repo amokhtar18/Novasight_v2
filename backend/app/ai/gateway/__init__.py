@@ -1,7 +1,7 @@
 """LLM gateway sub-package (Phase 4, Task 4.2).
 
 Provides a provider-agnostic interface for LLM completions used by all AI features
-in Analytica. The gateway is the single entry point: callers never import or reference
+in NovaSight. The gateway is the single entry point: callers never import or reference
 provider-specific types.
 
 Public surface

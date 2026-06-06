@@ -37,11 +37,17 @@ human reference.
 | `AI__PROVIDER` / `__MODEL` / `__API_KEY` | str / secret | — | deployment + tenant | LLM gateway provider, default model, key |
 | `AI__TEMPERATURE` / `__MAX_TOKENS` | float / int | 0.0 / 1024 | — | generation params |
 | `AI__PROMPT_TEMPLATE_DIR` | str | — | deployment | versioned prompt templates |
-| `AUTH__OIDC_ISSUER` / `__OIDC_AUDIENCE` / `__JWKS_URL` | str | `""` | deployment | OIDC (RS256) provider — issuer URL, audience, JWKS endpoint. Required when `AUTH__DEV_STUB=false`. |
+| `AUTH__OIDC_ISSUER` / `__OIDC_AUDIENCE` / `__JWKS_URL` | str | `""` | deployment | OIDC (RS256) provider — issuer URL, audience, JWKS endpoint. Required only in OIDC mode (neither `AUTH__DEV_STUB` nor `AUTH__SESSION_SECRET` set). |
 | `AUTH__DEV_STUB` | bool | `false` | deployment | Enable HS256 dev-stub mode. **NEVER set to `true` in production.** Secure default is `false`. |
 | `AUTH__DEV_STUB_SECRET` | SecretStr | `None` | local/dev only | HS256 signing secret used in dev-stub mode (use a long random string, 32+ chars recommended). Required when `DEV_STUB=true`; ignored otherwise. |
+| `AUTH__SESSION_SECRET` | SecretStr | `None` | deployment | HS256 secret for **password mode**: the backend signs+verifies its own access/refresh tokens and serves `/auth/login`. The default out-of-box mode. Mutually exclusive with OIDC; leave blank to use an external IdP. |
+| `AUTH__ACCESS_TTL_SECONDS` / `__REFRESH_TTL_SECONDS` | int | 3600 / 1209600 | — | access (1h) and refresh (14d) token lifetimes for password mode. |
 | `AUTH__TENANT_CLAIM` | str | `"tenant"` | deployment | Name of the JWT claim that carries the tenant identifier (slug). |
+| `AUTH__ROLES_CLAIM` | str | `"roles"` | deployment | Name of the JWT claim carrying the principal's roles list. |
+| `AUTH__PLATFORM_ADMIN_ROLE` | str | `"platform_admin"` | deployment | Role required to operate the control plane (provision/de-provision tenants). Platform role, not tenant-scoped. |
+| `AUTH__TENANT_SUPERUSER_ROLE` | str | `"superuser"` | deployment | Tenant-scoped role required to create/run/schedule pipelines and dbt jobs. A platform admin is implicitly allowed. |
 | `SEED_TENANT__SLUG` / `__NAME` / `__ADMIN_EMAIL` | str | — | deployment | bootstrap tenant identity used by the seed script; slug derives the tenant's Iceberg namespace / ClickHouse db / dbt schema |
+| `SEED_TENANT__ADMIN_PASSWORD` | SecretStr | `None` | deployment | Password for the seeded admin (password mode). When set, the admin can log in and is granted the platform-admin + tenant-superuser roles. Omit in OIDC mode. |
 | `MINIO__API_PORT` | int | 9000 | local stack | host publish port for the MinIO S3 API (Compose only); must match the port in `OBJECT_STORE__ENDPOINT_URL` |
 | `MINIO__CONSOLE_PORT` | int | 9001 | local stack | host publish port for the MinIO web console (Compose only) |
 | `DBT_SCHEMA` | str | — | per tenant | dbt target schema == the tenant's ClickHouse database; resolved from the tenant context at invocation. dbt/Dagster only. |

@@ -1,7 +1,7 @@
 # Grafana dashboard provider — loads JSON dashboards from disk (Phase 6.4).
 apiVersion: 1
 providers:
-  - name: analytica
+  - name: novasight
     orgId: 1
     type: file
     disableDeletion: false

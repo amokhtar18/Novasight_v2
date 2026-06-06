@@ -1,6 +1,6 @@
 # Scheduled reporting (Phase 5.1)
 
-Analytica renders saved queries to Excel workbooks and emails them on a schedule.
+NovaSight renders saved queries to Excel workbooks and emails them on a schedule.
 All of it runs **in the background** through a Dramatiq worker — never on the API
 request path — and every step is tenant-scoped.
 

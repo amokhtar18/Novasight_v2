@@ -19,6 +19,7 @@ No secret values are logged or returned in error messages.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -145,19 +146,13 @@ async def _verify_oidc(token: str, auth_cfg: AuthSettings) -> dict[str, object]:
     return claims
 
 
-def _verify_dev_stub(token: str, auth_cfg: AuthSettings) -> dict[str, object]:
-    """Verify an HS256 dev-stub token.
+def _verify_hs256(token: str, secret: str) -> dict[str, object]:
+    """Verify an HS256 token signed with the shared ``secret``.
 
-    ONLY called when ``auth_cfg.dev_stub is True``. Checks signature and expiry.
-    Returns the decoded claims dict on success.
+    Used by both dev-stub mode and first-class password mode — in both, the
+    backend (or the dev harness) signs the token with a symmetric secret it also
+    holds. Checks signature and expiry. Returns the decoded claims on success.
     """
-    if auth_cfg.dev_stub_secret is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Dev-stub mode is enabled but no secret is configured",
-        )
-
-    secret = auth_cfg.dev_stub_secret.get_secret_value()
     try:
         claims: dict[str, object] = jwt.decode(
             token,
@@ -171,6 +166,40 @@ def _verify_dev_stub(token: str, auth_cfg: AuthSettings) -> dict[str, object]:
         raise HTTPException(status_code=401, detail="Token validation failed") from exc
 
     return claims
+
+
+def mint_token(
+    *,
+    secret: str,
+    subject: str,
+    tenant_slug: str,
+    email: str,
+    roles: list[str],
+    ttl_seconds: int,
+    tenant_claim: str,
+    roles_claim: str,
+    kind: str = "access",
+) -> str:
+    """Sign an HS256 token for password-mode auth.
+
+    Co-located with verification so the claim shape stays in lock-step. The
+    ``tenant_claim`` / ``roles_claim`` names come from settings (golden rule 1) so
+    issued tokens match exactly what ``get_principal`` and ``get_tenant_context``
+    read back. ``kind`` distinguishes short-lived access tokens from long-lived
+    refresh tokens (carried as the ``typ`` claim; the refresh endpoint requires
+    ``typ == "refresh"``).
+    """
+    now = int(time.time())
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "email": email,
+        tenant_claim: tenant_slug,
+        roles_claim: roles,
+        "typ": kind,
+        "iat": now,
+        "exp": now + ttl_seconds,
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
 
 
 def _extract_roles(claims: dict[str, object], roles_claim: str) -> frozenset[str]:
@@ -233,8 +262,11 @@ async def get_principal(
     token = _extract_bearer(request)
     auth_cfg = settings.auth
 
-    if auth_cfg.dev_stub:
-        claims = _verify_dev_stub(token, auth_cfg)
+    # HS256 (dev-stub or password mode) when a symmetric secret is configured;
+    # otherwise real OIDC (RS256/JWKS).
+    hs256_secret = auth_cfg.hs256_secret
+    if hs256_secret is not None:
+        claims = _verify_hs256(token, hs256_secret)
     else:
         claims = await _verify_oidc(token, auth_cfg)
 
@@ -254,4 +286,25 @@ async def require_platform_admin(
     if settings.auth.platform_admin_role not in principal.roles:
         logger.warning("Principal sub=%r lacks platform-admin role", principal.subject)
         raise HTTPException(status_code=403, detail="Platform admin role required")
+    return principal
+
+
+async def require_tenant_superuser(
+    principal: Principal = Depends(get_principal),  # noqa: B008
+    settings: Settings = Depends(get_settings),  # noqa: B008
+) -> Principal:
+    """Dependency: authorize a tenant *superuser* (orchestration operator).
+
+    Gates tenant-scoped actions that create, run, or schedule pipelines and dbt
+    jobs. The required role name comes from ``settings.auth.tenant_superuser_role``
+    (golden rule 1). A platform admin is implicitly allowed (they outrank tenant
+    roles). Fails closed with 403 otherwise.
+    """
+    roles = principal.roles
+    if (
+        settings.auth.tenant_superuser_role not in roles
+        and settings.auth.platform_admin_role not in roles
+    ):
+        logger.warning("Principal sub=%r lacks tenant-superuser role", principal.subject)
+        raise HTTPException(status_code=403, detail="Superuser role required")
     return principal

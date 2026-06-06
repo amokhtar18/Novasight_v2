@@ -157,7 +157,7 @@ class ReportingSettings(BaseSettings):
     # Hard cap on rows pulled into a single report workbook.
     max_rows: int = 100_000
     # Subject-line prefix for report emails.
-    subject_prefix: str = "[Analytica] "
+    subject_prefix: str = "[NovaSight] "
 
 
 class AlertSettings(BaseSettings):
@@ -175,7 +175,7 @@ class AlertSettings(BaseSettings):
     # Timeout for webhook POSTs.
     webhook_timeout_seconds: float = 10.0
     # Subject-line prefix for alert emails.
-    subject_prefix: str = "[Analytica][ALERT] "
+    subject_prefix: str = "[NovaSight][ALERT] "
 
 
 class ObservabilitySettings(BaseSettings):
@@ -200,7 +200,7 @@ class ObservabilitySettings(BaseSettings):
     tracing_enabled: bool = False
     otlp_endpoint: str = ""  # e.g. http://otel-collector:4318 — OTLP/HTTP base URL
     # Base service name; each process refines it (…-api, …-worker) at startup.
-    service_name: str = "analytica"
+    service_name: str = "novasight"
     # Head sampling ratio in [0, 1]; 1.0 = sample every trace.
     trace_sample_ratio: float = 1.0
 
@@ -219,6 +219,18 @@ class AuthSettings(BaseSettings):
     dev_stub: bool = False
     dev_stub_secret: SecretStr | None = None
 
+    # Password-auth mode: the backend itself issues HS256 access/refresh tokens
+    # (see ``app/services/auth.py``) signed with this secret, and verifies them with
+    # the same secret. Set this (with ``dev_stub`` left False) for the self-contained
+    # password login that works out of the box in a single deployment. No default —
+    # it is an environment-specific secret (golden rule 1). When neither ``dev_stub``
+    # nor ``session_secret`` is set, real OIDC (RS256/JWKS) is in force.
+    session_secret: SecretStr | None = None
+    # Access / refresh token lifetimes in seconds. Environment-identical conventions
+    # with safe defaults; overridable via AUTH__ACCESS_TTL_SECONDS / AUTH__REFRESH_TTL_SECONDS.
+    access_ttl_seconds: int = 3600            # 1 hour
+    refresh_ttl_seconds: int = 1_209_600      # 14 days
+
     # The JWT claim name that carries the tenant identifier (e.g. "tenant").
     # Matches whatever our OIDC provider / token issuance convention sets.
     tenant_claim: str = "tenant"
@@ -234,21 +246,46 @@ class AuthSettings(BaseSettings):
     # control-plane endpoints are not tenant-scoped.
     platform_admin_role: str = "platform_admin"
 
+    # Tenant-scoped role a user must hold to operate orchestration (create/run/schedule
+    # pipelines and dbt jobs) within their own tenant. A "super user" inside the tenant,
+    # distinct from the platform admin who manages tenants. Convention with a safe
+    # default, overridable via AUTH__TENANT_SUPERUSER_ROLE.
+    tenant_superuser_role: str = "superuser"
+
+    @property
+    def hs256_secret(self) -> str | None:
+        """The active HS256 secret for issuing/verifying password-mode tokens.
+
+        ``dev_stub`` uses ``dev_stub_secret``; password mode uses ``session_secret``.
+        Returns ``None`` when neither is configured (real OIDC is in force), which
+        also disables the password-login endpoints.
+        """
+        if self.dev_stub and self.dev_stub_secret is not None:
+            return self.dev_stub_secret.get_secret_value()
+        if self.session_secret is not None:
+            return self.session_secret.get_secret_value()
+        return None
+
     @model_validator(mode="after")
     def _require_mode_config(self) -> AuthSettings:
         """Fail closed at startup if the selected auth mode is misconfigured.
 
-        Real OIDC (``dev_stub`` False) must have the issuer, audience, and JWKS
-        URL; dev-stub mode must have its signing secret. This keeps the
-        infrastructure-pointing OIDC values effectively required (golden rule:
-        no environment-specific value is silently defaulted) while still letting
-        dev-stub installs omit OIDC config they don't use.
+        Three mutually exclusive modes, resolved in order:
+          * dev-stub (``dev_stub`` True) — requires ``dev_stub_secret``.
+          * password (``session_secret`` set) — the backend signs+verifies HS256.
+          * real OIDC (neither of the above) — requires issuer, audience, JWKS URL.
+        This keeps infrastructure-pointing values effectively required (golden rule:
+        no environment-specific value is silently defaulted) while letting each mode
+        omit the config it does not use.
         """
         if self.dev_stub:
             if self.dev_stub_secret is None:
                 raise ValueError(
                     "AUTH__DEV_STUB_SECRET is required when AUTH__DEV_STUB is true"
                 )
+            return self
+        if self.session_secret is not None:
+            # Password mode: backend-issued HS256 tokens; no OIDC infra required.
             return self
         missing = [
             name
@@ -261,7 +298,8 @@ class AuthSettings(BaseSettings):
         ]
         if missing:
             raise ValueError(
-                f"{', '.join(missing)} required when AUTH__DEV_STUB is false (real OIDC)"
+                f"{', '.join(missing)} required for OIDC mode "
+                "(set AUTH__DEV_STUB or AUTH__SESSION_SECRET to use HS256 instead)"
             )
         return self
 
@@ -278,6 +316,11 @@ class SeedTenantSettings(BaseSettings):
     slug: str                       # used to derive physical resource names
     name: str                       # human-facing display name
     admin_email: str                # first user provisioned for the tenant
+    # Password for the seeded admin user (HS256/password mode). No default — it is
+    # a secret (golden rule 1). When set, the seed grants the admin the platform-admin
+    # and tenant-superuser roles so the install is operable out of the box. Omit in
+    # OIDC mode (the IdP owns credentials), where the admin user has no local password.
+    admin_password: SecretStr | None = None
 
 
 class Settings(BaseSettings):

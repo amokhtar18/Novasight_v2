@@ -1,1 +1,1 @@
-# Analytica backend application package
+# NovaSight backend application package

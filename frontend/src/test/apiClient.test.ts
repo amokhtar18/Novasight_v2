@@ -2,32 +2,40 @@
  * Unit tests for the API client.
  *
  * Verifies that:
- *  1. The Authorization header contains the Bearer token from runtime config.
+ *  1. The Authorization header carries the access token from the auth store.
  *  2. The correct URL (base URL + path) is constructed.
  *  3. Non-2xx responses throw an Error with the status code.
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { _resetConfig } from "@/lib/config";
+import { useAuthStore } from "@/store/authStore";
 
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
 // Inject a test config before any import of the API client.
-function setWindowConfig(apiBaseUrl: string, authToken: string) {
-  window.__APP_CONFIG__ = { apiBaseUrl, authToken };
+function setWindowConfig(apiBaseUrl: string) {
+  window.__APP_CONFIG__ = { apiBaseUrl };
 }
 
 beforeEach(() => {
   _resetConfig();
-  setWindowConfig("/api/v1", "test-token-abc");
+  setWindowConfig("/api/v1");
+  // The token now comes from the auth store, not config.js.
+  useAuthStore.getState().setSession({
+    accessToken: "test-token-abc",
+    refreshToken: "refresh-abc",
+    user: { id: "u1", email: "u@x", name: null, tenant: "local", roles: [] },
+  });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   delete window.__APP_CONFIG__;
   _resetConfig();
+  useAuthStore.getState().clear();
 });
 
 // ---------------------------------------------------------------------------

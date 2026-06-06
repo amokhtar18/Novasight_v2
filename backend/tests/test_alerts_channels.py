@@ -32,13 +32,13 @@ def _event() -> AlertEvent:
 
 def test_email_channel_sends_via_sender() -> None:
     sender = _FakeEmailSender()
-    channel = EmailAlertChannel(sender, ["ops@alpha.test"], "[Analytica][ALERT] ")
+    channel = EmailAlertChannel(sender, ["ops@alpha.test"], "[NovaSight][ALERT] ")
 
     channel.send(_event())
 
     assert len(sender.calls) == 1
     call = sender.calls[0]
-    assert call["subject"] == "[Analytica][ALERT] Revenue drop"
+    assert call["subject"] == "[NovaSight][ALERT] Revenue drop"
     assert call["recipients"] == ["ops@alpha.test"]
     assert "42.0" in call["body"]
     assert "< 100.0" in call["body"]

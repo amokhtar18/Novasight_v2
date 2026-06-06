@@ -16,7 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from analytica_orchestration.catalog import (
+from novasight_orchestration.catalog import (
     STAGE_CLICKHOUSE,
     STAGE_DBT,
     build_clickhouse_metadata_config,
@@ -32,7 +32,7 @@ def _secret(value: str) -> Any:
 def _settings(
     *,
     dbt_schema: str = "tenant_local",
-    service_name: str = "analytica_clickhouse",
+    service_name: str = "novasight_clickhouse",
     host_port: str = "http://openmetadata:8585/api",
 ) -> Any:
     """Minimal OrchestrationSettings stand-in (only the fields the builders read)."""
@@ -63,7 +63,7 @@ def test_clickhouse_config_is_env_driven() -> None:
     cfg = build_clickhouse_metadata_config(_settings())
 
     assert cfg["source"]["type"] == "clickhouse"
-    assert cfg["source"]["serviceName"] == "analytica_clickhouse"
+    assert cfg["source"]["serviceName"] == "novasight_clickhouse"
 
     conn = cfg["source"]["serviceConnection"]["config"]
     assert conn["hostPort"] == "clickhouse:8123"
@@ -98,7 +98,7 @@ def test_dbt_config_points_at_manifest(tmp_path: Path) -> None:
     cfg = build_dbt_ingestion_config(_settings(), manifest)
 
     assert cfg["source"]["type"] == "dbt"
-    assert cfg["source"]["serviceName"] == "analytica_clickhouse"
+    assert cfg["source"]["serviceName"] == "novasight_clickhouse"
     src = cfg["source"]["sourceConfig"]["config"]["dbtConfigSource"]
     assert src["dbtManifestFilePath"] == str(manifest)
     # No siblings present → only the manifest is referenced.
@@ -130,7 +130,7 @@ def test_run_catalog_ingestion_runs_both_stages(tmp_path: Path) -> None:
     # Datasets first (ClickHouse tables), then lineage (dbt models).
     assert [c["source"]["type"] for c in captured] == ["clickhouse", "dbt"]
     assert result.stages == [STAGE_CLICKHOUSE, STAGE_DBT]
-    assert result.service_name == "analytica_clickhouse"
+    assert result.service_name == "novasight_clickhouse"
     assert result.scoped_database == "tenant_local"
 
 

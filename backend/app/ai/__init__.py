@@ -1,4 +1,4 @@
-"""AI layer for Analytica.
+"""AI layer for NovaSight.
 
 Provides:
 - semantic/  — tenant-scoped Cube semantic-layer client (Phase 4, Task 4.1)

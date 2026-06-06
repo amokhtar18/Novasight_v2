@@ -1,4 +1,4 @@
-# Analytica — developer convenience targets.
+# NovaSight — developer convenience targets.
 # The local stack reads the repo-root .env (the SAME file the backend reads), passed to
 # Compose with --env-file so it is found regardless of the compose file's directory.
 

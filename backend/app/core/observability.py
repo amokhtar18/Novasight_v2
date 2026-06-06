@@ -16,7 +16,7 @@ from app.core.metrics import PrometheusHTTPMiddleware, render_latest
 from app.core.tracing import configure_tracing, instrument_fastapi
 
 
-def setup_fastapi_observability(app: FastAPI, *, service_name: str = "analytica-api") -> None:
+def setup_fastapi_observability(app: FastAPI, *, service_name: str = "novasight-api") -> None:
     """Add the metrics middleware + ``/metrics`` route and configure tracing."""
     settings = get_settings()
     obs = settings.observability

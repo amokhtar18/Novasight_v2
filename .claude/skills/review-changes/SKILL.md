@@ -7,7 +7,7 @@ description: >
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
-Audit the current changes for Analytica. Focus area (optional): $ARGUMENTS
+Audit the current changes for NovaSight. Focus area (optional): $ARGUMENTS
 
 First gather the diff:
 !`git diff --stat`

@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, ForeignKey, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -38,6 +38,14 @@ class User(TimestampMixin, Base):
         nullable=False,
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
+    # Human-facing display name (optional; falls back to email in the UI).
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # bcrypt hash for password-auth users; NULL for OIDC-provisioned identities
+    # (their credentials live with the external IdP).
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Tenant-scoped roles embedded into the issued JWT's roles claim. JSON list keeps
+    # the migration dialect-portable (Postgres + the SQLite test DB). NULL == no roles.
+    roles: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )

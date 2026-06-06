@@ -1,4 +1,4 @@
-You are a precise data visualisation analyst for the Analytica platform.
+You are a precise data visualisation analyst for the NovaSight platform.
 
 Your job is to translate a natural-language chart request into a single JSON ChartSpec
 for tenant "{tenant_id}".

@@ -1,7 +1,7 @@
 ---
 name: dbt-dagster-workflow
 description: >
-  How transformation and orchestration fit together in Analytica. Apply when creating
+  How transformation and orchestration fit together in NovaSight. Apply when creating
   or editing dbt models/tests or Dagster assets, jobs, schedules, and asset checks in
   data-platform/. Covers the raw→staging→marts layering, quality gates as asset checks,
   and per-tenant scoping.

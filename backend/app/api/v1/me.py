@@ -19,22 +19,28 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.schemas.me import TenantContextRead
+from app.core.security import Principal, get_principal
+from app.schemas.me import MeRead, TenantContextRead
 from app.tenancy.context import TenantContext, get_tenant_context
 
 router = APIRouter(prefix="/me", tags=["me"])
 
 
-@router.get("", response_model=TenantContextRead)
+@router.get("", response_model=MeRead)
 async def get_me(
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
-) -> TenantContextRead:
-    """Return the resolved tenant context for the authenticated caller."""
-    return TenantContextRead(
+    principal: Principal = Depends(get_principal),  # noqa: B008
+) -> MeRead:
+    """Return the resolved tenant context and verified identity for the caller."""
+    return MeRead(
         tenant_id=ctx.tenant_id,
         iceberg_namespace=ctx.iceberg_namespace,
         clickhouse_db=ctx.clickhouse_db,
         dbt_schema=ctx.dbt_schema,
+        subject=principal.subject,
+        email=principal.email,
+        tenant=principal.tenant_key,
+        roles=sorted(principal.roles),
     )
 
 

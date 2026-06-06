@@ -9,7 +9,11 @@ the caller (tenancy-isolation invariant).
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.db import get_db
 from app.core.security import require_platform_admin
 from app.models import Tenant
 from app.schemas.tenant import TenantProvisionRequest, TenantRead
@@ -39,6 +43,34 @@ def _to_read(tenant: Tenant) -> TenantRead:
         clickhouse_db=rmap.clickhouse_db,
         dbt_schema=rmap.dbt_schema,
     )
+
+
+@router.get("", response_model=list[TenantRead])
+async def list_tenants(
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> list[TenantRead]:
+    """List all tenants with their physical resource coordinates (platform admin)."""
+    result = await db.execute(
+        select(Tenant).options(selectinload(Tenant.resource_map)).order_by(Tenant.slug.asc())
+    )
+    return [_to_read(t) for t in result.scalars().all()]
+
+
+@router.get("/{slug}", response_model=TenantRead)
+async def get_tenant(
+    slug: str,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> TenantRead:
+    """Fetch one tenant by slug (platform admin)."""
+    result = await db.execute(
+        select(Tenant)
+        .where(Tenant.slug == slug)
+        .options(selectinload(Tenant.resource_map))
+    )
+    tenant = result.scalars().first()
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return _to_read(tenant)
 
 
 @router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)

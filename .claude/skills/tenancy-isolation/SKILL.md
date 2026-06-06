@@ -1,7 +1,7 @@
 ---
 name: tenancy-isolation
 description: >
-  The multi-tenancy invariant for Analytica. Apply whenever code reads or writes data,
+  The multi-tenancy invariant for NovaSight. Apply whenever code reads or writes data,
   resolves storage locations, builds queries, runs pipelines, or handles auth. Enforces
   pooled compute with per-tenant isolated data (Iceberg namespace, ClickHouse database,
   dbt schema), with tenant context resolved at the boundary and never trusted from the

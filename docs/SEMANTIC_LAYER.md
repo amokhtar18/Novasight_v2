@@ -11,7 +11,7 @@ Read `docs/ARCHITECTURE.md` for context on where the semantic layer sits in the 
 
 The serving engine is ClickHouse. As of 2025, dbt MetricFlow does not support
 ClickHouse as a query target. Cube supports ClickHouse natively via its HTTP driver
-and is the locked engine decision for Analytica (see architecture decision record in
+and is the locked engine decision for NovaSight (see architecture decision record in
 project memory).
 
 ---
@@ -28,7 +28,7 @@ data-platform/semantic/config/cube.js
 ### Cube: `regional_sales`
 
 The cube maps to the serving table produced by the Dagster serving asset
-(`data-platform/orchestration/analytica_orchestration/serving.py`). The physical table
+(`data-platform/orchestration/novasight_orchestration/serving.py`). The physical table
 name is read from the environment variable `CUBEJS_SERVING_REGIONAL_SALES_TABLE` (which
 is set from `SERVING_REGIONAL_SALES_TABLE` in the repo-root `.env`). The database is
 resolved from the per-request JWT security context — never from env or a literal.

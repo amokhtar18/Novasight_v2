@@ -1,0 +1,110 @@
+# Cloud profile — multi-tenant SaaS posture.
+#
+# Same templates as on-prem; the ONLY difference is THIS file (configuration + storage
+# backend). The bundled stateful deps are OFF — the platform points at managed
+# services (RDS/Cloud SQL, ElastiCache, S3, managed ClickHouse). Storage backend flips
+# from MinIO to S3 across the same S3-compatible seam (ARCHITECTURE.md).
+#
+# Secrets are CHANGE-ME placeholders; supply real values at install (external/sealed
+# Secret or --set-string), never commit them.
+
+# Use managed dependencies — nothing stateful runs in this chart.
+postgresql:
+  enabled: false
+redis:
+  enabled: false
+minio:
+  enabled: false
+clickhouse:
+  enabled: false
+
+api:
+  replicaCount: 3
+  service:
+    type: ClusterIP
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
+    hosts:
+      - host: app.CHANGE-ME.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: novasight-api-tls
+        hosts:
+          - app.CHANGE-ME.example.com
+
+worker:
+  replicaCount: 3
+
+# Multi-tenant control plane needs durable, shared Dagster state. Use a RWX class
+# (or, better, an external Postgres-backed Dagster instance via DAGSTER_HOME config).
+dagster:
+  persistence:
+    accessMode: ReadWriteMany
+    storageClass: CHANGE-ME-rwx
+    size: 5Gi
+
+# All infrastructure endpoints are managed services — supplied explicitly here since
+# no bundled dep fills them in.
+config:
+  ENVIRONMENT: cloud
+  LOG_LEVEL: INFO
+
+  POSTGRES__HOST: CHANGE-ME.rds.amazonaws.com
+  POSTGRES__PORT: "5432"
+  POSTGRES__USER: novasight
+  POSTGRES__DB: novasight
+
+  REDIS__HOST: CHANGE-ME.cache.amazonaws.com
+  REDIS__PORT: "6379"
+
+  # Object store = AWS S3 (the MinIO→S3 flip across the same seam).
+  OBJECT_STORE__ENDPOINT_URL: https://s3.us-east-1.amazonaws.com
+  OBJECT_STORE__REGION: us-east-1
+  OBJECT_STORE__BUCKET: novasight-prod-lake
+  # Confirm at-rest encryption regardless of bucket policy (5.4).
+  OBJECT_STORE__SERVER_SIDE_ENCRYPTION: AES256
+
+  ICEBERG__CATALOG_URI: https://catalog.CHANGE-ME.example.com/iceberg
+  ICEBERG__WAREHOUSE: s3://novasight-prod-lake/warehouse
+
+  CLICKHOUSE__HOST: CHANGE-ME.clickhouse.cloud
+  CLICKHOUSE__PORT: "8443"
+  CLICKHOUSE__USER: default
+
+  AI__PROVIDER: anthropic
+  AI__MODEL: claude-opus-4-8
+  AI__PROMPT_TEMPLATE_DIR: /app/app/ai/prompts
+
+  CUBE__BASE_URL: https://cube.CHANGE-ME.example.com
+
+  AUTH__DEV_STUB: "false"
+  AUTH__OIDC_ISSUER: https://auth.CHANGE-ME.example.com/
+  AUTH__OIDC_AUDIENCE: novasight
+  AUTH__JWKS_URL: https://auth.CHANGE-ME.example.com/.well-known/jwks.json
+  AUTH__TENANT_CLAIM: tenant
+  AUTH__ROLES_CLAIM: roles
+
+  # A seed/demo tenant; further tenants are provisioned via the control plane (6.3).
+  SEED_TENANT__SLUG: demo
+  SEED_TENANT__NAME: Demo
+  SEED_TENANT__ADMIN_EMAIL: admin@CHANGE-ME.example.com
+
+  DBT_SCHEMA: demo
+
+secrets:
+  POSTGRES__PASSWORD: CHANGE-ME
+  OBJECT_STORE__ACCESS_KEY: CHANGE-ME
+  OBJECT_STORE__SECRET_KEY: CHANGE-ME
+  CLICKHOUSE__PASSWORD: CHANGE-ME
+  AI__API_KEY: CHANGE-ME
+  CUBE__API_SECRET: CHANGE-ME

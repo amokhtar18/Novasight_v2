@@ -26,12 +26,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 # --- HTTP (API) -------------------------------------------------------------
 
 HTTP_REQUESTS = Counter(
-    "analytica_http_requests_total",
+    "novasight_http_requests_total",
     "Total HTTP requests.",
     labelnames=("method", "path", "status"),
 )
 HTTP_REQUEST_DURATION = Histogram(
-    "analytica_http_request_duration_seconds",
+    "novasight_http_request_duration_seconds",
     "HTTP request latency in seconds.",
     labelnames=("method", "path"),
 )
@@ -39,12 +39,12 @@ HTTP_REQUEST_DURATION = Histogram(
 # --- Pipeline (ingestion) ---------------------------------------------------
 
 INGEST_ROWS = Counter(
-    "analytica_ingest_rows_total",
+    "novasight_ingest_rows_total",
     "Rows written by the ingestion pipeline.",
     labelnames=("status",),
 )
 INGEST_DURATION = Histogram(
-    "analytica_ingest_duration_seconds",
+    "novasight_ingest_duration_seconds",
     "Ingestion pipeline run duration in seconds.",
     labelnames=("status",),
 )

@@ -1,4 +1,4 @@
-# Analytica orchestration (Dagster)
+# NovaSight orchestration (Dagster)
 
 The Dagster code location for the data platform. Models the world as software-defined
 assets so lineage is automatic (see the `dbt-dagster-workflow` skill):

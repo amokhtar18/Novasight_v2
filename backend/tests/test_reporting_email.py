@@ -35,7 +35,7 @@ def test_send_uses_settings_and_attaches_workbook() -> None:
 
     with patch("app.reporting.email.smtplib.SMTP", return_value=smtp_ctx) as smtp_cls:
         sender.send(
-            subject="[Analytica] Sales",
+            subject="[NovaSight] Sales",
             recipients=["a@example.test", "b@example.test"],
             body="here is your report",
             attachment=EmailAttachment(filename="sales.xlsx", content=b"PK\x03\x04stuff"),
@@ -56,7 +56,7 @@ def test_send_uses_settings_and_attaches_workbook() -> None:
     sent_message = smtp_client.send_message.call_args.args[0]
     assert sent_message["From"] == "reports@example.test"
     assert sent_message["To"] == "a@example.test, b@example.test"
-    assert sent_message["Subject"] == "[Analytica] Sales"
+    assert sent_message["Subject"] == "[NovaSight] Sales"
     # The workbook is attached.
     attachments = list(sent_message.iter_attachments())
     assert len(attachments) == 1

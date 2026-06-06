@@ -1,16 +1,16 @@
 # syntax=docker/dockerfile:1.7
 #
-# Production image for the Analytica Dagster code location (dlt ingestion + dbt).
+# Production image for the NovaSight Dagster code location (dlt ingestion + dbt).
 #
 # Build context MUST be the data-platform/ directory, because the image bundles BOTH
 # the orchestration package AND the sibling dbt project — dbt_resource.py resolves the
 # project at ``<orchestration>/../../dbt`` (parents[2]/dbt), so the on-disk layout
 #   data-platform/orchestration/...   and   data-platform/dbt/...
 # must be preserved. Build with:
-#   docker build -f data-platform/orchestration/Dockerfile -t analytica-dagster data-platform
+#   docker build -f data-platform/orchestration/Dockerfile -t novasight-dagster data-platform
 #
 # Roles (same image, different process):
-#   * webserver (default CMD): dagster-webserver -m analytica_orchestration.definitions
+#   * webserver (default CMD): dagster-webserver -m novasight_orchestration.definitions
 #   * daemon:                  dagster-daemon run   (schedules/sensors/run queue)
 #
 # Golden rule 1 — no build-time secrets, no environment-specific config baked in. The
@@ -37,14 +37,14 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir uv
 
-WORKDIR /opt/analytica/data-platform
+WORKDIR /opt/novasight/data-platform
 
 # Copy the orchestration package and the dbt project, preserving the sibling layout.
 COPY orchestration ./orchestration
 COPY dbt ./dbt
 
 # Editable install keeps the package files at this path so dbt_resource.py's
-# parents[2]/dbt resolution points at /opt/analytica/data-platform/dbt at runtime.
+# parents[2]/dbt resolution points at /opt/novasight/data-platform/dbt at runtime.
 #
 # The [catalog] extra (OpenMetadata ingestion SDK, used only by the catalog_metadata
 # asset) is OPT-IN: the asset imports the SDK lazily, so the code location loads
@@ -95,17 +95,17 @@ RUN apt-get update \
  && : > /opt/dagster/home/dagster.yaml
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /opt/analytica /opt/analytica
+COPY --from=builder /opt/novasight /opt/novasight
 
 # The editable install referenced the builder path; the runtime path is identical
-# (/opt/analytica/data-platform/...), so imports and parents[2]/dbt still resolve.
-RUN chown -R dagster:dagster /opt/dagster /opt/analytica
+# (/opt/novasight/data-platform/...), so imports and parents[2]/dbt still resolve.
+RUN chown -R dagster:dagster /opt/dagster /opt/novasight
 
 USER dagster
-WORKDIR /opt/analytica/data-platform
+WORKDIR /opt/novasight/data-platform
 
 EXPOSE 3000
 
 # Default role: the Dagster webserver, serving the code location. Bind address/port
 # come from the environment. Run the daemon with `command: dagster-daemon run`.
-CMD ["sh", "-c", "exec dagster-webserver -h \"$DAGSTER_HOST\" -p \"$DAGSTER_PORT\" -m analytica_orchestration.definitions"]
+CMD ["sh", "-c", "exec dagster-webserver -h \"$DAGSTER_HOST\" -p \"$DAGSTER_PORT\" -m novasight_orchestration.definitions"]

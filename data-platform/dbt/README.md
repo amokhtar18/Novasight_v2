@@ -1,4 +1,4 @@
-# Analytica dbt project
+# NovaSight dbt project
 
 Transforms raw, tenant-isolated datasets into modeled, tested marts. Runs against the
 tenant's **ClickHouse** database; orchestrated per-tenant by Dagster (`dagster-dbt`,

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from dagster import AssetCheckResult, AssetCheckSeverity, AssetKey
 
-from analytica_orchestration.quality_events import (
+from novasight_orchestration.quality_events import (
     QUALITY_GATE_FAILURE_EVENT,
     QualityGateFailure,
     build_failure_event,

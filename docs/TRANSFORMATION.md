@@ -42,7 +42,7 @@ failure.
 The dbt tests are the pipeline's quality gate. Dagster runs the dbt project with
 `dbt build` (not `dbt run`), so models and their tests execute together in DAG order
 and every test is surfaced as a Dagster **asset check**
-(`data-platform/orchestration/analytica_orchestration/dbt_assets.py`).
+(`data-platform/orchestration/novasight_orchestration/dbt_assets.py`).
 
 **Blocking.** `dbt build` runs each model, then its tests, before anything downstream.
 When a test fails, dbt **skips every downstream model** — so a failing *upstream* check

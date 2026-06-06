@@ -36,7 +36,7 @@ _FAKE_ENV: dict[str, str] = {
     "CUBE__BASE_URL": "http://cube:4000",
     "CUBE__API_SECRET": "test-cube-secret-at-least-32-chars!",
     "AUTH__OIDC_ISSUER": "http://localhost/",
-    "AUTH__OIDC_AUDIENCE": "analytica",
+    "AUTH__OIDC_AUDIENCE": "novasight",
     "AUTH__JWKS_URL": "http://localhost/.well-known/jwks.json",
     "SEED_TENANT__SLUG": "local",
     "SEED_TENANT__NAME": "Local Tenant",

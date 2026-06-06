@@ -1,12 +1,12 @@
 # Developer guide
 
-Welcome to Analytica. This guide gets you productive and shows how to add features the
+Welcome to NovaSight. This guide gets you productive and shows how to add features the
 right way. Read `CLAUDE.md` (the always-on rules) and `ARCHITECTURE.md` first; this page
 is the practical "how we work".
 
 ## 1. Mental model in one minute
 
-Analytica is a **modular monolith** that runs two ways from one codebase:
+NovaSight is a **modular monolith** that runs two ways from one codebase:
 - **On-prem**: single server, single tenant, `docker compose up`, MinIO + local Postgres.
 - **Cloud**: Kubernetes, multi-tenant, Helm, S3 + managed Postgres.
 
@@ -41,7 +41,7 @@ docs/       this guide + architecture + agents + configuration
 ## 3. Day-one setup
 
 ```bash
-git clone <repo> && cd analytica
+git clone <repo> && cd novasight
 docker compose -f infra/compose/docker-compose.yml up -d   # data services
 cp .env.example .env                                       # fill in local values
 cd backend && uv sync && uv run alembic upgrade head        # backend + schema

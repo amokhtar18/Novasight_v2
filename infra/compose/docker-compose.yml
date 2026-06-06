@@ -1,12 +1,39 @@
-# Analytica — local dev / single-tenant on-prem stack.
+# NovaSight — the single, unified stack: infrastructure + application + frontend.
+#
+# One `docker compose up` brings up everything — Postgres, Redis, MinIO, ClickHouse,
+# Cube, OpenMetadata, the API, workers, scheduler, Dagster, and the frontend (which
+# also reverse-proxies /api, so the whole app is one origin). There is no separate
+# "local" mode or app overlay: configuration (the repo-root .env) is the only thing
+# that differs between a single on-prem box and the cloud.
 #
 # Golden rule (config-management skill): nothing environment-specific is hardcoded.
 # Every credential, port, database name, and bucket below is interpolated from the
 # repo-root .env file — the SAME variables the backend reads via app/core/config.py,
 # so the stack and the app stay in lockstep from one source of truth.
 #
-# Bring up:   docker compose -f infra/compose/docker-compose.yml up -d
+# Bring up:   docker compose -f infra/compose/docker-compose.yml up -d --build
 # (run from the repo root so the root .env is picked up; see infra/compose/README.md)
+# Observability (Prometheus + Grafana) stays an optional overlay:
+#   ... -f infra/compose/docker-compose.observability.yml
+
+# Anchors shared by the backend roles (one image, different commands).
+x-backend-build: &backend-build
+  context: ../../backend
+  dockerfile: Dockerfile
+
+x-backend-env: &backend-env
+  # All application config is read from the root .env, exactly as Settings expects.
+  env_file:
+    - ../../.env
+  environment:
+    # Reach infrastructure by compose service name, not the host's localhost.
+    POSTGRES__HOST: postgres
+    REDIS__HOST: redis
+    CLICKHOUSE__HOST: clickhouse
+    OBJECT_STORE__ENDPOINT_URL: http://minio:9000
+    CUBE__BASE_URL: http://cube:4000
+    # Prompt templates bundled in the image (overrides any host-oriented .env value).
+    AI__PROMPT_TEMPLATE_DIR: /app/app/ai/prompts
 
 services:
   postgres:
@@ -161,7 +188,7 @@ services:
 
       # --- Base URL used by the backend client to reach Cube ---
       # (informational: the app reads CUBE__BASE_URL from .env, not this var)
-      CUBEJS_APP: analytica
+      CUBEJS_APP: novasight
 
     volumes:
       # Mount the model directory (read-only) so the container sees the latest schema.
@@ -261,7 +288,7 @@ services:
       ELASTICSEARCH_PORT: "9200"
       ELASTICSEARCH_SCHEME: http
       # --- Server base URL the UI/clients use (matches OPENMETADATA__HOST_PORT) ---
-      OPENMETADATA_CLUSTER_NAME: analytica
+      OPENMETADATA_CLUSTER_NAME: novasight
       SERVER_HOST_API_URL: "${OPENMETADATA__SERVER_URL:-http://openmetadata-server:8585/api}"
     command: ["./bootstrap/openmetadata-ops.sh", "migrate"]
     restart: "no"
@@ -284,6 +311,116 @@ services:
       retries: 10
       start_period: 120s
 
+  # ---------------------------------------------------------------------------
+  # Application tier (one backend image, different commands) + frontend.
+  # ---------------------------------------------------------------------------
+
+  # One-shot DB migration. Runs to completion, then exits; the API waits on it.
+  migrate:
+    build: *backend-build
+    <<: *backend-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: *backend-build
+    <<: *backend-env
+    ports:
+      - "${API__PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Dramatiq worker: reporting + KPI alerts actors.
+  worker:
+    build: *backend-build
+    <<: *backend-env
+    command: ["dramatiq", "app.reporting.worker"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # periodiq scheduler: fires the dispatcher heartbeats for reports + alerts.
+  scheduler:
+    build: *backend-build
+    <<: *backend-env
+    command: ["periodiq", "app.reporting.worker"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Dagster webserver — serves the code location (dlt ingestion + dbt assets).
+  dagster:
+    build:
+      context: ../../data-platform
+      dockerfile: orchestration/Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      CLICKHOUSE__HOST: clickhouse
+      OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
+    ports:
+      - "${DAGSTER__PORT:-3000}:3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - dagster-home:/opt/dagster/home
+
+  # Dagster daemon — schedules, sensors, and the run queue.
+  dagster-daemon:
+    build:
+      context: ../../data-platform
+      dockerfile: orchestration/Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      CLICKHOUSE__HOST: clickhouse
+      OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
+    command: ["dagster-daemon", "run"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - dagster-home:/opt/dagster/home
+
+  # Frontend — serves the SPA and reverse-proxies /api to the API (single origin).
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    environment:
+      # Relative base — nginx proxies /api to the api service on the same origin.
+      API_BASE_URL: /api/v1
+    ports:
+      - "${FRONTEND__PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:
@@ -291,3 +428,4 @@ volumes:
   clickhouse-data:
   cubestore-data:
   openmetadata-es-data:
+  dagster-home:

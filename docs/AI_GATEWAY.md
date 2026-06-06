@@ -2,7 +2,7 @@
 
 > Phase 4, Task 4.2 — provider-agnostic LLM gateway under `backend/app/ai/gateway/`.
 
-The gateway is the **single entry point** for every LLM call in Analytica.  No other
+The gateway is the **single entry point** for every LLM call in NovaSight.  No other
 module in `app/ai/` imports or references provider-specific SDK types.
 
 ---

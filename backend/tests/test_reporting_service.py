@@ -221,7 +221,7 @@ async def test_run_report_renders_stores_and_emails(
     assert len(email.sent) == 1
     sent = email.sent[0]
     assert sent.recipients == recipients
-    assert sent.subject == "[Analytica] Daily Orders"
+    assert sent.subject == "[NovaSight] Daily Orders"
     assert sent.attachment is not None
     assert sent.attachment.filename.endswith(".xlsx")
     assert sent.attachment.content[:2] == b"PK"

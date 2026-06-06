@@ -1,7 +1,7 @@
 # Phase 0 — Foundations (the skeleton with tenancy baked in)
 
 Goal: a running stack and a backend that already understands settings, auth, and tenant
-context — before anything analytical exists.
+context — before anything novasightl exists.
 
 ---
 

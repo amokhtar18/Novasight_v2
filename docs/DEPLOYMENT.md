@@ -1,14 +1,14 @@
 # Production containers (Phase 6.1)
 
-Analytica ships as **two** production images, built multi-stage and run **non-root**.
+NovaSight ships as **two** production images, built multi-stage and run **non-root**.
 Every host, credential, bucket, model id, and threshold is read from the environment
 at runtime (golden rule 1) — there are **no build-time secrets** and nothing
 environment- or tenant-specific is baked into an image.
 
 | Image | Dockerfile | Roles (same image, different `command`) |
 |-------|-----------|------------------------------------------|
-| `analytica-backend` | [`backend/Dockerfile`](../backend/Dockerfile) | **API** (default), **worker**, **scheduler**, **migrations** |
-| `analytica-dagster` | [`data-platform/orchestration/Dockerfile`](../data-platform/orchestration/Dockerfile) | **webserver** (default), **daemon** |
+| `novasight-backend` | [`backend/Dockerfile`](../backend/Dockerfile) | **API** (default), **worker**, **scheduler**, **migrations** |
+| `novasight-dagster` | [`data-platform/orchestration/Dockerfile`](../data-platform/orchestration/Dockerfile) | **webserver** (default), **daemon** |
 
 One image per deployable serving several roles keeps the dependency closure and the
 attack surface identical across processes (golden rule 4).
@@ -18,23 +18,23 @@ attack surface identical across processes (golden rule 4).
 Build (context is `backend/`):
 
 ```bash
-docker build -f backend/Dockerfile -t analytica-backend:latest backend
+docker build -f backend/Dockerfile -t novasight-backend:latest backend
 ```
 
 Run a role by overriding the command; config comes entirely from the environment:
 
 ```bash
 # API (default CMD) — binds $API_HOST:$API_PORT (defaults 0.0.0.0:8000)
-docker run --rm -p 8000:8000 --env-file .env analytica-backend:latest
+docker run --rm -p 8000:8000 --env-file .env novasight-backend:latest
 
 # Database migrations (run as a one-shot job / initContainer before the API)
-docker run --rm --env-file .env analytica-backend:latest alembic upgrade head
+docker run --rm --env-file .env novasight-backend:latest alembic upgrade head
 
 # Dramatiq worker — reporting (5.1) + KPI alerts (5.2)
-docker run --rm --env-file .env analytica-backend:latest dramatiq app.reporting.worker
+docker run --rm --env-file .env novasight-backend:latest dramatiq app.reporting.worker
 
 # periodiq scheduler — fires the dispatcher heartbeats
-docker run --rm --env-file .env analytica-backend:latest periodiq app.reporting.worker
+docker run --rm --env-file .env novasight-backend:latest periodiq app.reporting.worker
 ```
 
 Image-internal conventions (all overridable from the environment, none secret):
@@ -58,7 +58,7 @@ a database, and the real `CLICKHOUSE__*` / `DBT_SCHEMA` are read at runtime.
 > both directories are available.
 
 ```bash
-docker build -f data-platform/orchestration/Dockerfile -t analytica-dagster:latest data-platform
+docker build -f data-platform/orchestration/Dockerfile -t novasight-dagster:latest data-platform
 
 # Webserver (default CMD) — binds $DAGSTER_HOST:$DAGSTER_PORT (defaults 0.0.0.0:3000)
 ```
@@ -71,10 +71,10 @@ docker build -f data-platform/orchestration/Dockerfile -t analytica-dagster:late
 > asset.
 
 ```bash
-docker run --rm -p 3000:3000 --env-file .env analytica-dagster:latest
+docker run --rm -p 3000:3000 --env-file .env novasight-dagster:latest
 
 # Daemon — schedules, sensors, run queue
-docker run --rm --env-file .env analytica-dagster:latest dagster-daemon run
+docker run --rm --env-file .env novasight-dagster:latest dagster-daemon run
 ```
 
 | Var | Default | Meaning |
@@ -82,27 +82,32 @@ docker run --rm --env-file .env analytica-dagster:latest dagster-daemon run
 | `DAGSTER_HOME` | `/opt/dagster/home` | Dagster instance home (mount a volume to persist) |
 | `DAGSTER_HOST` / `DAGSTER_PORT` | `0.0.0.0` / `3000` | In-container bind address/port for the webserver |
 
-## Running the whole stack locally
+## Running the whole stack
 
-The base compose runs infrastructure only; the
-[`docker-compose.app.yml`](../infra/compose/docker-compose.app.yml) overlay builds and
-runs the application images against it, reaching infrastructure by compose service
-name. Run from the repo root and pass `--env-file` (Compose anchors `.env` to the
-compose file's directory, not the CWD):
+There is one unified compose file: [`docker-compose.yml`](../infra/compose/docker-compose.yml)
+brings up **everything** — infrastructure (Postgres, Redis, MinIO, ClickHouse, Cube,
+OpenMetadata), the application (`migrate` one-shot → `api`, plus `worker`, `scheduler`,
+`dagster`, `dagster-daemon`), and the `frontend` (which also reverse-proxies `/api`, so
+the whole app is one origin). There is no separate "local" mode or app overlay —
+configuration (the repo-root `.env`) is the only thing that differs between a single
+on-prem box and the cloud.
+
+Run from the repo root and pass `--env-file` (Compose anchors `.env` to the compose
+file's directory, not the CWD):
 
 ```bash
-docker compose --env-file .env \
-  -f infra/compose/docker-compose.yml \
-  -f infra/compose/docker-compose.app.yml up -d --build
+docker compose --env-file .env -f infra/compose/docker-compose.yml up -d --build
 ```
 
-This brings up `migrate` (one-shot) → `api`, plus `worker`, `scheduler`, `dagster`,
-and `dagster-daemon`.
+Then open the app at `http://localhost:${FRONTEND__PORT}` (default `8080`) and sign in
+with the seeded admin (`SEED_TENANT__ADMIN_EMAIL` / `SEED_TENANT__ADMIN_PASSWORD`).
+Observability (Prometheus + Grafana) is an optional overlay:
+`-f infra/compose/docker-compose.observability.yml`.
 
 # Kubernetes / Helm (Phase 6.2)
 
 The same two images are packaged by one umbrella chart,
-[`infra/helm/analytica`](../infra/helm/analytica). It deploys the API, the worker, the
+[`infra/helm/novasight`](../infra/helm/novasight). It deploys the API, the worker, the
 (singleton) scheduler, the Dagster webserver, and the (singleton) Dagster daemon, runs
 DB migrations as a `pre-install`/`pre-upgrade` hook Job, and can optionally bundle the
 stateful dependencies (Postgres, Redis, MinIO, ClickHouse).
@@ -123,7 +128,7 @@ set in `config:` overrides them. The bundled deps read their own credentials fro
 On-prem and cloud differ **only** in the values file — configuration + storage backend
 (MinIO vs S3), per `ARCHITECTURE.md`. The templates are identical.
 
-| | [`values-onprem.yaml`](../infra/helm/analytica/values-onprem.yaml) | [`values-cloud.yaml`](../infra/helm/analytica/values-cloud.yaml) |
+| | [`values-onprem.yaml`](../infra/helm/novasight/values-onprem.yaml) | [`values-cloud.yaml`](../infra/helm/novasight/values-cloud.yaml) |
 |---|---|---|
 | Tenancy | single-tenant | multi-tenant |
 | Stateful deps | bundled in-cluster | disabled → managed (RDS, ElastiCache, managed ClickHouse) |
@@ -133,15 +138,15 @@ On-prem and cloud differ **only** in the values file — configuration + storage
 Render either profile (the acceptance check):
 
 ```bash
-helm template analytica infra/helm/analytica -f infra/helm/analytica/values-onprem.yaml
-helm template analytica infra/helm/analytica -f infra/helm/analytica/values-cloud.yaml
+helm template novasight infra/helm/novasight -f infra/helm/novasight/values-onprem.yaml
+helm template novasight infra/helm/novasight -f infra/helm/novasight/values-cloud.yaml
 ```
 
 Install (supply real secrets at install time — never commit them):
 
 ```bash
-helm upgrade --install analytica infra/helm/analytica \
-  -f infra/helm/analytica/values-onprem.yaml \
+helm upgrade --install novasight infra/helm/novasight \
+  -f infra/helm/novasight/values-onprem.yaml \
   --set-string secrets.POSTGRES__PASSWORD=... \
   --set-string secrets.AI__API_KEY=... \
   --set-string secrets.CUBE__API_SECRET=...   # etc.
