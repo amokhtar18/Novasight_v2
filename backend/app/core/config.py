@@ -205,6 +205,24 @@ class ObservabilitySettings(BaseSettings):
     trace_sample_ratio: float = 1.0
 
 
+class DagsterSettings(BaseSettings):
+    """Backend↔Dagster control-plane connection (Phase 1).
+
+    The backend launches runs and reloads the code location over Dagster's GraphQL
+    API so users schedule/run pipelines and dbt jobs without opening Dagster. The
+    one infrastructure-pointing value — ``graphql_url`` — has no real default (empty
+    sentinel disables the integration; the client returns a clear error if invoked),
+    keeping golden rule 1. The location/repository names are environment-identical
+    conventions matching the ``novasight_orchestration`` code location.
+    """
+
+    graphql_url: str = ""  # e.g. http://dagster:3000/graphql — empty disables control
+    # Code location (the -m module name) and Definitions' repository name.
+    repository_location: str = "novasight_orchestration"
+    repository_name: str = "__repository__"
+    request_timeout_seconds: float = 30.0
+
+
 class AuthSettings(BaseSettings):
     # OIDC / RS256 settings. These point at deployment infrastructure, so they have
     # NO standalone default; the mode validator below makes them required whenever
@@ -364,6 +382,9 @@ class Settings(BaseSettings):
     # Observability (metrics + tracing). All-default conventions; tracing stays off
     # until an OTLP endpoint is configured.
     observability: ObservabilitySettings = ObservabilitySettings()
+    # Backend↔Dagster control plane. All-default conventions; the integration stays
+    # off until DAGSTER__GRAPHQL_URL is set.
+    dagster: DagsterSettings = DagsterSettings()
     smtp: SmtpSettings | None = None
     # Column-level encryption. Optional — only required once a dataset tags a column
     # sensitive; the ingestion/serving paths validate its presence at point of use.

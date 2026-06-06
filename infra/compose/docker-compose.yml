@@ -32,6 +32,8 @@ x-backend-env: &backend-env
     CLICKHOUSE__HOST: clickhouse
     OBJECT_STORE__ENDPOINT_URL: http://minio:9000
     CUBE__BASE_URL: http://cube:4000
+    # Backend↔Dagster control plane (launch/reload over GraphQL).
+    DAGSTER__GRAPHQL_URL: http://dagster:3000/graphql
     # Prompt templates bundled in the image (overrides any host-oriented .env value).
     AI__PROMPT_TEMPLATE_DIR: /app/app/ai/prompts
 

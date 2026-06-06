@@ -46,6 +46,8 @@ human reference.
 | `AUTH__ROLES_CLAIM` | str | `"roles"` | deployment | Name of the JWT claim carrying the principal's roles list. |
 | `AUTH__PLATFORM_ADMIN_ROLE` | str | `"platform_admin"` | deployment | Role required to operate the control plane (provision/de-provision tenants). Platform role, not tenant-scoped. |
 | `AUTH__TENANT_SUPERUSER_ROLE` | str | `"superuser"` | deployment | Tenant-scoped role required to create/run/schedule pipelines and dbt jobs. A platform admin is implicitly allowed. |
+| `DAGSTER__GRAPHQL_URL` | str | `""` | deployment | Dagster GraphQL endpoint the backend uses to launch runs + reload the code location (e.g. `http://dagster:3000/graphql`). Empty disables the control plane; orchestration endpoints then fail closed with 503. |
+| `DAGSTER__REPOSITORY_LOCATION` / `__REPOSITORY_NAME` | str | `novasight_orchestration` / `__repository__` | convention | Code location (the `-m` module) and Definitions repository name the dynamic jobs/schedules live in. |
 | `SEED_TENANT__SLUG` / `__NAME` / `__ADMIN_EMAIL` | str | — | deployment | bootstrap tenant identity used by the seed script; slug derives the tenant's Iceberg namespace / ClickHouse db / dbt schema |
 | `SEED_TENANT__ADMIN_PASSWORD` | SecretStr | `None` | deployment | Password for the seeded admin (password mode). When set, the admin can log in and is granted the platform-admin + tenant-superuser roles. Omit in OIDC mode. |
 | `MINIO__API_PORT` | int | 9000 | local stack | host publish port for the MinIO S3 API (Compose only); must match the port in `OBJECT_STORE__ENDPOINT_URL` |

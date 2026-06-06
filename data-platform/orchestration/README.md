@@ -1,5 +1,16 @@
 # NovaSight orchestration (Dagster)
 
+> **Dynamic, registry-driven orchestration (Phase 1).** Beyond the static demo graph
+> below, the platform is moving to *generic* jobs parametrised by a registry id so users
+> run/schedule work from the app without opening Dagster. The backend launches and
+> reloads over GraphQL (`backend/app/orchestration/dagster_client.py`); the run-config
+> contract (job/op names + `runConfigData` shape) is defined in
+> `backend/app/orchestration/run_config.py` and mirrored here. The generic
+> `pipeline_job` (body = dlt → Iceberg → ClickHouse) and `transform_job` (body = dbt
+> build) and the registry-driven schedule definitions are added alongside the ETL and
+> dbt-wizard tasks. Schedules are owned by the `schedules` table (Postgres): toggling
+> one is a registry update + a code-location reload — no start/stop mutation.
+
 The Dagster code location for the data platform. Models the world as software-defined
 assets so lineage is automatic (see the `dbt-dagster-workflow` skill):
 
