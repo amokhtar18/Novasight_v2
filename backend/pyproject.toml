@@ -139,6 +139,11 @@ module = "pyarrow.*"
 ignore_missing_imports = true
 no_implicit_reexport = false
 
+# pandas ships no stubs by default (used only by the filesystem connector's Excel path).
+[[tool.mypy.overrides]]
+module = "pandas.*"
+ignore_missing_imports = true
+
 # clickhouse-connect ships no py.typed marker; the client surface is dynamic and
 # isolated to the ClickHouse adapter, so we treat its imports as untyped.
 [[tool.mypy.overrides]]
