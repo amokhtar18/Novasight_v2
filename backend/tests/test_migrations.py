@@ -42,9 +42,25 @@ def test_upgrade_head_builds_schema(tmp_path: Path) -> None:
             "datasets",
             "report_definitions",
             "kpi_thresholds",
+            # Phase 1 definition registry (0007).
+            "source_connections",
+            "pipelines",
+            "pipeline_runs",
+            "dbt_models",
+            "dbt_tests",
+            "transform_jobs",
+            "semantic_models",
+            "charts",
+            "dashboards",
+            "dashboard_tiles",
+            "schedules",
         } <= tables
         # The migration was actually stamped.
         assert "alembic_version" in tables
+
+        # Spot-check the new users auth columns landed (0006).
+        user_cols = {c["name"] for c in inspector.get_columns("users")}
+        assert {"name", "password_hash", "roles"} <= user_cols
 
         report_cols = {c["name"] for c in inspector.get_columns("report_definitions")}
         assert {
@@ -87,5 +103,10 @@ def test_downgrade_base_drops_schema(tmp_path: Path) -> None:
         assert "datasets" not in tables
         assert "report_definitions" not in tables
         assert "kpi_thresholds" not in tables
+        # Registry tables are gone too.
+        assert "pipelines" not in tables
+        assert "charts" not in tables
+        assert "dashboard_tiles" not in tables
+        assert "schedules" not in tables
     finally:
         engine.dispose()
