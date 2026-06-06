@@ -14,6 +14,7 @@ import { loadConfig } from "@/lib/config";
 import { useAuthStore } from "@/store/authStore";
 import type {
   AccessTokenResponse,
+  ChartCreate,
   DatasetRead,
   HealthRead,
   InsightRequest,
@@ -26,6 +27,9 @@ import type {
   NLQueryResponse,
   QueryRequest,
   QueryResponse,
+  SavedChartRead,
+  SemanticModelRead,
+  SemanticQueryRequest,
   SuggestionsResponse,
   TenantProvisionRequest,
   TenantRead,
@@ -179,6 +183,52 @@ export async function queryDataset(
     { method: "POST", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Semantic layer (governed models + structured queries)
+// ---------------------------------------------------------------------------
+
+/** GET /semantic/models — governed models the tenant may query. */
+export async function listSemanticModels(): Promise<SemanticModelRead[]> {
+  return apiFetch<SemanticModelRead[]>("/semantic/models", {}, { Accept: "application/json" });
+}
+
+/** POST /semantic/query — run a structured, grounded query against the semantic layer. */
+export async function querySemantic(
+  request: SemanticQueryRequest
+): Promise<QueryResponse> {
+  return apiFetch<QueryResponse>(
+    "/semantic/query",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Saved charts (tenant-scoped CRUD)
+// ---------------------------------------------------------------------------
+
+/** GET /charts — the tenant's saved charts, newest first. */
+export async function listCharts(): Promise<SavedChartRead[]> {
+  return apiFetch<SavedChartRead[]>("/charts", {}, { Accept: "application/json" });
+}
+
+/** POST /charts — persist a named ChartSpec. */
+export async function createChart(request: ChartCreate): Promise<SavedChartRead> {
+  return apiFetch<SavedChartRead>(
+    "/charts",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /charts/{id}. */
+export async function deleteChart(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/charts/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

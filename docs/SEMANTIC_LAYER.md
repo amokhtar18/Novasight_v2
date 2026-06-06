@@ -352,3 +352,55 @@ logging.  They must not be forwarded verbatim to the frontend.
 4. Add new identifier constants to `backend/app/ai/semantic/client.py` and
    re-export them from `backend/app/ai/semantic/__init__.py`.
 5. Update `docs/CONFIGURATION.md` if a new env var is introduced.
+
+---
+
+## HTTP API: governed structured queries (manual charts)
+
+Feature #9 adds a point-and-click analogue of the AI `NL→chart` path. Both are
+read-only and grounded on the governed Cube layer; neither touches a raw physical
+table (golden rule #3). The endpoints are tenant-scoped via `get_tenant_context` —
+the tenant is resolved from the JWT, never a body/path value.
+
+- **`GET /api/v1/semantic/models`** → the governed models the tenant may query,
+  derived from Cube `/meta`. Each model lists its `measures` and `dimensions`
+  (`name`, `title`, `type`). The builder offers only what Cube exposes.
+- **`POST /api/v1/semantic/query`** → run a structured request:
+
+  ```json
+  { "measures": ["regional_sales.total_amount"],
+    "dimensions": ["regional_sales.region"],
+    "order": { "regional_sales.total_amount": "desc" },
+    "limit": 50 }
+  ```
+
+  Every reference is validated against the tenant's governed meta **before** any
+  query runs; an unknown measure/dimension (or an order key that isn't selected)
+  returns **422**. The `limit` is clamped to `settings.max_query_rows`. The result
+  is a `QueryResponse` whose `columns` are `dimensions + measures` — the exact shape
+  the shared `ChartRenderer` consumes for AI charts, so manual and AI charts render
+  identically.
+
+Implementation: `backend/app/api/v1/semantic.py` → `services/semantic.py`
+(`SemanticService`, fail-closed `SemanticValidationError`) → `ai/semantic/client.py`
+(`SemanticLayerClient.query`, now with an optional `limit`).
+
+## HTTP API: saved charts
+
+A built chart (manual or AI) can be persisted server-side so it survives across
+devices and can later be composed onto a dashboard.
+
+- **`GET /api/v1/charts`**, **`GET /api/v1/charts/{id}`**, **`POST /api/v1/charts`**,
+  **`PATCH /api/v1/charts/{id}`**, **`DELETE /api/v1/charts/{id}`** — tenant-scoped
+  CRUD over the `charts` table. A chart is a named `ChartSpec` plus
+  `source_kind` (`semantic` | `dataset`) and `source_ref`. The spec (not a data
+  snapshot) is stored, so a chart re-runs its grounded query when displayed.
+
+A chart owned by another tenant is indistinguishable from not-found (404) — no
+cross-tenant existence leak. Implementation: `backend/app/api/v1/charts.py` →
+`services/charts.py` → `models/chart.py`.
+
+Frontend: the chart builder (`frontend/src/pages/Builder.tsx`) defaults to the
+semantic-model path (pick model → dimension → measure → type → live preview) and
+both paths expose **Save chart** (`components/chart/SaveChartButton.tsx`) which posts
+to the charts API.

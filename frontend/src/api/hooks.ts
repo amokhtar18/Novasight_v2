@@ -12,13 +12,17 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  createChart,
   createUser,
+  deleteChart,
   deleteUser,
   deprovisionTenant,
   getHealth,
   getMe,
   getSuggestions,
+  listCharts,
   listDatasets,
+  listSemanticModels,
   listTenants,
   listUsers,
   login,
@@ -28,16 +32,19 @@ import {
   postNLQuery,
   provisionTenant,
   queryDataset,
+  querySemantic,
   updateUser,
   uploadDataset,
 } from "./client";
 import { useAuthStore } from "@/store/authStore";
 import type {
+  ChartCreate,
   InsightRequest,
   LoginRequest,
   NLChartRequest,
   NLQueryRequest,
   QueryRequest,
+  SemanticQueryRequest,
   TenantProvisionRequest,
   UserCreate,
   UserUpdate,
@@ -51,6 +58,9 @@ export const queryKeys = {
   datasetQuery: (id: string, req: QueryRequest) =>
     ["datasets", id, "query", req] as const,
   suggestions: (id: string) => ["datasets", id, "suggestions"] as const,
+  semanticModels: () => ["semantic", "models"] as const,
+  semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
+  charts: () => ["charts"] as const,
   users: () => ["users"] as const,
   tenants: () => ["tenants"] as const,
 };
@@ -186,6 +196,74 @@ export function useSuggestions(datasetId: string | null, enabled = true) {
     enabled: datasetId !== null && enabled,
     staleTime: 5 * 60_000,
     retry: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Semantic layer
+// ---------------------------------------------------------------------------
+
+/** Query: governed semantic models the tenant may build charts on. */
+export function useSemanticModels() {
+  return useQuery({
+    queryKey: queryKeys.semanticModels(),
+    queryFn: listSemanticModels,
+    staleTime: 5 * 60_000,
+    retry: 0,
+  });
+}
+
+/**
+ * Query: run a structured, grounded query against the semantic layer.
+ * Only enabled when a request is provided (the builder gates this until the
+ * user has picked a dimension + measure).
+ */
+export function useSemanticQuery(request: SemanticQueryRequest | null) {
+  return useQuery({
+    queryKey:
+      request !== null ? queryKeys.semanticQuery(request) : (["noop"] as const),
+    queryFn: () => {
+      if (!request) throw new Error("a semantic query request is required");
+      return querySemantic(request);
+    },
+    enabled: request !== null,
+    staleTime: 30_000,
+    retry: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Saved charts
+// ---------------------------------------------------------------------------
+
+/** Query: the tenant's saved charts. */
+export function useCharts(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.charts(),
+    queryFn: listCharts,
+    enabled,
+  });
+}
+
+/** Mutation: save a chart. Invalidates the charts list on success. */
+export function useCreateChart() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: ChartCreate) => createChart(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.charts() });
+    },
+  });
+}
+
+/** Mutation: delete a saved chart. Invalidates the charts list. */
+export function useDeleteChart() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteChart(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.charts() });
+    },
   });
 }
 

@@ -214,7 +214,7 @@ topbar) via `<Outlet>`; pages are lazy-loaded so each route is its own chunk
 | `/data` | Data sources | Upload CSVs; browse datasets with status |
 | `/data/:datasetId` | Dataset detail | AI chart suggestions for a dataset |
 | `/explore` | Ask AI | NL→SQL: question → validated SQL + table + visualize + summarize |
-| `/build` | Chart builder | Low-code manual builder + NL→chart; save to dashboard |
+| `/build` | Chart builder | Low-code builder over **semantic models** (default) or datasets, + NL→chart; **Save chart** (server-side, `POST /charts`) or add to dashboard |
 | `/dashboards` | Dashboards | List / create dashboards |
 | `/dashboards/:dashboardId` | Dashboard detail | dnd-kit grid: reorder/resize/remove tiles |
 | `/insights` | Insights | Guardrailed AI narrative for a metric |

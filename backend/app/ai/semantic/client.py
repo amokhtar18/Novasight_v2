@@ -213,6 +213,7 @@ class SemanticLayerClient:
         measures: list[str],
         dimensions: list[str],
         order: dict[str, str] | None = None,
+        limit: int | None = None,
     ) -> list[CubeRow]:
         """Run a Cube query scoped to the given tenant and return typed rows.
 
@@ -225,6 +226,9 @@ class SemanticLayerClient:
             dimensions: Fully-qualified Cube dimension identifiers.
             order: Optional ordering dict, e.g.
                 ``{"regional_sales.total_amount": "desc"}``.
+            limit: Optional row cap forwarded to Cube's ``limit``. The caller is
+                responsible for clamping this to the platform maximum; this client
+                only passes it through.
 
         Returns:
             A list of ``CubeRow`` dicts.  Numeric measure values are cast to
@@ -235,7 +239,9 @@ class SemanticLayerClient:
             CubeQueryError: If Cube returns 400 or any other non-200 status.
         """
         token = self._mint_jwt(ctx)
-        body = self._build_body(measures=measures, dimensions=dimensions, order=order)
+        body = self._build_body(
+            measures=measures, dimensions=dimensions, order=order, limit=limit
+        )
 
         # Log the query intent with tenant tagging; NEVER log the token or secret.
         logger.info(
@@ -313,6 +319,7 @@ class SemanticLayerClient:
         measures: list[str],
         dimensions: list[str],
         order: dict[str, str] | None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
         """Build the Cube JSON query body."""
         query: dict[str, Any] = {
@@ -321,6 +328,8 @@ class SemanticLayerClient:
         }
         if order:
             query["order"] = order
+        if limit is not None:
+            query["limit"] = limit
         return {"query": query}
 
     @staticmethod

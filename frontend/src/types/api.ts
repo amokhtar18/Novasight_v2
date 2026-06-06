@@ -140,6 +140,63 @@ export interface NLChartResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Semantic layer — /api/v1/semantic  (mirrors schemas/semantic.py)
+// ---------------------------------------------------------------------------
+
+/** One governed measure or dimension exposed by a semantic model. */
+export interface SemanticField {
+  /** Fully-qualified Cube identifier, e.g. "regional_sales.region". */
+  name: string;
+  /** Human-readable label for display in the builder. */
+  title: string;
+  /** Cube member type (e.g. "number", "string", "time"). */
+  type: string;
+}
+
+/** A governed model (Cube cube/view) the tenant may query. */
+export interface SemanticModelRead {
+  name: string;
+  title: string;
+  measures: SemanticField[];
+  dimensions: SemanticField[];
+}
+
+/** A structured, grounded query against the semantic layer. */
+export interface SemanticQueryRequest {
+  measures: string[];
+  dimensions: string[];
+  /** Ordering, e.g. { "regional_sales.total_amount": "desc" }. */
+  order?: Record<string, "asc" | "desc">;
+  limit?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Saved charts — /api/v1/charts  (mirrors schemas/saved_chart.py)
+// ---------------------------------------------------------------------------
+
+export type ChartSourceKind = "semantic" | "dataset";
+
+/** Body for POST /charts — persist a named ChartSpec. */
+export interface ChartCreate {
+  name: string;
+  spec: ChartSpec;
+  source_kind?: ChartSourceKind;
+  source_ref?: string | null;
+}
+
+/** A saved chart as returned by the API. */
+export interface SavedChartRead {
+  id: string;
+  name: string;
+  spec: ChartSpec;
+  source_kind: string;
+  source_ref: string | null;
+  owner_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Tenant context — GET /api/v1/me  (mirrors schemas/me.py)
 // ---------------------------------------------------------------------------
 
