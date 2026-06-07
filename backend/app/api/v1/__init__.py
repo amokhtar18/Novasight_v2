@@ -6,8 +6,10 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.charts import router as charts_router
 from app.api.v1.dashboards import router as dashboards_router
 from app.api.v1.datasets import router as datasets_router
+from app.api.v1.dbt_models import router as dbt_models_router
 from app.api.v1.health import router as health_router
 from app.api.v1.me import router as me_router
+from app.api.v1.pipelines import router as pipelines_router
 from app.api.v1.semantic import router as semantic_router
 from app.api.v1.semantic_models import router as semantic_models_router
 from app.api.v1.sources import router as sources_router
@@ -23,7 +25,9 @@ v1_router.include_router(ai_router)
 v1_router.include_router(tenants_router)
 v1_router.include_router(users_router)
 v1_router.include_router(sources_router)
+v1_router.include_router(pipelines_router)
 v1_router.include_router(semantic_router)
 v1_router.include_router(semantic_models_router)
+v1_router.include_router(dbt_models_router)
 v1_router.include_router(charts_router)
 v1_router.include_router(dashboards_router)

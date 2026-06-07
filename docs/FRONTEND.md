@@ -213,6 +213,8 @@ topbar) via `<Outlet>`; pages are lazy-loaded so each route is its own chunk
 | `/` | Overview | Greeting, live system health, counts, quick actions, recents |
 | `/data` | Data sources | Upload CSVs; browse datasets with status |
 | `/data/:datasetId` | Dataset detail | AI chart suggestions for a dataset |
+| `/pipelines` | Pipelines | ETL: manage source connections (create/test) + build pipelines, run now, view run history (superuser) |
+| `/transforms` | Transforms | dbt model+test wizard: layer/materialization/SQL + column tests (regenerates dbt codegen; superuser) |
 | `/models` | Semantic models | Wizard to define governed measures/dimensions over a mart (regenerates Cube codegen; superuser) |
 | `/explore` | Ask AI | NL→SQL: question → validated SQL + table + visualize + summarize |
 | `/build` | Chart builder | Low-code builder over **semantic models** (default) or datasets, + NL→chart; **Save chart** (server-side, `POST /charts`) or add to dashboard |

@@ -144,6 +144,11 @@ no_implicit_reexport = false
 module = "pandas.*"
 ignore_missing_imports = true
 
+# PyYAML ships no bundled stubs; used only by the dbt codegen to emit schema.yml.
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true
+
 # clickhouse-connect ships no py.typed marker; the client surface is dynamic and
 # isolated to the ClickHouse adapter, so we treat its imports as untyped.
 [[tool.mypy.overrides]]

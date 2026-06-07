@@ -59,11 +59,10 @@ from typing import TYPE_CHECKING
 from fastapi import Depends
 
 from app.core.config import Settings, get_settings
-from app.core.crypto import KmsProvider, build_kms_provider
-from app.core.iceberg_catalog import build_catalog_properties
+from app.core.crypto import KmsProvider
 from app.core.metrics import INGEST_DURATION, INGEST_ROWS
 from app.core.object_store import ObjectStore, get_object_store
-from app.ingestion.encryption import encrypt_arrow_columns
+from app.ingestion.iceberg_writer import write_arrow_table
 from app.tenancy.context import TenantContext
 
 if TYPE_CHECKING:
@@ -183,70 +182,25 @@ class CsvIcebergPipeline:
         table_name: str,
         sensitive_columns: list[str] | None = None,
     ) -> int:
-        """Parse the CSV, build a catalog from settings, and write (overwrite) the table.
+        """Parse the CSV to Arrow and write (overwrite) the tenant's Iceberg table.
 
-        Returns the number of rows written (for pipeline metrics).
-
-        This is the synchronous, Iceberg-specific layer.  It is separated from
-        ``run()`` so it can be called from a thread executor if async wrapping is
-        needed in the future. Columns named in ``sensitive_columns`` are encrypted
-        before the write so they are ciphertext at rest.
+        Returns the number of rows written (for pipeline metrics). The Arrow→Iceberg
+        write is delegated to the shared ``iceberg_writer`` so CSV upload and the
+        connector-driven ETL pipelines (#3) land tables through one code path.
         """
         import pyarrow.csv as pa_csv
-        from pyiceberg.catalog import load_catalog
-        from pyiceberg.exceptions import (
-            NamespaceAlreadyExistsError,
-            NoSuchTableError,
-        )
 
         # Parse CSV bytes to an Arrow table for schema inference and typed writing.
         arrow_table = pa_csv.read_csv(io.BytesIO(raw_bytes))
 
-        # Encrypt tagged columns before writing (fail closed if encryption is unset).
-        if sensitive_columns:
-            provider = self._provider or build_kms_provider(self._settings)
-            arrow_table = encrypt_arrow_columns(arrow_table, sensitive_columns, provider)
-
-        # Build catalog config entirely from Settings — no literals, no files.
-        catalog_props = self._build_catalog_properties()
-
-        catalog = load_catalog(
-            name=self._ctx.iceberg_namespace,
-            **catalog_props,
+        return write_arrow_table(
+            ctx=self._ctx,
+            settings=self._settings,
+            table_name=table_name,
+            arrow_table=arrow_table,
+            sensitive_columns=sensitive_columns,
+            provider=self._provider,
         )
-
-        namespace = self._ctx.iceberg_namespace
-        identifier = (namespace, table_name)
-
-        # Ensure the namespace exists; idempotent — NamespaceAlreadyExistsError is fine.
-        try:
-            catalog.create_namespace(namespace)
-        except NamespaceAlreadyExistsError:
-            logger.debug("Namespace %r already exists — skipping create", namespace)
-
-        # Create table on first run; overwrite on subsequent runs.
-        try:
-            iceberg_table = catalog.load_table(identifier)
-            # Table exists — overwrite all data (idempotency mechanism).
-            iceberg_table.overwrite(arrow_table)
-        except NoSuchTableError:
-            # First run — create the table with the inferred Arrow schema.
-            iceberg_table = catalog.create_table(
-                identifier=identifier,
-                schema=arrow_table.schema,
-            )
-            iceberg_table.overwrite(arrow_table)
-
-        return int(arrow_table.num_rows)
-
-    def _build_catalog_properties(self) -> dict[str, str]:
-        """Return a pyiceberg ``load_catalog`` properties dict built from Settings.
-
-        Delegates to ``app.core.iceberg_catalog.build_catalog_properties`` so the
-        ClickHouse registration service (Task 1.3) builds an identical catalog
-        from the same single source of truth.
-        """
-        return build_catalog_properties(self._settings)
 
 
 # ---------------------------------------------------------------------------

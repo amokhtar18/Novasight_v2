@@ -5,6 +5,7 @@
 
 import {
   BarChart3,
+  Boxes,
   Database,
   Layers,
   LayoutDashboard,
@@ -13,6 +14,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +32,8 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutGrid, end: true },
   { to: "/data", label: "Data sources", icon: Database },
+  { to: "/pipelines", label: "Pipelines", icon: Workflow },
+  { to: "/transforms", label: "Transforms", icon: Boxes },
   { to: "/models", label: "Semantic models", icon: Layers },
   { to: "/explore", label: "Ask AI", icon: Sparkles },
   { to: "/build", label: "Chart builder", icon: BarChart3 },
@@ -47,6 +51,8 @@ export const FOOTER_ITEMS: NavItem[] = [
 export function titleForPath(pathname: string): string {
   if (pathname === "/") return "Overview";
   if (pathname.startsWith("/data")) return "Data sources";
+  if (pathname.startsWith("/pipelines")) return "Pipelines";
+  if (pathname.startsWith("/transforms")) return "Transforms";
   if (pathname.startsWith("/models")) return "Semantic models";
   if (pathname.startsWith("/explore")) return "Ask AI";
   if (pathname.startsWith("/build")) return "Chart builder";

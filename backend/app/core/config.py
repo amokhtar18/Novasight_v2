@@ -98,6 +98,21 @@ class CubeSettings(BaseSettings):
     model_dir: str | None = None
 
 
+class DbtSettings(BaseSettings):
+    """dbt codegen output (the dbt model + test wizard, #5/#6).
+
+    ``models_dir`` is the filesystem path where the codegen writes generated per-tenant
+    dbt model files (``tenant_<schema>/<name>.sql`` + ``schema.yml``) — a directory
+    inside the dbt project that the Dagster/dbt run reads. Optional: when unset, the
+    codegen renders but does not write (e.g. in tests, or before the project volume is
+    wired). Env: ``DBT__MODELS_DIR``. Golden rule 1: no path is hardcoded.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    models_dir: str | None = None
+
+
 class EncryptionSettings(BaseSettings):
     """Column-level encryption for fields tagged sensitive (Phase 5.4).
 
@@ -390,6 +405,9 @@ class Settings(BaseSettings):
     # Backend↔Dagster control plane. All-default conventions; the integration stays
     # off until DAGSTER__GRAPHQL_URL is set.
     dagster: DagsterSettings = DagsterSettings()
+    # dbt codegen output dir (the dbt model/test wizard). All-default; writing is
+    # skipped until DBT__MODELS_DIR points at the dbt project's models volume.
+    dbt: DbtSettings = DbtSettings()
     smtp: SmtpSettings | None = None
     # Column-level encryption. Optional — only required once a dataset tags a column
     # sensitive; the ingestion/serving paths validate its presence at point of use.

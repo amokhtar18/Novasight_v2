@@ -57,3 +57,18 @@ class SourceConnector(ABC):
         limit: int = 50,
     ) -> PreviewResult:
         """List selectable objects; if ``target`` is given, also sample its rows."""
+
+    @abstractmethod
+    async def extract(
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        *,
+        target: str,
+    ) -> Any:  # noqa: ANN401 — a pyarrow.Table (no type stubs); kept loose on purpose
+        """Read the full selected ``target`` object/table into a pyarrow ``Table``.
+
+        Unlike ``preview`` this is uncapped — it is the extract step of a pipeline
+        run, executed off the request path (worker). Raises ``ConnectorError`` on
+        failure. Blocking IO must run in a worker thread.
+        """

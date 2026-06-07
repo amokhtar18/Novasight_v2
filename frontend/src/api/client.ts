@@ -16,6 +16,8 @@ import type {
   AccessTokenResponse,
   ChartCreate,
   DashboardCreate,
+  DbtModelDefCreate,
+  DbtModelDefRead,
   DashboardLayoutUpdate,
   DashboardRead,
   DashboardSummary,
@@ -32,9 +34,15 @@ import type {
   NLChartResponse,
   NLQueryRequest,
   NLQueryResponse,
+  PipelineCreate,
+  PipelineRead,
+  PipelineRunRead,
   QueryRequest,
   QueryResponse,
   SavedChartRead,
+  SourceConnectionCreate,
+  SourceConnectionRead,
+  SourceTestResponse,
   SemanticModelDefCreate,
   SemanticModelDefRead,
   SemanticModelRead,
@@ -192,6 +200,114 @@ export async function queryDataset(
     { method: "POST", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
+}
+
+// ---------------------------------------------------------------------------
+// dbt model registry (wizard; mutations require superuser)
+// ---------------------------------------------------------------------------
+
+/** GET /dbt-models — the tenant's dbt model definitions. */
+export async function listDbtModels(): Promise<DbtModelDefRead[]> {
+  return apiFetch<DbtModelDefRead[]>("/dbt-models", {}, { Accept: "application/json" });
+}
+
+/** POST /dbt-models — define a dbt model + tests (regenerates the dbt codegen). */
+export async function createDbtModel(request: DbtModelDefCreate): Promise<DbtModelDefRead> {
+  return apiFetch<DbtModelDefRead>(
+    "/dbt-models",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /dbt-models/{id}. */
+export async function deleteDbtModel(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/dbt-models/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ETL: source connections (mutations require superuser)
+// ---------------------------------------------------------------------------
+
+/** GET /sources/kinds — connector kinds the wizard offers. */
+export async function listSourceKinds(): Promise<string[]> {
+  return apiFetch<string[]>("/sources/kinds", {}, { Accept: "application/json" });
+}
+
+/** GET /sources — the tenant's source connections. */
+export async function listSources(): Promise<SourceConnectionRead[]> {
+  return apiFetch<SourceConnectionRead[]>("/sources", {}, { Accept: "application/json" });
+}
+
+/** POST /sources — create a source connection (secret encrypted at rest). */
+export async function createSource(
+  request: SourceConnectionCreate
+): Promise<SourceConnectionRead> {
+  return apiFetch<SourceConnectionRead>(
+    "/sources",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** POST /sources/{id}/test — connectivity check (raises on failure). */
+export async function testSource(id: string): Promise<SourceTestResponse> {
+  return apiFetch<SourceTestResponse>(
+    `/sources/${id}/test`,
+    { method: "POST" },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /sources/{id}. */
+export async function deleteSource(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/sources/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ETL: pipelines (mutations + run-now require superuser)
+// ---------------------------------------------------------------------------
+
+/** GET /pipelines — the tenant's pipelines. */
+export async function listPipelines(): Promise<PipelineRead[]> {
+  return apiFetch<PipelineRead[]>("/pipelines", {}, { Accept: "application/json" });
+}
+
+/** POST /pipelines — create a pipeline. */
+export async function createPipeline(request: PipelineCreate): Promise<PipelineRead> {
+  return apiFetch<PipelineRead>(
+    "/pipelines",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /pipelines/{id}. */
+export async function deletePipeline(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/pipelines/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
+}
+
+/** POST /pipelines/{id}/run — queue a run now; returns the queued run. */
+export async function runPipeline(id: string): Promise<PipelineRunRead> {
+  return apiFetch<PipelineRunRead>(
+    `/pipelines/${id}/run`,
+    { method: "POST" },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** GET /pipelines/{id}/runs — run history. */
+export async function listPipelineRuns(id: string): Promise<PipelineRunRead[]> {
+  return apiFetch<PipelineRunRead[]>(`/pipelines/${id}/runs`, {}, { Accept: "application/json" });
 }
 
 // ---------------------------------------------------------------------------

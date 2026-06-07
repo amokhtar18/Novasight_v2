@@ -13,10 +13,28 @@ from app.codegen.cube_model import (
     tenant_model_relpath,
     write_tenant_models,
 )
+from app.codegen.dbt_model import (
+    DbtModelInput,
+    DbtTestInput,
+    render_model_sql,
+    render_schema_yml,
+)
+from app.codegen.dbt_model import (
+    tenant_dir_relpath as dbt_tenant_dir_relpath,
+)
+from app.codegen.dbt_model import (
+    write_tenant_models as write_tenant_dbt_models,
+)
 
 __all__ = [
     "CubeModelInput",
+    "DbtModelInput",
+    "DbtTestInput",
+    "dbt_tenant_dir_relpath",
+    "render_model_sql",
+    "render_schema_yml",
     "render_tenant_models",
     "tenant_model_relpath",
+    "write_tenant_dbt_models",
     "write_tenant_models",
 ]

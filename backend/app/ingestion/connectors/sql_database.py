@@ -60,6 +60,16 @@ class SqlDatabaseConnector(SourceConnector):
         self.validate_config(config)
         return await asyncio.to_thread(self._sync_preview, config, secret, target, limit)
 
+    async def extract(
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        *,
+        target: str,
+    ) -> Any:  # noqa: ANN401 — pyarrow.Table
+        self.validate_config(config)
+        return await asyncio.to_thread(self._sync_extract, config, secret, target)
+
     # ------------------------------------------------------------------
     # Blocking implementations (run in a worker thread)
     # ------------------------------------------------------------------
@@ -100,6 +110,30 @@ class SqlDatabaseConnector(SourceConnector):
             raise
         except Exception as exc:
             raise ConnectorError(f"preview failed: {type(exc).__name__}") from exc
+        finally:
+            engine.dispose()
+
+    def _sync_extract(
+        self, config: dict[str, Any], secret: dict[str, Any] | None, target: str
+    ) -> Any:  # noqa: ANN401 — pyarrow.Table
+        import pyarrow as pa
+
+        engine = self._engine(config, secret)
+        try:
+            with engine.connect() as conn:
+                if target not in set(inspect(conn).get_table_names()):
+                    raise ConnectorError(f"unknown table {target!r}")
+                if any(ch not in _SAFE_IDENT for ch in target):
+                    raise ConnectorError("invalid table name")
+                result = conn.execute(text(f"SELECT * FROM {target}"))  # noqa: S608
+                columns = list(result.keys())
+                rows = result.fetchall()
+                data = {col: [row[i] for row in rows] for i, col in enumerate(columns)}
+                return pa.table(data)
+        except ConnectorError:
+            raise
+        except Exception as exc:
+            raise ConnectorError(f"extract failed: {type(exc).__name__}") from exc
         finally:
             engine.dispose()
 

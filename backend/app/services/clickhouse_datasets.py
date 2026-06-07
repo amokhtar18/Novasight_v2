@@ -144,6 +144,33 @@ class ClickHouseDatasetService:
         logger.info("Dataset %s registered as ClickHouse table %s", dataset.id, qualified)
         return qualified
 
+    def register_table(self, ctx: TenantContext, table_name: str) -> str:
+        """Make an Iceberg ``table_name`` in the tenant namespace queryable from ClickHouse.
+
+        The pipeline analogue of ``register_dataset``: given a landing table the ETL
+        wrote to the tenant's Iceberg namespace, create the matching ``IcebergS3``-engine
+        table in the tenant's ClickHouse database. Idempotent. ``table_name`` is a
+        validated identifier (pipeline ``target_table``); it is still ``_ident``-quoted.
+
+        Returns the fully-qualified ClickHouse table identifier ``<db>.<table>``.
+        """
+        s3_url = self._iceberg_s3_url(ctx, table_name)
+        db = ctx.clickhouse_db
+        logger.info("Registering pipeline table in ClickHouse db=%r table=%r", db, table_name)
+
+        self._ch.command(f"CREATE DATABASE IF NOT EXISTS {_ident(db)}")
+        os_cfg = self._settings.object_store
+        engine = (
+            "IcebergS3("
+            f"{_str_literal(s3_url)}, "
+            f"{_str_literal(os_cfg.access_key.get_secret_value())}, "
+            f"{_str_literal(os_cfg.secret_key.get_secret_value())})"
+        )
+        self._ch.command(
+            f"CREATE TABLE IF NOT EXISTS {_ident(db)}.{_ident(table_name)} ENGINE = {engine}"
+        )
+        return f"{db}.{table_name}"
+
     # ------------------------------------------------------------------
     # Read-only, tenant-scoped queries
     # ------------------------------------------------------------------

@@ -29,6 +29,12 @@ const DatasetDetail = lazy(() =>
 const SemanticModels = lazy(() =>
   import("@/pages/SemanticModels").then((m) => ({ default: m.SemanticModels }))
 );
+const Pipelines = lazy(() =>
+  import("@/pages/Pipelines").then((m) => ({ default: m.Pipelines }))
+);
+const DbtModels = lazy(() =>
+  import("@/pages/DbtModels").then((m) => ({ default: m.DbtModels }))
+);
 const Explore = lazy(() =>
   import("@/pages/Explore").then((m) => ({ default: m.Explore }))
 );
@@ -84,6 +90,8 @@ export function App() {
           <Route index element={<Overview />} />
           <Route path="data" element={<DataSources />} />
           <Route path="data/:datasetId" element={<DatasetDetail />} />
+          <Route path="pipelines" element={<Pipelines />} />
+          <Route path="transforms" element={<DbtModels />} />
           <Route path="models" element={<SemanticModels />} />
           <Route path="explore" element={<Explore />} />
           <Route path="build" element={<Builder />} />

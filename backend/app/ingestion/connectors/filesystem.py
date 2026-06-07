@@ -71,6 +71,25 @@ class FilesystemConnector(SourceConnector):
         rows = [list(row.values()) for row in sample.to_pylist()]
         return PreviewResult(objects=[str(config["key"])], columns=columns, rows=rows)
 
+    async def extract(
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        *,
+        target: str,
+    ) -> Any:  # noqa: ANN401 — pyarrow.Table
+        self.validate_config(config)
+        # ``target`` is the object key to load (the pipeline's selected object);
+        # fall back to the connection's configured key when not specified.
+        key = target or str(config["key"])
+        try:
+            raw = await self._store.get_object(key=key)
+            return await asyncio.to_thread(_read_table, str(config["format"]), raw)
+        except ConnectorError:
+            raise
+        except Exception as exc:
+            raise ConnectorError(f"extract failed: {type(exc).__name__}") from exc
+
 
 def _read_table(fmt: str, raw: bytes) -> Any:  # noqa: ANN401 — pyarrow/pandas vary by format
     """Parse raw bytes into a pyarrow Table by format (runs in a worker thread)."""

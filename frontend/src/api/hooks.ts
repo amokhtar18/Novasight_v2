@@ -15,12 +15,18 @@ import {
   addDashboardTile,
   createChart,
   createDashboard,
+  createDbtModel,
+  createPipeline,
   createSemanticModelDef,
+  createSource,
   createUser,
   deleteChart,
   deleteDashboard,
   deleteDashboardTile,
+  deleteDbtModel,
+  deletePipeline,
   deleteSemanticModelDef,
+  deleteSource,
   deleteUser,
   deprovisionTenant,
   getDashboard,
@@ -30,8 +36,13 @@ import {
   listCharts,
   listDashboards,
   listDatasets,
+  listDbtModels,
+  listPipelineRuns,
+  listPipelines,
   listSemanticModelDefs,
   listSemanticModels,
+  listSourceKinds,
+  listSources,
   listTenants,
   listUsers,
   login,
@@ -42,7 +53,9 @@ import {
   provisionTenant,
   queryDataset,
   querySemantic,
+  runPipeline,
   setDashboardLayout,
+  testSource,
   updateDashboard,
   updateDashboardTile,
   updateUser,
@@ -55,13 +68,16 @@ import type {
   DashboardLayoutUpdate,
   DashboardTileCreate,
   DashboardUpdate,
+  DbtModelDefCreate,
   InsightRequest,
   LoginRequest,
   NLChartRequest,
   NLQueryRequest,
+  PipelineCreate,
   QueryRequest,
   SemanticModelDefCreate,
   SemanticQueryRequest,
+  SourceConnectionCreate,
   TenantProvisionRequest,
   UserCreate,
   UserUpdate,
@@ -77,6 +93,10 @@ export const queryKeys = {
   suggestions: (id: string) => ["datasets", id, "suggestions"] as const,
   semanticModels: () => ["semantic", "models"] as const,
   semanticModelDefs: () => ["semantic-models"] as const,
+  sources: () => ["sources"] as const,
+  pipelines: () => ["pipelines"] as const,
+  pipelineRuns: (id: string) => ["pipelines", id, "runs"] as const,
+  dbtModels: () => ["dbt-models"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
   charts: () => ["charts"] as const,
   dashboards: () => ["dashboards"] as const,
@@ -284,6 +304,136 @@ export function useDeleteSemanticModelDef() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.semanticModelDefs() });
       void client.invalidateQueries({ queryKey: queryKeys.semanticModels() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ETL: source connections
+// ---------------------------------------------------------------------------
+
+/** Query: connector kinds the wizard offers. */
+export function useSourceKinds() {
+  return useQuery({
+    queryKey: ["sources", "kinds"] as const,
+    queryFn: listSourceKinds,
+    staleTime: 60 * 60_000,
+  });
+}
+
+/** Query: the tenant's source connections. */
+export function useSources() {
+  return useQuery({ queryKey: queryKeys.sources(), queryFn: listSources });
+}
+
+/** Mutation: create a source connection. Invalidates the sources list. */
+export function useCreateSource() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: SourceConnectionCreate) => createSource(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.sources() });
+    },
+  });
+}
+
+/** Mutation: test a source connection's connectivity. */
+export function useTestSource() {
+  return useMutation({ mutationFn: (id: string) => testSource(id) });
+}
+
+/** Mutation: delete a source connection. Invalidates the sources list. */
+export function useDeleteSource() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteSource(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.sources() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ETL: pipelines
+// ---------------------------------------------------------------------------
+
+/** Query: the tenant's pipelines. */
+export function usePipelines() {
+  return useQuery({ queryKey: queryKeys.pipelines(), queryFn: listPipelines });
+}
+
+/** Query: a pipeline's run history. Disabled until an id is provided. */
+export function usePipelineRuns(id: string | null) {
+  return useQuery({
+    queryKey: id !== null ? queryKeys.pipelineRuns(id) : (["noop"] as const),
+    queryFn: () => {
+      if (!id) throw new Error("pipeline id is required");
+      return listPipelineRuns(id);
+    },
+    enabled: id !== null,
+  });
+}
+
+/** Mutation: create a pipeline. Invalidates the pipelines list. */
+export function useCreatePipeline() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: PipelineCreate) => createPipeline(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.pipelines() });
+    },
+  });
+}
+
+/** Mutation: delete a pipeline. Invalidates the pipelines list. */
+export function useDeletePipeline() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deletePipeline(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.pipelines() });
+    },
+  });
+}
+
+/** Mutation: run a pipeline now. Invalidates that pipeline's run history. */
+export function useRunPipeline() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => runPipeline(id),
+    onSuccess: (_run, id) => {
+      void client.invalidateQueries({ queryKey: queryKeys.pipelineRuns(id) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// dbt model registry (wizard)
+// ---------------------------------------------------------------------------
+
+/** Query: the tenant's dbt model definitions. */
+export function useDbtModels() {
+  return useQuery({ queryKey: queryKeys.dbtModels(), queryFn: listDbtModels });
+}
+
+/** Mutation: define a dbt model. Invalidates the list. */
+export function useCreateDbtModel() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: DbtModelDefCreate) => createDbtModel(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dbtModels() });
+    },
+  });
+}
+
+/** Mutation: delete a dbt model. Invalidates the list. */
+export function useDeleteDbtModel() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteDbtModel(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dbtModels() });
     },
   });
 }

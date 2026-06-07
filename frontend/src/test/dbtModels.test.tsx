@@ -1,0 +1,73 @@
+/**
+ * Tests for the DbtModels (Transforms) wizard (#5/#6).
+ *
+ * Hooks + toast mocked. Covers the empty state and the create flow: filling name,
+ * SQL, and a column test posts the full DbtModelDefCreate payload (accepted_values
+ * splits its comma list). Dialog fields are queried by id (portal to body).
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+
+vi.mock("@/api/hooks", () => ({
+  useDbtModels: vi.fn(),
+  useCreateDbtModel: vi.fn(),
+  useDeleteDbtModel: vi.fn(),
+}));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+import { DbtModels } from "@/pages/DbtModels";
+import { useCreateDbtModel, useDeleteDbtModel, useDbtModels } from "@/api/hooks";
+
+const mockModels = vi.mocked(useDbtModels);
+const mockCreate = vi.mocked(useCreateDbtModel);
+const mockDelete = vi.mocked(useDeleteDbtModel);
+
+let createMutateAsync: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  createMutateAsync = vi.fn().mockResolvedValue({ id: "m1", name: "mart_orders" });
+  // @ts-expect-error partial mock
+  mockModels.mockReturnValue({ data: [], isLoading: false });
+  // @ts-expect-error partial mock
+  mockCreate.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
+  // @ts-expect-error partial mock
+  mockDelete.mockReturnValue({ mutate: vi.fn() });
+});
+
+afterEach(() => vi.clearAllMocks());
+
+function setValue(id: string, value: string) {
+  fireEvent.change(document.querySelector(`#${id}`)!, { target: { value } });
+}
+
+describe("DbtModels wizard", () => {
+  it("shows the empty state with no models", () => {
+    render(<DbtModels />);
+    expect(screen.getByText(/no dbt models yet/i)).toBeInTheDocument();
+  });
+
+  it("posts the full model definition with a column test", async () => {
+    render(<DbtModels />);
+    fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);
+
+    setValue("dm-name", "mart_orders");
+    setValue("dm-sql", "select region from {{ ref('stg') }}");
+    setValue("t-col-0", "region");
+    setValue("t-type-0", "accepted_values");
+    setValue("t-vals-0", "west, east");
+
+    fireEvent.click(screen.getByRole("button", { name: /create model/i }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalled());
+    expect(createMutateAsync).toHaveBeenCalledWith({
+      name: "mart_orders",
+      layer: "marts",
+      materialization: "table",
+      sql: "select region from {{ ref('stg') }}",
+      tests: [
+        { column_name: "region", test_type: "accepted_values", config: { values: ["west", "east"] } },
+      ],
+    });
+  });
+});

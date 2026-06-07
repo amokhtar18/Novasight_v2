@@ -201,13 +201,11 @@ async def test_pipeline_targets_tenant_namespace_and_table() -> None:
 
 @pytest.mark.asyncio
 async def test_catalog_properties_come_from_settings() -> None:
-    """_build_catalog_properties returns values sourced from settings, not literals."""
-    ctx = _make_ctx(_TENANT_ALPHA)
-    settings = _make_settings()
-    store = _FakeObjectStore()
+    """Catalog props are sourced from settings, not literals (now via iceberg_writer)."""
+    from app.core.iceberg_catalog import build_catalog_properties
 
-    pipeline = CsvIcebergPipeline(ctx=ctx, store=store, settings=settings)
-    props = pipeline._build_catalog_properties()
+    settings = _make_settings()
+    props = build_catalog_properties(settings)
 
     assert props["type"] == "rest"
     assert props["uri"] == settings.iceberg.catalog_uri
@@ -264,7 +262,7 @@ async def test_idempotency_overwrite_on_second_run() -> None:
     pipeline = CsvIcebergPipeline(ctx=ctx, store=store, settings=settings)
 
     patch_props = patch(
-        "app.ingestion.csv_iceberg.CsvIcebergPipeline._build_catalog_properties",
+        "app.ingestion.iceberg_writer.build_catalog_properties",
         return_value={},
     )
     patch_catalog = patch("pyiceberg.catalog.load_catalog", return_value=fake_catalog)

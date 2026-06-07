@@ -105,7 +105,7 @@ async def test_pipeline_encrypts_tagged_columns_at_rest() -> None:
 
     pipeline = CsvIcebergPipeline(ctx=ctx, store=store, settings=settings, provider=provider)
 
-    with patch.object(CsvIcebergPipeline, "_build_catalog_properties", return_value={}), patch(
+    with patch("app.ingestion.iceberg_writer.build_catalog_properties", return_value={}), patch(
         "pyiceberg.catalog.load_catalog", return_value=fake_catalog
     ):
         await pipeline.run(dataset)  # type: ignore[arg-type]
@@ -144,8 +144,8 @@ async def test_ingestion_does_not_log_plaintext(caplog: pytest.LogCaptureFixture
 
     pipeline = CsvIcebergPipeline(ctx=ctx, store=store, settings=settings, provider=_provider())
 
-    with caplog.at_level(logging.DEBUG), patch.object(
-        CsvIcebergPipeline, "_build_catalog_properties", return_value={}
+    with caplog.at_level(logging.DEBUG), patch(
+        "app.ingestion.iceberg_writer.build_catalog_properties", return_value={}
     ), patch("pyiceberg.catalog.load_catalog", return_value=MagicMock()):
         await pipeline.run(dataset)  # type: ignore[arg-type]
 

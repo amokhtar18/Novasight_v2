@@ -171,6 +171,75 @@ export interface SemanticQueryRequest {
 }
 
 // ---------------------------------------------------------------------------
+// ETL: source connections — /api/v1/sources  (mirrors schemas/source.py)
+// ---------------------------------------------------------------------------
+
+export interface SourceConnectionRead {
+  id: string;
+  name: string;
+  kind: string;
+  config: Record<string, unknown>;
+  status: string;
+  has_secret: boolean;
+}
+
+export interface SourceConnectionCreate {
+  name: string;
+  kind: string;
+  config: Record<string, unknown>;
+  /** Credentials (e.g. { password }); encrypted at rest. Omit when none. */
+  secret?: Record<string, unknown> | null;
+}
+
+export interface SourceTestResponse {
+  ok: boolean;
+  detail?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// ETL: pipelines — /api/v1/pipelines  (mirrors schemas/pipeline.py)
+// ---------------------------------------------------------------------------
+
+export type WriteDisposition = "overwrite";
+
+export interface PipelineConfig {
+  /** Source object to extract: a DB table name, or a file key for filesystem. */
+  object: string;
+  write_disposition?: WriteDisposition;
+}
+
+export interface PipelineRead {
+  id: string;
+  name: string;
+  source_connection_id: string;
+  config: PipelineConfig;
+  target_table: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineCreate {
+  name: string;
+  source_connection_id: string;
+  config: PipelineConfig;
+  target_table: string;
+  enabled?: boolean;
+}
+
+export interface PipelineRunRead {
+  id: string;
+  pipeline_id: string;
+  status: string;
+  dagster_run_id: string | null;
+  rows: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Semantic-model registry (wizard definitions) — /api/v1/semantic-models
 // (mirrors schemas/semantic_model.py). Distinct from SemanticModelRead above,
 // which is the *governed Cube meta* the query path reads.
@@ -216,6 +285,51 @@ export interface SemanticModelDefCreate {
   name: string;
   base_table: string;
   config: SemanticModelConfig;
+  enabled?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// dbt model + test registry (wizard) — /api/v1/dbt-models
+// (mirrors schemas/dbt_model.py)
+// ---------------------------------------------------------------------------
+
+export type DbtLayer = "staging" | "intermediate" | "marts";
+export type DbtMaterialization = "view" | "table" | "incremental";
+export type DbtTestType = "not_null" | "unique" | "accepted_values" | "relationships";
+
+export interface DbtTestDef {
+  column_name?: string | null;
+  test_type: DbtTestType;
+  config?: Record<string, unknown>;
+}
+
+export interface DbtTestReadModel {
+  id: string;
+  column_name: string | null;
+  test_type: string;
+  config: Record<string, unknown>;
+}
+
+export interface DbtModelDefRead {
+  id: string;
+  name: string;
+  layer: string;
+  materialization: string;
+  sql: string | null;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  tests: DbtTestReadModel[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbtModelDefCreate {
+  name: string;
+  layer?: DbtLayer;
+  materialization?: DbtMaterialization;
+  sql: string;
+  config?: Record<string, unknown>;
+  tests?: DbtTestDef[];
   enabled?: boolean;
 }
 

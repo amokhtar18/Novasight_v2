@@ -87,3 +87,26 @@ dbt build --select staging --profiles-dir .      # builds the staging view + run
 
 `dbt parse` does not connect to ClickHouse. `dbt build` requires the Phase 1 dataset
 present in the tenant's ClickHouse database and `DBT_PHASE1_DATASET_TABLE` set to it.
+
+## dbt model + test wizard (#5/#6)
+
+Beyond the static models above, users define **dbt models from the UI** (the
+Transforms page, `/transforms`). A definition is a `layer`, a `materialization`, the
+model `sql` (a SELECT), and optional column data tests.
+
+- **API** (`backend/app/api/v1/dbt_models.py` → `services/dbt_models.py`):
+  `GET/POST /api/v1/dbt-models`, `GET/PATCH/DELETE /api/v1/dbt-models/{id}`. Reads need
+  a tenant context; mutations require the tenant superuser role. Names are unique per
+  tenant; `layer`/`materialization`/`test_type` are closed sets; the SQL is the user's
+  transformation (custom SQL is a first-class dbt path).
+- **Codegen** (`backend/app/codegen/dbt_model.py`): the single writer. On every change
+  the service re-renders the tenant's enabled models into
+  `<DBT__MODELS_DIR>/tenant_<dbt_schema>/` — one `<name>.sql` (with a
+  `{{ config(materialized=...) }}` header) plus a `schema.yml` of column/model
+  `data_tests`. Stale `.sql` files are pruned on rename/delete. Isolation is by
+  directory + the tenant's target schema, mirroring the Cube codegen.
+
+The pure render + writer are unit-tested (`tests/test_dbt_codegen.py`,
+`tests/test_dbt_models_api.py`). Materializing the generated models to ClickHouse runs
+via the dynamic Dagster dbt run (#7) and is verified on the running stack; tests become
+Dagster asset checks (the existing quality-gate pattern).
