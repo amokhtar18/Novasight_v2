@@ -40,6 +40,8 @@ import type {
   QueryRequest,
   QueryResponse,
   SavedChartRead,
+  ScheduleCreate,
+  ScheduleRead,
   SourceConnectionCreate,
   SourceConnectionRead,
   SourceTestResponse,
@@ -308,6 +310,32 @@ export async function runPipeline(id: string): Promise<PipelineRunRead> {
 /** GET /pipelines/{id}/runs — run history. */
 export async function listPipelineRuns(id: string): Promise<PipelineRunRead[]> {
   return apiFetch<PipelineRunRead[]>(`/pipelines/${id}/runs`, {}, { Accept: "application/json" });
+}
+
+// ---------------------------------------------------------------------------
+// ETL: schedules (mutations require superuser)
+// ---------------------------------------------------------------------------
+
+/** GET /schedules — the tenant's schedules. */
+export async function listSchedules(): Promise<ScheduleRead[]> {
+  return apiFetch<ScheduleRead[]>("/schedules", {}, { Accept: "application/json" });
+}
+
+/** POST /schedules — schedule a pipeline on a cron. */
+export async function createSchedule(request: ScheduleCreate): Promise<ScheduleRead> {
+  return apiFetch<ScheduleRead>(
+    "/schedules",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /schedules/{id}. */
+export async function deleteSchedule(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/schedules/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

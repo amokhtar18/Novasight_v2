@@ -60,6 +60,7 @@ human reference.
 | `CUBE__PORT` | int | — | local stack | Host-published port for the Cube container (internal port 4000). Compose only; must match the port in `CUBE__BASE_URL`. |
 | `CUBE__MODEL_DIR` | str \| None | `None` | deployment | Filesystem path where the semantic-model codegen writes generated per-tenant Cube model files (`tenant__<db>.js`); must be a directory the Cube container also reads (shared volume). Unset → codegen renders but does not write. Read by `CubeSettings.model_dir`. |
 | `DBT__MODELS_DIR` | str \| None | `None` | deployment | Filesystem path where the dbt model/test codegen writes generated per-tenant dbt files (`tenant_<schema>/<name>.sql` + `schema.yml`); must be inside the dbt project's models dir that the Dagster/dbt run reads. Unset → codegen renders but does not write. Read by `DbtSettings.models_dir`. |
+| `PIPELINE_DISPATCH_CRON` | str | `* * * * *` | safe default | periodiq heartbeat for the pipeline-schedule dispatcher (#4). The dispatcher fires this often, then runs each pipeline schedule whose own cron is due. Read by `Settings.pipeline_dispatch_cron`. |
 | `SERVING_REGIONAL_SALES_TABLE` | str | `serving_regional_sales` | deployment | Physical name of the serving table the Dagster serving asset writes and the Cube model reads. Shared by both layers via the same env var so they never drift. |
 
 > `MINIO__*` are consumed only by `infra/compose/docker-compose.yml` for the local dev

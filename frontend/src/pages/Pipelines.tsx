@@ -11,6 +11,7 @@
 
 import { useState } from "react";
 import {
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   Database,
@@ -23,12 +24,15 @@ import { toast } from "sonner";
 
 import {
   useCreatePipeline,
+  useCreateSchedule,
   useCreateSource,
   useDeletePipeline,
+  useDeleteSchedule,
   useDeleteSource,
   usePipelineRuns,
   usePipelines,
   useRunPipeline,
+  useSchedules,
   useSourceKinds,
   useSources,
   useTestSource,
@@ -52,6 +56,7 @@ import {
 import { formatRelativeTime } from "@/lib/format";
 import type {
   PipelineRunRead,
+  ScheduleRead,
   SourceConnectionCreate,
   SourceConnectionRead,
 } from "@/types/api";
@@ -302,6 +307,7 @@ function NewSourceDialog({
 function PipelinesSection() {
   const { data: pipelines, isLoading } = usePipelines();
   const { data: sources } = useSources();
+  const { data: schedules } = useSchedules();
   const [open, setOpen] = useState(false);
 
   return (
@@ -337,7 +343,14 @@ function PipelinesSection() {
         ) : (
           <ul className="divide-y divide-border/60">
             {pipelines.map((p) => (
-              <PipelineRow key={p.id} id={p.id} name={p.name} target={p.target_table} enabled={p.enabled} />
+              <PipelineRow
+                key={p.id}
+                id={p.id}
+                name={p.name}
+                target={p.target_table}
+                enabled={p.enabled}
+                schedules={(schedules ?? []).filter((s) => s.target_id === p.id)}
+              />
             ))}
           </ul>
         )}
@@ -352,15 +365,18 @@ function PipelineRow({
   name,
   target,
   enabled,
+  schedules,
 }: {
   id: string;
   name: string;
   target: string;
   enabled: boolean;
+  schedules: ScheduleRead[];
 }) {
   const runPipeline = useRunPipeline();
   const deletePipeline = useDeletePipeline();
   const [expanded, setExpanded] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const { data: runs, isLoading: runsLoading } = usePipelineRuns(expanded ? id : null);
 
   function handleRun() {
@@ -394,6 +410,11 @@ function PipelineRow({
         </button>
         <div className="flex shrink-0 items-center gap-2">
           {!enabled && <Badge variant="secondary">disabled</Badge>}
+          {schedules.some((s) => s.enabled) && <Badge variant="info">scheduled</Badge>}
+          <Button size="sm" variant="ghost" onClick={() => setScheduleOpen(true)}>
+            <CalendarClock className="h-4 w-4" aria-hidden />
+            Schedule
+          </Button>
           <Button size="sm" variant="outline" onClick={handleRun} disabled={!enabled || runPipeline.isPending}>
             <Play className="h-4 w-4" aria-hidden />
             Run
@@ -428,7 +449,110 @@ function PipelineRow({
           )}
         </div>
       )}
+
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        pipelineId={id}
+        pipelineName={name}
+        schedules={schedules}
+      />
     </li>
+  );
+}
+
+function ScheduleDialog({
+  open,
+  onOpenChange,
+  pipelineId,
+  pipelineName,
+  schedules,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  pipelineId: string;
+  pipelineName: string;
+  schedules: ScheduleRead[];
+}) {
+  const createSchedule = useCreateSchedule();
+  const deleteSchedule = useDeleteSchedule();
+  const [cron, setCron] = useState("0 2 * * *");
+
+  function handleAdd() {
+    if (!cron.trim()) {
+      toast.error("A cron expression is required");
+      return;
+    }
+    createSchedule.mutate(
+      { name: `${pipelineName} schedule`, target_id: pipelineId, cron: cron.trim() },
+      {
+        onSuccess: () => toast.success("Schedule added"),
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : "Could not add the schedule"),
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Schedules">
+      <DialogHeader>
+        <DialogTitle>Schedule “{pipelineName}”</DialogTitle>
+        <DialogDescription>
+          Run this pipeline automatically on a cron (5 fields: minute hour day month weekday).
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-4">
+        {schedules.length > 0 && (
+          <ul className="divide-y divide-border/60">
+            {schedules.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="font-mono">{s.cron}</span>
+                <span className="flex items-center gap-2">
+                  {!s.enabled && <Badge variant="secondary">disabled</Badge>}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      deleteSchedule.mutate(s.id, {
+                        onError: (err) =>
+                          toast.error(err instanceof Error ? err.message : "Delete failed"),
+                      })
+                    }
+                    aria-label={`Delete schedule ${s.cron}`}
+                    className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="sch-cron">New schedule (cron)</Label>
+          <div className="flex gap-2">
+            <Input
+              id="sch-cron"
+              value={cron}
+              onChange={(e) => setCron(e.target.value)}
+              placeholder="0 2 * * *"
+              className="font-mono"
+            />
+            <Button onClick={handleAdd} disabled={createSchedule.isPending}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Add
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          Done
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }
 

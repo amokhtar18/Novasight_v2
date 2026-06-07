@@ -376,6 +376,10 @@ class Settings(BaseSettings):
     default_page_size: int = 50
     max_query_rows: int = 100_000
     max_upload_mb: int = 100
+    # periodiq heartbeat cron for the pipeline-schedule dispatcher (#4). A 5-field
+    # cron; every minute by default — the dispatcher then checks each schedule's own
+    # cron. Env: PIPELINE_DISPATCH_CRON.
+    pipeline_dispatch_cron: str = "* * * * *"
 
     # Governed serving-table allow-list for NL→SQL validation.  Uses the same env
     # var that Dagster and Cube consume so the physical table name has one source of

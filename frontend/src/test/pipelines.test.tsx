@@ -22,6 +22,9 @@ vi.mock("@/api/hooks", () => ({
   useCreatePipeline: vi.fn(),
   useDeletePipeline: vi.fn(),
   useRunPipeline: vi.fn(),
+  useSchedules: vi.fn(),
+  useCreateSchedule: vi.fn(),
+  useDeleteSchedule: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -50,6 +53,7 @@ const pipeline: PipelineRead = {
 
 let createPipelineMutate: ReturnType<typeof vi.fn>;
 let runPipelineMutate: ReturnType<typeof vi.fn>;
+let createScheduleMutate: ReturnType<typeof vi.fn>;
 
 function query<T>(data: T) {
   return { data, isLoading: false, isError: false };
@@ -61,6 +65,7 @@ function mutation(spy: ReturnType<typeof vi.fn>) {
 function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRead[] }) {
   createPipelineMutate = vi.fn();
   runPipelineMutate = vi.fn();
+  createScheduleMutate = vi.fn();
   // @ts-expect-error partial mock
   vi.mocked(hooks.useSources).mockReturnValue(query(opts.sources ?? []));
   // @ts-expect-error partial mock
@@ -81,6 +86,12 @@ function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRea
   vi.mocked(hooks.useDeletePipeline).mockReturnValue(mutation(vi.fn()));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useRunPipeline).mockReturnValue(mutation(runPipelineMutate));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useSchedules).mockReturnValue(query([]));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useCreateSchedule).mockReturnValue(mutation(createScheduleMutate));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useDeleteSchedule).mockReturnValue(mutation(vi.fn()));
 }
 
 afterEach(() => vi.clearAllMocks());
@@ -123,6 +134,18 @@ describe("Pipelines page", () => {
     expect(runPipelineMutate).toHaveBeenCalledWith(
       "p1",
       expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("schedules a pipeline on a cron", () => {
+    setup({ sources: [source], pipelines: [pipeline] });
+    render(<Pipelines />);
+    fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
+    fireEvent.change(document.querySelector("#sch-cron")!, { target: { value: "0 6 * * *" } });
+    fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
+    expect(createScheduleMutate).toHaveBeenCalledWith(
+      { name: "orders_daily schedule", target_id: "p1", cron: "0 6 * * *" },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
     );
   });
 });

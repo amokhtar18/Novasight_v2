@@ -75,6 +75,29 @@ executor's **steps are injected**, so the orchestration + lifecycle are fully un
 tested (`tests/test_pipeline_executor.py`) with no infra; the concrete extract/load/
 register adapters are thin and verified against the running stack.
 
-**Remaining (later slices):** scheduling via the dynamic Dagster code location
-(#4/#7 — `dagster_run_id` stays null for worker runs today) and a frontend
-pipeline-builder UI (the run-now/CRUD API is complete).
+## Schedules (#4)
+
+A **schedule** binds a cron to a pipeline so it runs on a cadence — no Dagster needed
+(consistent with run-now going through the worker). Schedules are tenant config.
+
+- **API** (`backend/app/api/v1/schedules.py` → `services/schedules.py`):
+  `GET/POST /api/v1/schedules`, `GET/PATCH/DELETE /api/v1/schedules/{id}`. Reads need a
+  tenant context; mutations require the tenant superuser role. The cron is validated at
+  the schema boundary (5-field matcher, `app/reporting/cron.py`); the target pipeline
+  must belong to the tenant. `target_kind` is `pipeline` (scheduling dbt transforms
+  arrives with the dbt run path).
+- **Dispatch** (`backend/app/ingestion/scheduler.py`): a periodiq actor
+  `dispatch_due_pipelines` fires on `PIPELINE_DISPATCH_CRON` (every minute by default),
+  then `ScheduleService.create_due_runs` records a queued run + enqueues `run_pipeline`
+  for each enabled schedule whose cron is due (skipping disabled pipelines). Reading the
+  schedule registry is control-plane; each enqueued run re-resolves its own tenant scope.
+
+The due-selection + run-creation logic is unit-tested (`tests/test_schedules_api.py`);
+the periodiq heartbeat runs in the worker (registered in `app/reporting/worker.py`).
+
+UI: each pipeline row on `/pipelines` has a **Schedule** action (add cron schedules /
+delete them) and shows a *scheduled* badge.
+
+**Remaining (later slices):** routing pipeline/transform orchestration through the
+dynamic Dagster code location (#7 — `dagster_run_id` stays null for worker runs today),
+and scheduling dbt transforms (needs the dbt run path).

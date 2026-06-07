@@ -25,9 +25,19 @@ configure_broker()
 setup_worker_observability()
 
 # Import after the broker is set so actor registration binds to it. This single
-# worker entrypoint hosts both reporting (5.1) and KPI-alert (5.2) actors/schedules.
+# worker entrypoint hosts reporting (5.1), KPI-alert (5.2), and ETL pipeline (#3/#4)
+# actors/schedules.
+from app.ingestion import actors as etl_actors  # noqa: E402
+from app.ingestion import scheduler as etl_scheduler  # noqa: E402
 from app.reporting import actors, schedule  # noqa: E402
 from app.reporting.alerts import actors as alert_actors  # noqa: E402
 from app.reporting.alerts import schedule as alert_schedule  # noqa: E402
 
-__all__ = ["actors", "alert_actors", "alert_schedule", "schedule"]
+__all__ = [
+    "actors",
+    "alert_actors",
+    "alert_schedule",
+    "etl_actors",
+    "etl_scheduler",
+    "schedule",
+]

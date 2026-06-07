@@ -239,6 +239,26 @@ export interface PipelineRunRead {
   created_at: string;
 }
 
+// Schedules — /api/v1/schedules (mirrors schemas/schedule.py)
+export interface ScheduleRead {
+  id: string;
+  name: string;
+  target_kind: string;
+  target_id: string;
+  cron: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleCreate {
+  name: string;
+  target_kind?: "pipeline";
+  target_id: string;
+  cron: string;
+  enabled?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Semantic-model registry (wizard definitions) — /api/v1/semantic-models
 // (mirrors schemas/semantic_model.py). Distinct from SemanticModelRead above,

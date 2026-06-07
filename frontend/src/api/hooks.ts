@@ -17,6 +17,7 @@ import {
   createDashboard,
   createDbtModel,
   createPipeline,
+  createSchedule,
   createSemanticModelDef,
   createSource,
   createUser,
@@ -25,6 +26,7 @@ import {
   deleteDashboardTile,
   deleteDbtModel,
   deletePipeline,
+  deleteSchedule,
   deleteSemanticModelDef,
   deleteSource,
   deleteUser,
@@ -39,6 +41,7 @@ import {
   listDbtModels,
   listPipelineRuns,
   listPipelines,
+  listSchedules,
   listSemanticModelDefs,
   listSemanticModels,
   listSourceKinds,
@@ -75,6 +78,7 @@ import type {
   NLQueryRequest,
   PipelineCreate,
   QueryRequest,
+  ScheduleCreate,
   SemanticModelDefCreate,
   SemanticQueryRequest,
   SourceConnectionCreate,
@@ -96,6 +100,7 @@ export const queryKeys = {
   sources: () => ["sources"] as const,
   pipelines: () => ["pipelines"] as const,
   pipelineRuns: (id: string) => ["pipelines", id, "runs"] as const,
+  schedules: () => ["schedules"] as const,
   dbtModels: () => ["dbt-models"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
   charts: () => ["charts"] as const,
@@ -403,6 +408,37 @@ export function useRunPipeline() {
     mutationFn: (id: string) => runPipeline(id),
     onSuccess: (_run, id) => {
       void client.invalidateQueries({ queryKey: queryKeys.pipelineRuns(id) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ETL: schedules
+// ---------------------------------------------------------------------------
+
+/** Query: the tenant's schedules. */
+export function useSchedules() {
+  return useQuery({ queryKey: queryKeys.schedules(), queryFn: listSchedules });
+}
+
+/** Mutation: schedule a pipeline. Invalidates the schedules list. */
+export function useCreateSchedule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: ScheduleCreate) => createSchedule(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.schedules() });
+    },
+  });
+}
+
+/** Mutation: delete a schedule. Invalidates the schedules list. */
+export function useDeleteSchedule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteSchedule(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.schedules() });
     },
   });
 }
