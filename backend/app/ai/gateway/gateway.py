@@ -35,7 +35,13 @@ import logging
 
 from fastapi import Depends
 
-from app.ai.gateway.provider import LLMProvider, LLMRequest, LLMResponse
+from app.ai.gateway.provider import (
+    LLMProvider,
+    LLMRequest,
+    LLMResponse,
+    ToolChatRequest,
+    ToolChatResponse,
+)
 from app.ai.gateway.registry import build_provider
 from app.core.config import AISettings, Settings, get_settings
 from app.tenancy.context import TenantContext
@@ -223,6 +229,64 @@ class LLMGateway:
             response.usage.get("output_tokens", 0),
         )
 
+        return response
+
+    async def complete_with_tools(
+        self,
+        request: ToolChatRequest,
+        *,
+        ctx: TenantContext,
+        model_override: str | None = None,
+    ) -> ToolChatResponse:
+        """Run a tool-enabled, multi-turn completion via the configured provider.
+
+        Resolves the effective model + max_tokens (same rules as ``complete``),
+        then dispatches. The tool dispatch loop itself lives in the chat service —
+        this method is a single model round-trip.
+
+        Args:
+            request: The tool-enabled request (system + messages + tools).
+            ctx: Server-resolved tenant context (logging + model resolution).
+            model_override: Optional per-request model id.
+
+        Returns:
+            A typed ``ToolChatResponse`` (assistant text + requested tool calls).
+
+        Raises:
+            LLMProviderError: Propagated from the provider on any failure.
+        """
+        effective_model = model_for_tenant(
+            ctx,
+            override=model_override or request.model,
+            ai_settings=self._settings,
+        )
+        effective_max_tokens = (
+            request.max_tokens
+            if request.max_tokens is not None
+            else self._settings.max_tokens
+        )
+        resolved = request.model_copy(
+            update={"model": effective_model, "max_tokens": effective_max_tokens}
+        )
+
+        logger.info(
+            "LLMGateway.complete_with_tools tenant_id=%r model=%r tools=%d turns=%d",
+            ctx.tenant_id,
+            effective_model,
+            len(resolved.tools),
+            len(resolved.messages),
+        )
+
+        response = await self._provider.complete_with_tools(resolved)
+
+        logger.info(
+            "LLMGateway.complete_with_tools done tenant_id=%r model=%r "
+            "stop_reason=%r tool_calls=%d",
+            ctx.tenant_id,
+            response.model,
+            response.stop_reason,
+            len(response.tool_calls),
+        )
         return response
 
 

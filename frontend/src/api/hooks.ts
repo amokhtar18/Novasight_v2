@@ -50,6 +50,7 @@ import {
   listUsers,
   login,
   logout,
+  postChat,
   postInsight,
   postNLChart,
   postNLQuery,
@@ -67,6 +68,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import type {
   ChartCreate,
+  ChatRequest,
   DashboardCreate,
   DashboardLayoutUpdate,
   DashboardTileCreate,
@@ -209,6 +211,13 @@ export function useDatasetQuery(datasetId: string | null, request: QueryRequest)
 export function useNLChart() {
   return useMutation({
     mutationFn: (request: NLChartRequest) => postNLChart(request),
+  });
+}
+
+/** Mutation: chat — grounded tool-calling answer over the semantic layer. */
+export function useChat() {
+  return useMutation({
+    mutationFn: (request: ChatRequest) => postChat(request),
   });
 }
 

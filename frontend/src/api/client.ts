@@ -15,6 +15,8 @@ import { useAuthStore } from "@/store/authStore";
 import type {
   AccessTokenResponse,
   ChartCreate,
+  ChatRequest,
+  ChatResponse,
   DashboardCreate,
   DbtModelDefCreate,
   DbtModelDefRead,
@@ -538,6 +540,15 @@ export async function getHealth(): Promise<HealthRead> {
 export async function postNLQuery(request: NLQueryRequest): Promise<NLQueryResponse> {
   return apiFetch<NLQueryResponse>(
     "/ai/query",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** POST /ai/chat — grounded tool-calling answer over the semantic layer. */
+export async function postChat(request: ChatRequest): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>(
+    "/ai/chat",
     { method: "POST", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );

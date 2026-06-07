@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   Lightbulb,
+  MessageSquare,
   Settings,
   Shield,
   Sparkles,
@@ -36,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/transforms", label: "Transforms", icon: Boxes },
   { to: "/models", label: "Semantic models", icon: Layers },
   { to: "/explore", label: "Ask AI", icon: Sparkles },
+  { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/build", label: "Chart builder", icon: BarChart3 },
   { to: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
   { to: "/insights", label: "Insights", icon: Lightbulb },
@@ -55,6 +57,7 @@ export function titleForPath(pathname: string): string {
   if (pathname.startsWith("/transforms")) return "Transforms";
   if (pathname.startsWith("/models")) return "Semantic models";
   if (pathname.startsWith("/explore")) return "Ask AI";
+  if (pathname.startsWith("/chat")) return "Chat";
   if (pathname.startsWith("/build")) return "Chart builder";
   if (pathname.startsWith("/dashboards")) return "Dashboards";
   if (pathname.startsWith("/insights")) return "Insights";

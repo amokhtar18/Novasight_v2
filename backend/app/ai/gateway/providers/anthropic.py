@@ -42,11 +42,21 @@ Example (for illustration; runtime model always comes from settings)::
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import anthropic
 
-from app.ai.gateway.provider import LLMProviderError, LLMRequest, LLMResponse
+if TYPE_CHECKING:
+    from anthropic.types import MessageParam, ToolParam
+
+from app.ai.gateway.provider import (
+    LLMProviderError,
+    LLMRequest,
+    LLMResponse,
+    ToolCall,
+    ToolChatRequest,
+    ToolChatResponse,
+)
 from app.core.config import AISettings
 
 logger = logging.getLogger(__name__)
@@ -178,6 +188,114 @@ class AnthropicProvider:
             usage=usage,
             raw_metadata=raw_metadata,
         )
+
+    async def complete_with_tools(self, request: ToolChatRequest) -> ToolChatResponse:
+        """Run a tool-enabled, multi-turn completion via the Messages API.
+
+        Maps the provider-neutral turns/tools onto Anthropic's ``tool_use`` /
+        ``tool_result`` content blocks (see the ``claude-api`` skill), then parses
+        the response back into neutral ``ToolCall`` objects. Sampling params are
+        intentionally omitted — current Claude 4.x models reject them.
+
+        This adapter is exercised against the live stack; the chat dispatch loop in
+        ``app/ai/chat`` is what's unit-tested (with a fake gateway).
+        """
+        model = request.model or ""
+        max_tokens = (
+            request.max_tokens if request.max_tokens is not None else self._default_max_tokens
+        )
+        tools = [
+            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+            for t in request.tools
+        ]
+        messages = [self._to_anthropic_message(turn) for turn in request.messages]
+
+        try:
+            message = await self._client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=request.system,
+                # The dicts are built to the Messages API shape; cast at this SDK
+                # boundary (the provider is the only layer allowed to touch SDK types).
+                messages=cast("list[MessageParam]", messages),
+                tools=cast("list[ToolParam]", tools),
+            )
+        except anthropic.AuthenticationError as exc:
+            raise LLMProviderError(
+                "Anthropic authentication failed — check AI__API_KEY",
+                provider=self.PROVIDER_NAME,
+                status_code=401,
+            ) from exc
+        except anthropic.RateLimitError as exc:
+            raise LLMProviderError(
+                "Anthropic rate limit exceeded",
+                provider=self.PROVIDER_NAME,
+                status_code=429,
+            ) from exc
+        except anthropic.APIStatusError as exc:
+            raise LLMProviderError(
+                f"Anthropic API error: HTTP {exc.status_code}",
+                provider=self.PROVIDER_NAME,
+                status_code=exc.status_code,
+            ) from exc
+        except anthropic.APIConnectionError as exc:
+            raise LLMProviderError(
+                "Anthropic connection error",
+                provider=self.PROVIDER_NAME,
+            ) from exc
+
+        text_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
+        for block in message.content:
+            if block.type == "text":
+                text_parts.append(block.text)
+            elif block.type == "tool_use":
+                tool_calls.append(
+                    ToolCall(id=block.id, name=block.name, input=dict(block.input or {}))
+                )
+
+        usage: dict[str, int] = {}
+        if message.usage is not None:
+            usage = {
+                "input_tokens": message.usage.input_tokens,
+                "output_tokens": message.usage.output_tokens,
+            }
+
+        return ToolChatResponse(
+            text="".join(text_parts).strip(),
+            tool_calls=tool_calls,
+            stop_reason=message.stop_reason or "",
+            model=message.model,
+            usage=usage,
+        )
+
+    @staticmethod
+    def _to_anthropic_message(turn: Any) -> dict[str, Any]:  # noqa: ANN401 — ChatTurn
+        """Map a neutral ``ChatTurn`` to an Anthropic message dict."""
+        if turn.role == "assistant":
+            content: list[dict[str, Any]] = []
+            if turn.text:
+                content.append({"type": "text", "text": turn.text})
+            for call in turn.tool_calls:
+                content.append(
+                    {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}
+                )
+            return {"role": "assistant", "content": content}
+        # user turn — either tool results or plain text
+        if turn.tool_results:
+            return {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": r.tool_use_id,
+                        "content": r.content,
+                        "is_error": r.is_error,
+                    }
+                    for r in turn.tool_results
+                ],
+            }
+        return {"role": "user", "content": turn.text or ""}
 
     async def close(self) -> None:
         """Close the underlying ``AsyncAnthropic`` HTTP client.

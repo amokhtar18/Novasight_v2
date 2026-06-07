@@ -17,7 +17,7 @@ Design notes
 """
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -66,6 +66,74 @@ class LLMResponse(BaseModel):
     raw_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+# ---------------------------------------------------------------------------
+# Tool-use (multi-turn) types — provider-neutral (used by the AI chat surface).
+#
+# These mirror the tool-use shape every major provider supports (Anthropic
+# tool_use/tool_result, OpenAI tool_calls/tool messages) without leaking any
+# provider type. The chat service builds the request, runs the dispatch loop, and
+# feeds tool results back as ``ChatTurn``s with ``tool_results``.
+# ---------------------------------------------------------------------------
+
+
+class ToolSpec(BaseModel):
+    """A tool the model may call: name, description, and a JSON-Schema input."""
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+
+
+class ToolCall(BaseModel):
+    """A model's request to call a tool (one tool_use)."""
+
+    id: str
+    name: str
+    input: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolResultMsg(BaseModel):
+    """The result of executing one tool call, fed back to the model."""
+
+    tool_use_id: str
+    content: str
+    is_error: bool = False
+
+
+class ChatTurn(BaseModel):
+    """One conversation turn. Assistant turns may carry ``tool_calls``; a user
+    turn returning tool output carries ``tool_results`` (and usually no text)."""
+
+    role: Literal["user", "assistant"]
+    text: str | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    tool_results: list[ToolResultMsg] = Field(default_factory=list)
+
+
+class ToolChatRequest(BaseModel):
+    """A tool-enabled, multi-turn completion request."""
+
+    system: str
+    messages: list[ChatTurn]
+    tools: list[ToolSpec] = Field(default_factory=list)
+    model: str | None = None
+    max_tokens: int | None = None
+
+
+class ToolChatResponse(BaseModel):
+    """The model's reply: any text plus the tool calls it wants executed.
+
+    ``stop_reason == "tool_use"`` (with a non-empty ``tool_calls``) means the
+    caller must run the tools and continue the loop; ``"end_turn"`` means done.
+    """
+
+    text: str = ""
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    stop_reason: str = ""
+    model: str = ""
+    usage: dict[str, int] = Field(default_factory=dict)
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     """Protocol every LLM provider must satisfy.
@@ -97,6 +165,20 @@ class LLMProvider(Protocol):
             LLMProviderError: On any provider-side failure (network, auth, rate
                 limit, etc.).  The original exception is chained via ``__cause__``
                 for structured logging but must not propagate provider-specific types.
+        """
+        ...
+
+    async def complete_with_tools(self, request: ToolChatRequest) -> ToolChatResponse:
+        """Run a tool-enabled, multi-turn completion and return the model's reply.
+
+        The reply carries any assistant text plus the tool calls the model wants
+        executed (``stop_reason == "tool_use"``). The caller (chat service) runs
+        the tools and continues the loop by appending a ``ChatTurn`` with
+        ``tool_results``. ``model``/``max_tokens`` are filled by the gateway.
+
+        Raises:
+            LLMProviderError: On any provider-side failure (wrapped, never leaking
+                provider-specific types).
         """
         ...
 

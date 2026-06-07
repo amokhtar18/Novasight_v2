@@ -29,6 +29,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.ai.chat import ChatService, get_chat_service
 from app.ai.gateway.provider import LLMProviderError
 from app.ai.insights import (
     InsightGuardrailError,
@@ -624,3 +625,68 @@ async def dataset_suggestions(
         )
 
     return SuggestionsResponse(suggestions=items, note=note)
+
+
+# ---------------------------------------------------------------------------
+# Chat over the semantic layer (#11): grounded tool-calling
+# ---------------------------------------------------------------------------
+
+
+class ChatRequest(BaseModel):
+    """Request body for POST /ai/chat."""
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="A natural-language question about the tenant's data.",
+    )
+
+
+class ChatResponse(BaseModel):
+    """Response for POST /ai/chat.
+
+    Attributes:
+        answer: The assistant's grounded answer (figures trace to tool results).
+        tools_used: The grounded tools the assistant called (for transparency).
+    """
+
+    answer: str = Field(description="Grounded natural-language answer.")
+    tools_used: list[str] = Field(description="Names of the tools the assistant called.")
+
+
+@router.post(
+    "/chat",
+    response_model=ChatResponse,
+    status_code=200,
+    responses={503: {"description": "LLM provider or semantic layer unavailable"}},
+    summary="Chat over the governed semantic layer via grounded tool-calling",
+    description=(
+        "Answers a natural-language question by running an LLM tool-dispatch loop. "
+        "The model may call only grounded, tenant-scoped tools (list/query semantic "
+        "models, validated NL→SQL) — there is no raw-table or arbitrary-SQL path "
+        "(golden rule #3). The tenant scope is resolved from the JWT; the model "
+        "cannot widen it. Tool failures are handled gracefully; provider/semantic "
+        "outages return 503 with a safe message."
+    ),
+)
+async def chat(
+    payload: ChatRequest,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: ChatService = Depends(get_chat_service),  # noqa: B008
+) -> ChatResponse:
+    """Answer a question over the tenant's governed semantic layer."""
+    try:
+        result = await svc.ask(ctx, payload.message)
+    except LLMProviderError as exc:
+        logger.error(
+            "Chat LLM provider error: tenant_id=%r provider=%r status=%r",
+            ctx.tenant_id,
+            exc.provider,
+            exc.status_code,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is temporarily unavailable. Please try again.",
+        ) from exc
+    return ChatResponse(answer=result.answer, tools_used=result.tools_used)

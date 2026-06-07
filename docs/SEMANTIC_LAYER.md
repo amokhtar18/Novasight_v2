@@ -480,3 +480,40 @@ tenant only.
 
 Frontend: the **Semantic models** page (`frontend/src/pages/SemanticModels.tsx`, route
 `/models`) is the wizard — name + base table + measure/dimension rows → `POST`.
+
+## HTTP API: chat over the semantic layer (#11/#12)
+
+`POST /api/v1/ai/chat` answers a natural-language question by running an **LLM
+tool-dispatch loop** grounded on the governed semantic layer. The model may call only
+a fixed set of **grounded, tenant-scoped tools** that delegate to the existing,
+already-validated services — there is no raw-table or arbitrary-SQL path (golden rule
+#3):
+
+- `list_semantic_models` → `SemanticService.list_models` (Cube `/meta`),
+- `query_semantic_model` → `SemanticService.query` (validated structured query),
+- `nl_to_sql` → `NLToSQLService.query` (validated, read-only SQL).
+
+Every tool runs under the server-resolved `TenantContext` — the model cannot widen the
+tenant scope. Tool failures are fed back to the model as `is_error` results (fail
+closed, but let it explain) rather than crashing the request; the loop is bounded.
+Provider/semantic outages return 503 with a safe message.
+
+### Gateway tool-use (provider-neutral)
+
+The chat service drives the LLM via a provider-neutral tool-use surface added to the
+gateway: `LLMGateway.complete_with_tools(ToolChatRequest) -> ToolChatResponse` with
+neutral `ToolSpec` / `ToolCall` / `ToolResultMsg` / `ChatTurn` types
+(`backend/app/ai/gateway/provider.py`). Providers map these onto their own wire format
+(`AnthropicProvider.complete_with_tools` — see the `claude-api` skill). The chat
+**dispatch loop** (`backend/app/ai/chat/service.py`) is unit-tested with a fake gateway
+(`tests/test_ai_chat.py`); the live LLM tool-calling and the provider adapters are
+verified on the running stack.
+
+Frontend: the **Chat** page (`frontend/src/pages/Chat.tsx`, route `/chat`) shows the
+answer plus the grounded tools the assistant called.
+
+**Remaining (later):** a standalone MCP-protocol server (FastMCP) exposing these same
+grounded tools to external MCP clients — it needs the `mcp` dependency and its own
+compose service, and is best wired/verified on the running stack. The tool functions
++ grounding it would expose already exist here (the chat handlers); #12's
+"AI charts/dashboards saved" reuses the existing `/charts` + `/dashboards` APIs.

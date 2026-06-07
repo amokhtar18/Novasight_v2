@@ -35,6 +35,7 @@ const Pipelines = lazy(() =>
 const DbtModels = lazy(() =>
   import("@/pages/DbtModels").then((m) => ({ default: m.DbtModels }))
 );
+const Chat = lazy(() => import("@/pages/Chat").then((m) => ({ default: m.Chat })));
 const Explore = lazy(() =>
   import("@/pages/Explore").then((m) => ({ default: m.Explore }))
 );
@@ -94,6 +95,7 @@ export function App() {
           <Route path="transforms" element={<DbtModels />} />
           <Route path="models" element={<SemanticModels />} />
           <Route path="explore" element={<Explore />} />
+          <Route path="chat" element={<Chat />} />
           <Route path="build" element={<Builder />} />
           <Route path="dashboards" element={<Dashboards />} />
           <Route path="dashboards/:dashboardId" element={<DashboardDetail />} />

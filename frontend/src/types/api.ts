@@ -560,6 +560,22 @@ export interface NLQueryResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Chat — POST /api/v1/ai/chat  (grounded tool-calling over the semantic layer)
+// ---------------------------------------------------------------------------
+
+export interface ChatRequest {
+  /** A natural-language question about the tenant's data (1–2000 chars). */
+  message: string;
+}
+
+export interface ChatResponse {
+  /** Grounded answer — figures trace to tool results. */
+  answer: string;
+  /** Names of the grounded tools the assistant called (for transparency). */
+  tools_used: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Insights — POST /api/v1/ai/insights
 // ---------------------------------------------------------------------------
 
