@@ -32,6 +32,9 @@ x-backend-env: &backend-env
     CLICKHOUSE__HOST: clickhouse
     OBJECT_STORE__ENDPOINT_URL: http://minio:9000
     CUBE__BASE_URL: http://cube:4000
+    # Semantic-model codegen output — a volume shared with the Cube container (only
+    # the api service mounts it rw and runs codegen; other backend services ignore it).
+    CUBE__MODEL_DIR: /cube-model
     # Backend↔Dagster control plane (launch/reload over GraphQL).
     DAGSTER__GRAPHQL_URL: http://dagster:3000/graphql
     # Prompt templates bundled in the image (overrides any host-oriented .env value).
@@ -179,11 +182,9 @@ services:
       # Consumed by the data model via COMPILE_CONTEXT.env.CUBEJS_SERVING_REGIONAL_SALES_TABLE
       CUBEJS_SERVING_REGIONAL_SALES_TABLE: "${SERVING_REGIONAL_SALES_TABLE:?set SERVING_REGIONAL_SALES_TABLE in .env}"
 
-      # --- Schema / model path (relative to the Cube project root /cube/conf) ---
-      # Cube resolves this against the project root, so it MUST be relative
-      # ("model"), not absolute — an absolute path is joined onto the root and
-      # finds no files, silently compiling zero cubes.
-      CUBEJS_SCHEMA_PATH: model
+      # --- Model loading is via repositoryFactory in cube.js (no CUBEJS_SCHEMA_PATH) ---
+      # cube.js serves each tenant the shared static cubes (model-shared/) plus its
+      # own generated subdir (model-tenant/<clickhouse_db>/). Both are mounted below.
 
       # --- Dev mode: disable Cube Cloud telemetry in local stack ---
       CUBEJS_TELEMETRY: "false"
@@ -193,9 +194,12 @@ services:
       CUBEJS_APP: novasight
 
     volumes:
-      # Mount the model directory (read-only) so the container sees the latest schema.
-      - ../../data-platform/semantic/model:/cube/conf/model:ro
-      # Mount the server config (cube.js) that wires multi-tenancy.
+      # Shared static cubes (regional_sales) — read-only; same dir devs edit by hand.
+      - ../../data-platform/semantic/model:/cube/conf/model-shared:ro
+      # Generated per-tenant cubes — the named volume the api service writes (read-only
+      # here; cube only reads). repositoryFactory loads model-tenant/<clickhouse_db>/.
+      - cube-model:/cube/conf/model-tenant:ro
+      # Mount the server config (cube.js) that wires multi-tenancy + repositoryFactory.
       - ../../data-platform/semantic/config/cube.js:/cube/conf/cube.js:ro
 
     depends_on:
@@ -332,6 +336,10 @@ services:
     <<: *backend-env
     ports:
       - "${API__PORT:-8000}:8000"
+    volumes:
+      # Semantic-model codegen writes per-tenant Cube files here; the cube service
+      # mounts the same named volume read-only as its model-tenant root.
+      - cube-model:/cube-model
     depends_on:
       postgres:
         condition: service_healthy
@@ -430,4 +438,6 @@ volumes:
   clickhouse-data:
   cubestore-data:
   openmetadata-es-data:
+  # Generated per-tenant Cube model files: api writes (rw), cube reads (ro).
+  cube-model:
   dagster-home:

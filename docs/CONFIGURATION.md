@@ -58,6 +58,7 @@ human reference.
 | `CUBE__BASE_URL` | str | — | deployment | URL the backend uses to reach Cube's HTTP API (e.g. `http://cube:4000`). Read by `CubeSettings.base_url` in `app/core/config.py`. |
 | `CUBE__API_SECRET` | SecretStr | — | deployment | HS256 shared secret. Backend signs per-tenant JWTs; Cube verifies them. Minimum 32 random characters. |
 | `CUBE__PORT` | int | — | local stack | Host-published port for the Cube container (internal port 4000). Compose only; must match the port in `CUBE__BASE_URL`. |
+| `CUBE__MODEL_DIR` | str \| None | `None` | deployment | Filesystem path where the semantic-model codegen writes generated per-tenant Cube model files (`tenant__<db>.js`); must be a directory the Cube container also reads (shared volume). Unset → codegen renders but does not write. Read by `CubeSettings.model_dir`. |
 | `SERVING_REGIONAL_SALES_TABLE` | str | `serving_regional_sales` | deployment | Physical name of the serving table the Dagster serving asset writes and the Cube model reads. Shared by both layers via the same env var so they never drift. |
 
 > `MINIO__*` are consumed only by `infra/compose/docker-compose.yml` for the local dev

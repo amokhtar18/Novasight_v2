@@ -15,10 +15,12 @@ import {
   addDashboardTile,
   createChart,
   createDashboard,
+  createSemanticModelDef,
   createUser,
   deleteChart,
   deleteDashboard,
   deleteDashboardTile,
+  deleteSemanticModelDef,
   deleteUser,
   deprovisionTenant,
   getDashboard,
@@ -28,6 +30,7 @@ import {
   listCharts,
   listDashboards,
   listDatasets,
+  listSemanticModelDefs,
   listSemanticModels,
   listTenants,
   listUsers,
@@ -57,6 +60,7 @@ import type {
   NLChartRequest,
   NLQueryRequest,
   QueryRequest,
+  SemanticModelDefCreate,
   SemanticQueryRequest,
   TenantProvisionRequest,
   UserCreate,
@@ -72,6 +76,7 @@ export const queryKeys = {
     ["datasets", id, "query", req] as const,
   suggestions: (id: string) => ["datasets", id, "suggestions"] as const,
   semanticModels: () => ["semantic", "models"] as const,
+  semanticModelDefs: () => ["semantic-models"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
   charts: () => ["charts"] as const,
   dashboards: () => ["dashboards"] as const,
@@ -244,6 +249,42 @@ export function useSemanticQuery(request: SemanticQueryRequest | null) {
     enabled: request !== null,
     staleTime: 30_000,
     retry: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Semantic-model registry (wizard definitions)
+// ---------------------------------------------------------------------------
+
+/** Query: the tenant's semantic-model definitions. */
+export function useSemanticModelDefs() {
+  return useQuery({
+    queryKey: queryKeys.semanticModelDefs(),
+    queryFn: listSemanticModelDefs,
+  });
+}
+
+/** Mutation: define a semantic model. Invalidates defs + governed models. */
+export function useCreateSemanticModelDef() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: SemanticModelDefCreate) => createSemanticModelDef(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.semanticModelDefs() });
+      void client.invalidateQueries({ queryKey: queryKeys.semanticModels() });
+    },
+  });
+}
+
+/** Mutation: delete a semantic-model definition. Invalidates defs + governed models. */
+export function useDeleteSemanticModelDef() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteSemanticModelDef(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.semanticModelDefs() });
+      void client.invalidateQueries({ queryKey: queryKeys.semanticModels() });
+    },
   });
 }
 

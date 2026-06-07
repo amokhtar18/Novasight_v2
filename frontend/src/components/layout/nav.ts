@@ -6,6 +6,7 @@
 import {
   BarChart3,
   Database,
+  Layers,
   LayoutDashboard,
   LayoutGrid,
   Lightbulb,
@@ -29,6 +30,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutGrid, end: true },
   { to: "/data", label: "Data sources", icon: Database },
+  { to: "/models", label: "Semantic models", icon: Layers },
   { to: "/explore", label: "Ask AI", icon: Sparkles },
   { to: "/build", label: "Chart builder", icon: BarChart3 },
   { to: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
@@ -45,6 +47,7 @@ export const FOOTER_ITEMS: NavItem[] = [
 export function titleForPath(pathname: string): string {
   if (pathname === "/") return "Overview";
   if (pathname.startsWith("/data")) return "Data sources";
+  if (pathname.startsWith("/models")) return "Semantic models";
   if (pathname.startsWith("/explore")) return "Ask AI";
   if (pathname.startsWith("/build")) return "Chart builder";
   if (pathname.startsWith("/dashboards")) return "Dashboards";

@@ -91,6 +91,11 @@ class CubeSettings(BaseSettings):
 
     base_url: str                   # e.g. http://cube:4000  (env: CUBE__BASE_URL)
     api_secret: SecretStr           # HS256 signing secret    (env: CUBE__API_SECRET)
+    # Filesystem path where the semantic-model codegen writes generated per-tenant
+    # Cube model files (a volume shared read-only with the Cube container). Optional:
+    # when unset, codegen renders but does not write (e.g. in tests, or before the
+    # shared volume is wired). Env: CUBE__MODEL_DIR.
+    model_dir: str | None = None
 
 
 class EncryptionSettings(BaseSettings):

@@ -34,11 +34,82 @@
  * query is executed. There is no fallback database.
  */
 
+const fs = require("fs");
+const path = require("path");
+
+// ---------------------------------------------------------------------------
+// Model roots (mounted in compose):
+//   model-shared — hand-written static cubes, shared by all tenants (regional_sales)
+//   model-tenant/<clickhouse_db>/ — codegen output, one subdir per tenant
+// Both are siblings of this config file (/cube/conf).
+// ---------------------------------------------------------------------------
+const SHARED_DIR = path.join(__dirname, "model-shared");
+const TENANT_ROOT = path.join(__dirname, "model-tenant");
+
+// Read all *.js / *.yml model files in a directory (non-recursive) as
+// { fileName, content } records. Missing directory → []. Never throws.
+function readModelFiles(dir) {
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    return [];
+  }
+  const files = [];
+  for (const name of names) {
+    if (!/\.(js|yml|yaml)$/.test(name)) continue;
+    const full = path.join(dir, name);
+    try {
+      if (!fs.statSync(full).isFile()) continue;
+      files.push({ fileName: name, content: fs.readFileSync(full, "utf-8") });
+    } catch (e) {
+      /* skip unreadable entries */
+    }
+  }
+  return files;
+}
+
 module.exports = {
   // ---------------------------------------------------------------------------
-  // Schema (model) directory — mounted from data-platform/semantic/model/
+  // Per-tenant model loading (directory-level isolation).
+  //
+  // Each request is scoped to securityContext.clickhouse_db. We serve that tenant
+  // the shared static cubes PLUS only its own generated subdir — so one tenant's
+  // catalog is never even parsed for another (stronger than an in-file guard).
+  // The backend codegen writes model-tenant/<db>/models.js (see
+  // backend/app/codegen/cube_model.py); a missing/absent db yields shared-only.
   // ---------------------------------------------------------------------------
-  schemaPath: process.env.CUBEJS_SCHEMA_PATH || "model",
+  repositoryFactory: ({ securityContext }) => ({
+    dataSchemaFiles: async () => {
+      const shared = readModelFiles(SHARED_DIR);
+      const db = securityContext && securityContext.clickhouse_db;
+      const tenant = db ? readModelFiles(path.join(TENANT_ROOT, db)) : [];
+      // Prefix tenant filenames so they can never collide with a shared file.
+      return shared.concat(
+        tenant.map((f) => ({ fileName: `t_${db}__${f.fileName}`, content: f.content }))
+      );
+    },
+  }),
+
+  // ---------------------------------------------------------------------------
+  // Per-tenant recompile trigger for dynamic (wizard-generated) models.
+  //
+  // Cube caches a compiled schema per appId (contextToAppId, keyed on
+  // clickhouse_db), so without a version signal a tenant would keep an old schema
+  // after editing a model. We key schemaVersion on the tenant's generated file's
+  // mtime: every codegen write bumps it, forcing a recompile. Tenants with no
+  // generated file (shared cubes only) get a stable constant — no needless work.
+  // ---------------------------------------------------------------------------
+  schemaVersion: ({ securityContext }) => {
+    const db = securityContext && securityContext.clickhouse_db;
+    if (!db) return "0";
+    const file = path.join(TENANT_ROOT, db, "models.js");
+    try {
+      return String(fs.statSync(file).mtimeMs);
+    } catch (e) {
+      return "0"; // no generated models for this tenant yet
+    }
+  },
 
   // ---------------------------------------------------------------------------
   // Authentication — Cube's BUILT-IN JWT verification.

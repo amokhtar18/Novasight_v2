@@ -35,6 +35,8 @@ import type {
   QueryRequest,
   QueryResponse,
   SavedChartRead,
+  SemanticModelDefCreate,
+  SemanticModelDefRead,
   SemanticModelRead,
   SemanticQueryRequest,
   SuggestionsResponse,
@@ -210,6 +212,34 @@ export async function querySemantic(
     { method: "POST", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Semantic-model registry (wizard definitions; mutations need superuser)
+// ---------------------------------------------------------------------------
+
+/** GET /semantic-models — the tenant's semantic-model definitions. */
+export async function listSemanticModelDefs(): Promise<SemanticModelDefRead[]> {
+  return apiFetch<SemanticModelDefRead[]>("/semantic-models", {}, { Accept: "application/json" });
+}
+
+/** POST /semantic-models — define a model (regenerates the tenant's Cube codegen). */
+export async function createSemanticModelDef(
+  request: SemanticModelDefCreate
+): Promise<SemanticModelDefRead> {
+  return apiFetch<SemanticModelDefRead>(
+    "/semantic-models",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /semantic-models/{id}. */
+export async function deleteSemanticModelDef(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/semantic-models/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

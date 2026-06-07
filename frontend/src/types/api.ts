@@ -171,6 +171,55 @@ export interface SemanticQueryRequest {
 }
 
 // ---------------------------------------------------------------------------
+// Semantic-model registry (wizard definitions) — /api/v1/semantic-models
+// (mirrors schemas/semantic_model.py). Distinct from SemanticModelRead above,
+// which is the *governed Cube meta* the query path reads.
+// ---------------------------------------------------------------------------
+
+export type MeasureType = "count" | "sum" | "avg" | "min" | "max" | "count_distinct";
+export type DimensionType = "string" | "number" | "time" | "boolean";
+
+export interface MeasureDef {
+  name: string;
+  type: MeasureType;
+  /** Column to aggregate; optional only for "count". */
+  sql?: string | null;
+  title?: string | null;
+  description?: string | null;
+}
+
+export interface DimensionDef {
+  name: string;
+  type: DimensionType;
+  sql: string;
+  title?: string | null;
+  description?: string | null;
+  primary_key?: boolean;
+}
+
+export interface SemanticModelConfig {
+  measures: MeasureDef[];
+  dimensions: DimensionDef[];
+}
+
+export interface SemanticModelDefRead {
+  id: string;
+  name: string;
+  base_table: string;
+  config: SemanticModelConfig;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SemanticModelDefCreate {
+  name: string;
+  base_table: string;
+  config: SemanticModelConfig;
+  enabled?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Saved charts — /api/v1/charts  (mirrors schemas/saved_chart.py)
 // ---------------------------------------------------------------------------
 

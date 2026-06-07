@@ -247,8 +247,10 @@ The Cube service is defined in `infra/compose/docker-compose.yml`. Key points:
   port 9000 is not exposed in this stack and must not be used.
 - `depends_on: clickhouse: condition: service_healthy` — Cube does not start until
   ClickHouse passes its `/ping` health check.
-- The model directory (`data-platform/semantic/model/`) and the server config
-  (`data-platform/semantic/config/cube.js`) are bind-mounted read-only.
+- The shared static model dir (`data-platform/semantic/model/` → `/cube/conf/model-shared`)
+  and the server config (`cube.js`) are bind-mounted read-only; generated per-tenant
+  models arrive via the `cube-model` named volume at `/cube/conf/model-tenant` (see the
+  codegen section below). Model loading is via `repositoryFactory`, not `CUBEJS_SCHEMA_PATH`.
 
 ---
 
@@ -427,3 +429,54 @@ A dashboard, tile, or chart from another tenant is indistinguishable from not-fo
 → `models/dashboard.py`. Frontend: the dashboard pages/grid/tiles use TanStack Query
 against this API (the localStorage store is removed); tiles re-run via
 `frontend/src/lib/useChartData.ts`.
+
+## HTTP API: semantic-model registry + codegen (#8)
+
+The chart/AI paths above query whatever cubes Cube exposes. The **registry** lets users
+*define* those cubes from the UI (the wizard), and **codegen** turns a definition into a
+Cube model file.
+
+- **`GET/POST /api/v1/semantic-models`**, **`GET/PATCH/DELETE /api/v1/semantic-models/{id}`**
+  — tenant-scoped CRUD over model definitions (name, `base_table`, and `config` =
+  measures + dimensions). Reads need a tenant context; **mutations require the tenant
+  superuser role** (defining the governed layer writes to the shared Cube model volume
+  and affects every query). Names are unique per tenant (a name becomes a cube name).
+  Members and column refs are strict identifiers — no arbitrary SQL reaches the model.
+
+### Codegen — directory-level isolation via repositoryFactory
+
+Cube loads model files through a `repositoryFactory` (`cube.js`): a request scoped to
+`securityContext.clickhouse_db` is served the **shared static cubes** plus **only that
+tenant's generated subdir**. Isolation is therefore at the *directory* level — one
+tenant's catalog is never even parsed for another, so the generated cubes need no in-file
+guard.
+
+Two model roots are mounted (`infra/compose/docker-compose.yml`):
+
+| Mount | Source | Holds |
+|---|---|---|
+| `/cube/conf/model-shared` (ro) | bind: `data-platform/semantic/model/` | hand-written static cubes (`regional_sales.js`) |
+| `/cube/conf/model-tenant` (ro) | named volume `cube-model` | codegen output, `<clickhouse_db>/models.js` per tenant |
+
+The codegen (`backend/app/codegen/cube_model.py`) is the single writer: on every
+create/update/delete the service re-renders the tenant's enabled models and writes
+`<CUBE__MODEL_DIR>/<clickhouse_db>/models.js` atomically. The **api** service mounts the
+`cube-model` volume read-write (`CUBE__MODEL_DIR=/cube-model`); Cube mounts the same volume
+read-only. `cube.js` adds a `schemaVersion` keyed on that file's mtime, so each write
+forces a per-tenant recompile (Cube caches a compiled schema per appId).
+
+```js
+// cube.js (sketch)
+repositoryFactory: ({ securityContext }) => ({
+  dataSchemaFiles: async () => shared.concat(tenantFilesFor(securityContext.clickhouse_db)),
+}),
+```
+
+**Verification note:** the pure render + writer are unit-tested
+(`tests/test_cube_codegen.py`, `tests/test_semantic_models_api.py`); the live Cube
+recompile (repositoryFactory + the shared volume) is verified on the running stack —
+`docker compose up`, define a model, confirm it appears in `/cubejs-api/v1/meta` for that
+tenant only.
+
+Frontend: the **Semantic models** page (`frontend/src/pages/SemanticModels.tsx`, route
+`/models`) is the wizard — name + base table + measure/dimension rows → `POST`.
