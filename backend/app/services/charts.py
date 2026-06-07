@@ -16,8 +16,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.models.chart import Chart
-from app.schemas.saved_chart import ChartCreate, ChartUpdate
+from app.schemas.chart import ChartSpec
+from app.schemas.saved_chart import ChartCreate, ChartRead, ChartUpdate
 from app.tenancy.context import TenantContext
+
+
+def chart_to_read(chart: Chart) -> ChartRead:
+    """Map a ``Chart`` row to ``ChartRead``, re-validating the stored spec.
+
+    Shared by the charts router and the dashboards service (tiles embed the chart),
+    so a malformed stored spec fails loudly in exactly one place.
+    """
+    return ChartRead(
+        id=chart.id,
+        name=chart.name,
+        spec=ChartSpec.model_validate(chart.spec),
+        source_kind=chart.source_kind,
+        source_ref=chart.source_ref,
+        owner_id=chart.owner_id,
+        created_at=chart.created_at,
+        updated_at=chart.updated_at,
+    )
 
 
 class ChartService:

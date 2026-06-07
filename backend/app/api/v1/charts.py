@@ -11,27 +11,14 @@ import uuid
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.models.chart import Chart
-from app.schemas.chart import ChartSpec
 from app.schemas.saved_chart import ChartCreate, ChartRead, ChartUpdate
-from app.services.charts import ChartService, get_chart_service
+from app.services.charts import ChartService, chart_to_read, get_chart_service
 from app.tenancy.context import TenantContext, get_tenant_context
 
 router = APIRouter(prefix="/charts", tags=["charts"])
 
-
-def _to_read(chart: Chart) -> ChartRead:
-    return ChartRead(
-        id=chart.id,
-        name=chart.name,
-        # Re-validate the stored spec so a malformed row fails loudly, not silently.
-        spec=ChartSpec.model_validate(chart.spec),
-        source_kind=chart.source_kind,
-        source_ref=chart.source_ref,
-        owner_id=chart.owner_id,
-        created_at=chart.created_at,
-        updated_at=chart.updated_at,
-    )
+# Re-validates the stored spec so a malformed row fails loudly, not silently.
+_to_read = chart_to_read
 
 
 @router.get("", response_model=list[ChartRead])

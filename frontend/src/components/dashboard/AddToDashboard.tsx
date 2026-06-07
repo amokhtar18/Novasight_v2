@@ -1,10 +1,11 @@
 /**
- * AddToDashboard — a button that saves a ChartSpec onto a dashboard.
+ * AddToDashboard — a button that pins a ChartSpec onto a (server-side) dashboard.
  *
- * Opens a dialog to pick an existing dashboard or create a new one, then pins
- * the chart (spec + title) as a tile. Persistence is client-side (per tenant)
- * via the dashboards store. Used by the Builder, Explore, and dataset
- * Suggestions surfaces — anywhere a user produces a chart worth keeping.
+ * Opens a dialog to pick an existing dashboard or create a new one, then: saves the
+ * chart (POST /charts) and pins it as a tile (POST /dashboards/{id}/tiles). The tile
+ * stores no data — it re-runs the chart's grounded query when displayed. Used by the
+ * Builder, Explore, and dataset Suggestions surfaces — anywhere a user produces a
+ * chart worth keeping.
  */
 
 import { useState } from "react";
@@ -12,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { LayoutDashboard, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { useAddDashboardTile, useCreateChart, useCreateDashboard, useDashboards } from "@/api/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,15 +25,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useDashboardsStore } from "@/store/dashboardsStore";
-import { useTenantId } from "@/lib/useTenantId";
 import type { ButtonProps } from "@/components/ui/button";
-import type { ChartSpec, QueryResponse } from "@/types/api";
+import type { ChartSourceKind, ChartSpec, QueryResponse } from "@/types/api";
 
 interface AddToDashboardProps {
   spec: ChartSpec;
   title: string;
-  /** Snapshot for specs that can't be re-run client-side (AI/NL charts). */
+  /** Accepted for call-site compatibility; tiles re-run the spec, so it's unused. */
   data?: QueryResponse;
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
@@ -40,47 +40,66 @@ interface AddToDashboardProps {
 
 const NEW = "__new__";
 
+/** Derive where a spec reads its data, so the saved chart records its source. */
+function deriveSource(spec: ChartSpec): { kind: ChartSourceKind; ref: string | null } {
+  const metricRefs = spec.query.metric_refs ?? [];
+  if (metricRefs.length > 0) {
+    return { kind: "semantic", ref: metricRefs[0]?.split(".")[0] ?? null };
+  }
+  return { kind: "dataset", ref: spec.query.dataset_id ?? null };
+}
+
 export function AddToDashboard({
   spec,
   title,
-  data,
   variant = "outline",
   size = "sm",
   className,
 }: AddToDashboardProps) {
-  const tenantId = useTenantId();
   const navigate = useNavigate();
-  const boards = useDashboardsStore((s) => (tenantId ? s.byTenant[tenantId] : undefined)) ?? [];
-  const create = useDashboardsStore((s) => s.create);
-  const addItem = useDashboardsStore((s) => s.addItem);
+  const { data: boards = [] } = useDashboards();
+  const createChart = useCreateChart();
+  const createDashboard = useCreateDashboard();
+  const addTile = useAddDashboardTile();
 
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<string>(NEW);
   const [newName, setNewName] = useState("");
 
-  function handleSave() {
-    if (!tenantId) return;
-    let dashboardId = target;
-    let dashboardName: string;
-    if (target === NEW || boards.length === 0) {
-      const board = create(tenantId, newName || "My dashboard");
-      dashboardId = board.id;
-      dashboardName = board.name;
-    } else {
-      dashboardName = boards.find((b) => b.id === dashboardId)?.name ?? "dashboard";
-    }
-    addItem(tenantId, dashboardId, { title, spec, data });
-    setOpen(false);
-    setNewName("");
-    toast.success(`Added to “${dashboardName}”`, {
-      action: {
-        label: "Open",
-        onClick: () => navigate(`/dashboards/${dashboardId}`),
-      },
-    });
-  }
-
   const creating = target === NEW || boards.length === 0;
+  const pending = createChart.isPending || createDashboard.isPending || addTile.isPending;
+
+  async function handleSave() {
+    try {
+      const source = deriveSource(spec);
+      const chart = await createChart.mutateAsync({
+        name: title,
+        spec,
+        source_kind: source.kind,
+        source_ref: source.ref,
+      });
+
+      let dashboardId = target;
+      let dashboardName: string;
+      if (creating) {
+        const board = await createDashboard.mutateAsync({ name: newName || "My dashboard" });
+        dashboardId = board.id;
+        dashboardName = board.name;
+      } else {
+        dashboardName = boards.find((b) => b.id === dashboardId)?.name ?? "dashboard";
+      }
+
+      await addTile.mutateAsync({ dashboardId, tile: { chart_id: chart.id, title } });
+
+      setOpen(false);
+      setNewName("");
+      toast.success(`Added to “${dashboardName}”`, {
+        action: { label: "Open", onClick: () => navigate(`/dashboards/${dashboardId}`) },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add to dashboard");
+    }
+  }
 
   return (
     <>
@@ -90,7 +109,6 @@ export function AddToDashboard({
         size={size}
         className={className}
         onClick={() => setOpen(true)}
-        disabled={!tenantId}
       >
         <LayoutDashboard className="h-4 w-4" aria-hidden />
         Add to dashboard
@@ -100,7 +118,7 @@ export function AddToDashboard({
         <DialogHeader>
           <DialogTitle>Add to dashboard</DialogTitle>
           <DialogDescription>
-            Pin “{title}” to a dashboard. Dashboards are saved in your browser.
+            Pin “{title}” to a dashboard. The chart is saved and re-runs its query when shown.
           </DialogDescription>
         </DialogHeader>
 
@@ -108,11 +126,7 @@ export function AddToDashboard({
           {boards.length > 0 && (
             <div className="space-y-1.5">
               <Label htmlFor="dash-target">Dashboard</Label>
-              <Select
-                id="dash-target"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-              >
+              <Select id="dash-target" value={target} onChange={(e) => setTarget(e.target.value)}>
                 {boards.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
@@ -141,9 +155,9 @@ export function AddToDashboard({
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>
+          <Button onClick={handleSave} disabled={pending}>
             <Plus className="h-4 w-4" aria-hidden />
-            Save
+            {pending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </Dialog>

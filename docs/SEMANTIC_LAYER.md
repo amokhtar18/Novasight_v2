@@ -404,3 +404,26 @@ Frontend: the chart builder (`frontend/src/pages/Builder.tsx`) defaults to the
 semantic-model path (pick model → dimension → measure → type → live preview) and
 both paths expose **Save chart** (`components/chart/SaveChartButton.tsx`) which posts
 to the charts API.
+
+## HTTP API: dashboards (#10)
+
+Dashboards are persisted server-side (replacing the old localStorage store), so they
+survive across devices and are shared within a tenant. A dashboard is an ordered grid
+of tiles; each tile pins a saved ``Chart``. Tiles store **no data** — they embed the
+chart's spec and the frontend re-runs its grounded query on display, so a dashboard
+always reflects current data.
+
+- **`GET /api/v1/dashboards`** → summaries (name, tile count).
+- **`POST /api/v1/dashboards`**, **`GET/PATCH/DELETE /api/v1/dashboards/{id}`** — CRUD.
+  The detail response embeds each tile's chart in one round-trip.
+- **`POST /api/v1/dashboards/{id}/tiles`** → pin a saved chart. The chart's ownership
+  is re-checked server-side, so a tile can never point at another tenant's chart (404).
+- **`PATCH/DELETE /api/v1/dashboards/{id}/tiles/{tile_id}`** — update placement / remove.
+- **`PUT /api/v1/dashboards/{id}/layout`** → persist the whole grid (order + sizes)
+  after a drag/resize.
+
+A dashboard, tile, or chart from another tenant is indistinguishable from not-found
+(404). Implementation: `backend/app/api/v1/dashboards.py` → `services/dashboards.py`
+→ `models/dashboard.py`. Frontend: the dashboard pages/grid/tiles use TanStack Query
+against this API (the localStorage store is removed); tiles re-run via
+`frontend/src/lib/useChartData.ts`.

@@ -15,9 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 
-import { useDatasets, useHealth } from "@/api/hooks";
-import { useDashboardsStore } from "@/store/dashboardsStore";
-import { useTenantId } from "@/lib/useTenantId";
+import { useDashboards, useDatasets, useHealth } from "@/api/hooks";
 import { useIdentity } from "@/lib/identity";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,11 +53,9 @@ const QUICK_ACTIONS = [
 
 export function Overview() {
   const { label } = useIdentity();
-  const tenantId = useTenantId();
   const { data: datasets, isLoading: datasetsLoading } = useDatasets();
   const { data: health, isLoading: healthLoading } = useHealth();
-  const dashboards =
-    useDashboardsStore((s) => (tenantId ? s.byTenant[tenantId] : undefined)) ?? [];
+  const { data: dashboards = [] } = useDashboards();
 
   const recentDatasets = (datasets ?? []).slice(0, 5);
 
@@ -209,7 +205,7 @@ export function Overview() {
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{b.name}</span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {b.items.length} chart{b.items.length === 1 ? "" : "s"}
+                          {b.tile_count} chart{b.tile_count === 1 ? "" : "s"}
                         </span>
                       </span>
                       <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

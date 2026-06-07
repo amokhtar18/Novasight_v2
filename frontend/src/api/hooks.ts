@@ -12,15 +12,21 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  addDashboardTile,
   createChart,
+  createDashboard,
   createUser,
   deleteChart,
+  deleteDashboard,
+  deleteDashboardTile,
   deleteUser,
   deprovisionTenant,
+  getDashboard,
   getHealth,
   getMe,
   getSuggestions,
   listCharts,
+  listDashboards,
   listDatasets,
   listSemanticModels,
   listTenants,
@@ -33,12 +39,19 @@ import {
   provisionTenant,
   queryDataset,
   querySemantic,
+  setDashboardLayout,
+  updateDashboard,
+  updateDashboardTile,
   updateUser,
   uploadDataset,
 } from "./client";
 import { useAuthStore } from "@/store/authStore";
 import type {
   ChartCreate,
+  DashboardCreate,
+  DashboardLayoutUpdate,
+  DashboardTileCreate,
+  DashboardUpdate,
   InsightRequest,
   LoginRequest,
   NLChartRequest,
@@ -61,6 +74,8 @@ export const queryKeys = {
   semanticModels: () => ["semantic", "models"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
   charts: () => ["charts"] as const,
+  dashboards: () => ["dashboards"] as const,
+  dashboard: (id: string) => ["dashboards", id] as const,
   users: () => ["users"] as const,
   tenants: () => ["tenants"] as const,
 };
@@ -263,6 +278,118 @@ export function useDeleteChart() {
     mutationFn: (id: string) => deleteChart(id),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.charts() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Dashboards
+// ---------------------------------------------------------------------------
+
+/** Query: the tenant's dashboards (summaries). */
+export function useDashboards() {
+  return useQuery({
+    queryKey: queryKeys.dashboards(),
+    queryFn: listDashboards,
+  });
+}
+
+/** Query: one dashboard with its tiles. Disabled until an id is provided. */
+export function useDashboard(id: string | null) {
+  return useQuery({
+    queryKey: id !== null ? queryKeys.dashboard(id) : (["noop"] as const),
+    queryFn: () => {
+      if (!id) throw new Error("dashboard id is required");
+      return getDashboard(id);
+    },
+    enabled: id !== null,
+  });
+}
+
+/** Mutation: create a dashboard. Invalidates the list. */
+export function useCreateDashboard() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: DashboardCreate) => createDashboard(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboards() });
+    },
+  });
+}
+
+/** Mutation: rename / re-describe a dashboard. Invalidates list + detail. */
+export function useUpdateDashboard() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: DashboardUpdate }) =>
+      updateDashboard(id, patch),
+    onSuccess: (data) => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboards() });
+      void client.invalidateQueries({ queryKey: queryKeys.dashboard(data.id) });
+    },
+  });
+}
+
+/** Mutation: delete a dashboard. Invalidates the list. */
+export function useDeleteDashboard() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteDashboard(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboards() });
+    },
+  });
+}
+
+/** Mutation: pin a saved chart onto a dashboard. Invalidates that dashboard. */
+export function useAddDashboardTile() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dashboardId, tile }: { dashboardId: string; tile: DashboardTileCreate }) =>
+      addDashboardTile(dashboardId, tile),
+    onSuccess: (_data, vars) => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboard(vars.dashboardId) });
+      void client.invalidateQueries({ queryKey: queryKeys.dashboards() });
+    },
+  });
+}
+
+/** Mutation: update one tile (e.g. resize). Invalidates that dashboard. */
+export function useUpdateDashboardTile(dashboardId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      tileId,
+      patch,
+    }: {
+      tileId: string;
+      patch: { title?: string | null; position?: number; w?: number; h?: number };
+    }) => updateDashboardTile(dashboardId, tileId, patch),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboard(dashboardId) });
+    },
+  });
+}
+
+/** Mutation: remove a tile. Invalidates that dashboard + the list (tile counts). */
+export function useDeleteDashboardTile(dashboardId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (tileId: string) => deleteDashboardTile(dashboardId, tileId),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboard(dashboardId) });
+      void client.invalidateQueries({ queryKey: queryKeys.dashboards() });
+    },
+  });
+}
+
+/** Mutation: persist the whole grid (drag-reorder + resize). */
+export function useSetDashboardLayout(dashboardId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (layout: DashboardLayoutUpdate) => setDashboardLayout(dashboardId, layout),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dashboard(dashboardId) });
     },
   });
 }

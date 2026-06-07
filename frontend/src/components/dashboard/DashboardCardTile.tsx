@@ -1,10 +1,10 @@
 /**
  * DashboardCardTile — one chart tile on a dashboard.
  *
- * Renders a saved DashboardItem. If the spec is a re-runnable dataset query it
- * re-fetches live; otherwise it renders from the snapshot captured at save time.
- * In edit mode it exposes a drag handle (dnd-kit sortable), a size control, and
- * a remove action.
+ * Renders a placed tile's saved chart. The tile stores no data — it re-runs the
+ * chart's grounded query (semantic or dataset) via useChartData, so it always
+ * shows current data. In edit mode it exposes a drag handle (dnd-kit sortable), a
+ * size control, and a remove action.
  */
 
 import { useSortable } from "@dnd-kit/sortable";
@@ -15,46 +15,46 @@ import { ChartRenderer } from "@/components/chart/ChartRenderer";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
-import { useDatasetQuery } from "@/api/hooks";
-import { useDashboardsStore, type DashboardItem, type TileSize } from "@/store/dashboardsStore";
+import { useDeleteDashboardTile, useUpdateDashboardTile } from "@/api/hooks";
+import { useChartData } from "@/lib/useChartData";
 import { cn } from "@/lib/cn";
-import type { QueryRequest } from "@/types/api";
+import type { DashboardTileRead } from "@/types/api";
 
-const SPAN: Record<TileSize, string> = {
-  sm: "lg:col-span-1",
-  md: "lg:col-span-2",
-  lg: "lg:col-span-4",
-};
+type TileSize = "sm" | "md" | "lg";
 
-const EMPTY_QUERY: QueryRequest = { dimensions: [], metrics: [] };
+// Tile width on the 12-col grid ↔ the lg column span used by this grid (4 cols).
+const SIZE_TO_W: Record<TileSize, number> = { sm: 3, md: 6, lg: 12 };
+
+function sizeFromW(w: number): TileSize {
+  if (w >= 12) return "lg";
+  if (w >= 6) return "md";
+  return "sm";
+}
+
+function spanForW(w: number): string {
+  if (w >= 12) return "lg:col-span-4";
+  if (w >= 6) return "lg:col-span-2";
+  return "lg:col-span-1";
+}
 
 interface TileProps {
-  item: DashboardItem;
-  tenantId: string;
+  tile: DashboardTileRead;
   dashboardId: string;
   editing: boolean;
 }
 
-export function DashboardCardTile({
-  item,
-  tenantId,
-  dashboardId,
-  editing,
-}: TileProps) {
-  const removeItem = useDashboardsStore((s) => s.removeItem);
-  const setItemSize = useDashboardsStore((s) => s.setItemSize);
+export function DashboardCardTile({ tile, dashboardId, editing }: TileProps) {
+  const updateTile = useUpdateDashboardTile(dashboardId);
+  const deleteTile = useDeleteDashboardTile(dashboardId);
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: item.id, disabled: !editing });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tile.id,
+    disabled: !editing,
+  });
 
-  // Re-runnable when there's an inline dataset query and no captured snapshot.
-  const reRunnable =
-    !item.data && !!item.spec.query.dataset_id && !!item.spec.query.query;
-  const datasetId = reRunnable ? item.spec.query.dataset_id! : null;
-  const request = item.spec.query.query ?? EMPTY_QUERY;
-  const { data: live, isLoading, isError } = useDatasetQuery(datasetId, request);
-
-  const data = item.data ?? live;
+  const spec = tile.chart.spec;
+  const title = tile.title ?? tile.chart.name;
+  const { data, isLoading, isError } = useChartData(spec);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -68,7 +68,7 @@ export function DashboardCardTile({
       style={style}
       className={cn(
         "flex flex-col rounded-xl border bg-card/70 p-4 shadow-sm",
-        SPAN[item.size],
+        spanForW(tile.w),
         isDragging && "opacity-70 ring-2 ring-primary"
       )}
     >
@@ -77,23 +77,26 @@ export function DashboardCardTile({
           <button
             type="button"
             className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
-            aria-label={`Drag ${item.title}`}
+            aria-label={`Drag ${title}`}
             {...attributes}
             {...listeners}
           >
             <GripVertical className="h-4 w-4" />
           </button>
         )}
-        <h3 className="min-w-0 flex-1 truncate text-sm font-medium" title={item.title}>
-          {item.title}
+        <h3 className="min-w-0 flex-1 truncate text-sm font-medium" title={title}>
+          {title}
         </h3>
         {editing && (
           <>
             <Select
-              aria-label={`Size of ${item.title}`}
-              value={item.size}
+              aria-label={`Size of ${title}`}
+              value={sizeFromW(tile.w)}
               onChange={(e) =>
-                setItemSize(tenantId, dashboardId, item.id, e.target.value as TileSize)
+                updateTile.mutate({
+                  tileId: tile.id,
+                  patch: { w: SIZE_TO_W[e.target.value as TileSize] },
+                })
               }
               className="h-7 w-20 text-xs"
             >
@@ -103,8 +106,8 @@ export function DashboardCardTile({
             </Select>
             <button
               type="button"
-              onClick={() => removeItem(tenantId, dashboardId, item.id)}
-              aria-label={`Remove ${item.title}`}
+              onClick={() => deleteTile.mutate(tile.id)}
+              aria-label={`Remove ${title}`}
               className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
@@ -114,12 +117,12 @@ export function DashboardCardTile({
       </div>
 
       <div className="min-h-[14rem] flex-1">
-        {isLoading && !data ? (
+        {isLoading ? (
           <div className="flex h-56 items-center justify-center">
             <Spinner label="Loading chart" />
           </div>
         ) : data && data.row_count > 0 ? (
-          <ChartRenderer spec={item.spec} data={data} title={item.title} className="h-64" />
+          <ChartRenderer spec={spec} data={data} title={title} className="h-64" />
         ) : isError ? (
           <EmptyState title="Couldn't load data" description="This tile's query failed to run." />
         ) : (

@@ -1,19 +1,20 @@
 /**
- * Dashboards — list of the tenant's saved dashboards (client-side persisted).
+ * Dashboards — list of the tenant's saved dashboards (server-persisted).
  * Create new boards and open or delete existing ones.
  */
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
-import { useDashboardsStore } from "@/store/dashboardsStore";
-import { useTenantId } from "@/lib/useTenantId";
+import { useCreateDashboard, useDashboards, useDeleteDashboard } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
@@ -25,45 +26,58 @@ import {
 import { formatRelativeTime } from "@/lib/format";
 
 export function Dashboards() {
-  const tenantId = useTenantId();
   const navigate = useNavigate();
-  const boards =
-    useDashboardsStore((s) => (tenantId ? s.byTenant[tenantId] : undefined)) ?? [];
-  const create = useDashboardsStore((s) => s.create);
-  const remove = useDashboardsStore((s) => s.remove);
+  const { data: boards, isLoading } = useDashboards();
+  const createDashboard = useCreateDashboard();
+  const deleteDashboard = useDeleteDashboard();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
-  function handleCreate() {
-    if (!tenantId) return;
-    const board = create(tenantId, name || "My dashboard");
-    setOpen(false);
-    setName("");
-    navigate(`/dashboards/${board.id}`);
+  async function handleCreate() {
+    try {
+      const board = await createDashboard.mutateAsync({ name: name || "My dashboard" });
+      setOpen(false);
+      setName("");
+      navigate(`/dashboards/${board.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create the dashboard");
+    }
+  }
+
+  function handleDelete(id: string) {
+    deleteDashboard.mutate(id, {
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : "Could not delete the dashboard"),
+    });
+    setPendingDelete(null);
   }
 
   return (
     <div className="animate-in-up">
       <PageHeader
         title="Dashboards"
-        description="Collections of charts you've pinned. Saved in your browser, scoped to this tenant."
+        description="Collections of charts you've pinned. Saved to your account and shared across this tenant."
         actions={
-          <Button onClick={() => setOpen(true)} disabled={!tenantId}>
+          <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden />
             New dashboard
           </Button>
         }
       />
 
-      {boards.length === 0 ? (
+      {isLoading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Spinner label="Loading dashboards" />
+        </div>
+      ) : !boards || boards.length === 0 ? (
         <EmptyState
           icon={<LayoutDashboard className="h-6 w-6" />}
           title="No dashboards yet"
           description="Build a chart and pin it, or create an empty dashboard to start."
           action={
-            <Button onClick={() => setOpen(true)} disabled={!tenantId}>
+            <Button onClick={() => setOpen(true)}>
               <Plus className="h-4 w-4" aria-hidden />
               New dashboard
             </Button>
@@ -82,10 +96,10 @@ export function Dashboards() {
                 </span>
                 <p className="truncate font-medium">{b.name}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Updated {formatRelativeTime(b.updatedAt)}
+                  Updated {formatRelativeTime(b.updated_at)}
                 </p>
                 <Badge variant="secondary" className="mt-3">
-                  {b.items.length} chart{b.items.length === 1 ? "" : "s"}
+                  {b.tile_count} chart{b.tile_count === 1 ? "" : "s"}
                 </Badge>
               </Link>
               <button
@@ -122,7 +136,9 @@ export function Dashboards() {
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate}>Create</Button>
+          <Button onClick={handleCreate} disabled={createDashboard.isPending}>
+            Create
+          </Button>
         </DialogFooter>
       </Dialog>
 
@@ -135,20 +151,14 @@ export function Dashboards() {
         <DialogHeader>
           <DialogTitle>Delete dashboard?</DialogTitle>
           <DialogDescription>
-            This removes the dashboard and its tiles from this browser. This can't be undone.
+            This permanently removes the dashboard and its tiles. This can't be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setPendingDelete(null)}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (tenantId && pendingDelete) remove(tenantId, pendingDelete);
-              setPendingDelete(null);
-            }}
-          >
+          <Button variant="destructive" onClick={() => pendingDelete && handleDelete(pendingDelete)}>
             Delete
           </Button>
         </DialogFooter>

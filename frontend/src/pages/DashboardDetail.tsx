@@ -1,47 +1,65 @@
 /**
  * DashboardDetail — view and edit a single dashboard. Toggle edit mode to
- * reorder tiles (dnd-kit), resize them, or remove them. Tiles re-run their
- * query live where possible, otherwise render their saved snapshot.
+ * reorder tiles (dnd-kit), resize them, or remove them. Each tile re-runs its
+ * saved chart's grounded query, so the dashboard always reflects current data.
  */
 
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, LayoutDashboard, Pencil, Plus } from "lucide-react";
 
-import { useDashboardsStore } from "@/store/dashboardsStore";
-import { useTenantId } from "@/lib/useTenantId";
+import { useDashboard, useUpdateDashboard } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export function DashboardDetail() {
   const { dashboardId = "" } = useParams();
-  const tenantId = useTenantId();
-  const board = useDashboardsStore((s) =>
-    tenantId ? s.byTenant[tenantId]?.find((b) => b.id === dashboardId) : undefined
-  );
-  const rename = useDashboardsStore((s) => s.rename);
+  const { data: board, isLoading, isError } = useDashboard(dashboardId || null);
+  const updateDashboard = useUpdateDashboard();
 
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
-  if (!tenantId || !board) {
+  function commitRename() {
+    if (board && nameDraft.trim() && nameDraft !== board.name) {
+      updateDashboard.mutate({ id: board.id, patch: { name: nameDraft.trim() } });
+    }
+  }
+
+  const backLink = (
+    <Link
+      to="/dashboards"
+      className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
+      All dashboards
+    </Link>
+  );
+
+  if (isLoading) {
     return (
       <div className="animate-in-up">
-        <Link
-          to="/dashboards"
-          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          All dashboards
-        </Link>
+        {backLink}
+        <div className="flex h-48 items-center justify-center">
+          <Spinner label="Loading dashboard" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !board) {
+    return (
+      <div className="animate-in-up">
+        {backLink}
         <EmptyState
           icon={<LayoutDashboard className="h-6 w-6" />}
           title="Dashboard not found"
-          description="It may have been deleted, or belongs to a different tenant/browser."
+          description="It may have been deleted, or belongs to a different tenant."
         />
       </div>
     );
@@ -49,13 +67,7 @@ export function DashboardDetail() {
 
   return (
     <div className="animate-in-up">
-      <Link
-        to="/dashboards"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        All dashboards
-      </Link>
+      {backLink}
 
       <PageHeader
         title={
@@ -63,7 +75,7 @@ export function DashboardDetail() {
             <Input
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={() => rename(tenantId, board.id, nameDraft)}
+              onBlur={commitRename}
               aria-label="Dashboard name"
               className="h-9 w-72 text-lg"
             />
@@ -71,7 +83,7 @@ export function DashboardDetail() {
             board.name
           )
         }
-        description={`${board.items.length} chart${board.items.length === 1 ? "" : "s"}`}
+        description={`${board.tiles.length} chart${board.tiles.length === 1 ? "" : "s"}`}
         actions={
           <>
             <Button asChild variant="outline" size="sm">
@@ -85,7 +97,7 @@ export function DashboardDetail() {
               variant={editing ? "default" : "outline"}
               onClick={() => {
                 if (!editing) setNameDraft(board.name);
-                else rename(tenantId, board.id, nameDraft);
+                else commitRename();
                 setEditing((v) => !v);
               }}
             >
@@ -111,7 +123,7 @@ export function DashboardDetail() {
         </Badge>
       )}
 
-      {board.items.length === 0 ? (
+      {board.tiles.length === 0 ? (
         <EmptyState
           icon={<LayoutDashboard className="h-6 w-6" />}
           title="This dashboard is empty"
@@ -126,12 +138,7 @@ export function DashboardDetail() {
           }
         />
       ) : (
-        <DashboardGrid
-          items={board.items}
-          tenantId={tenantId}
-          dashboardId={board.id}
-          editing={editing}
-        />
+        <DashboardGrid tiles={board.tiles} dashboardId={board.id} editing={editing} />
       )}
     </div>
   );

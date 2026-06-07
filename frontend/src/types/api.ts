@@ -197,6 +197,76 @@ export interface SavedChartRead {
 }
 
 // ---------------------------------------------------------------------------
+// Dashboards — /api/v1/dashboards  (mirrors schemas/dashboard.py)
+// ---------------------------------------------------------------------------
+
+/** A dashboard tile: a placed saved chart (chart embedded for one-round-trip render). */
+export interface DashboardTileRead {
+  id: string;
+  chart_id: string;
+  title: string | null;
+  position: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  chart: SavedChartRead;
+}
+
+/** A dashboard in the list view (no tiles, just a count). */
+export interface DashboardSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_id: string | null;
+  tile_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A dashboard with its ordered tiles (detail view). */
+export interface DashboardRead {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_id: string | null;
+  created_at: string;
+  updated_at: string;
+  tiles: DashboardTileRead[];
+}
+
+export interface DashboardCreate {
+  name: string;
+  description?: string | null;
+}
+
+export interface DashboardUpdate {
+  name?: string | null;
+  description?: string | null;
+}
+
+export interface DashboardTileCreate {
+  chart_id: string;
+  title?: string | null;
+  w?: number | null;
+  h?: number | null;
+}
+
+/** One tile's placement, for bulk layout persistence (dnd-kit drag/resize). */
+export interface TileLayout {
+  id: string;
+  position: number;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+export interface DashboardLayoutUpdate {
+  tiles: TileLayout[];
+}
+
+// ---------------------------------------------------------------------------
 // Tenant context — GET /api/v1/me  (mirrors schemas/me.py)
 // ---------------------------------------------------------------------------
 

@@ -15,6 +15,13 @@ import { useAuthStore } from "@/store/authStore";
 import type {
   AccessTokenResponse,
   ChartCreate,
+  DashboardCreate,
+  DashboardLayoutUpdate,
+  DashboardRead,
+  DashboardSummary,
+  DashboardTileCreate,
+  DashboardTileRead,
+  DashboardUpdate,
   DatasetRead,
   HealthRead,
   InsightRequest,
@@ -226,6 +233,100 @@ export async function createChart(request: ChartCreate): Promise<SavedChartRead>
 /** DELETE /charts/{id}. */
 export async function deleteChart(id: string): Promise<void> {
   const response = await fetchWithAuth(`/charts/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dashboards (tenant-scoped CRUD + tiles + layout)
+// ---------------------------------------------------------------------------
+
+/** GET /dashboards — the tenant's dashboards (summaries), newest first. */
+export async function listDashboards(): Promise<DashboardSummary[]> {
+  return apiFetch<DashboardSummary[]>("/dashboards", {}, { Accept: "application/json" });
+}
+
+/** GET /dashboards/{id} — one dashboard with its tiles (each embeds its chart). */
+export async function getDashboard(id: string): Promise<DashboardRead> {
+  return apiFetch<DashboardRead>(`/dashboards/${id}`, {}, { Accept: "application/json" });
+}
+
+/** POST /dashboards — create an empty dashboard. */
+export async function createDashboard(request: DashboardCreate): Promise<DashboardRead> {
+  return apiFetch<DashboardRead>(
+    "/dashboards",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** PATCH /dashboards/{id} — rename / re-describe. */
+export async function updateDashboard(
+  id: string,
+  request: DashboardUpdate
+): Promise<DashboardRead> {
+  return apiFetch<DashboardRead>(
+    `/dashboards/${id}`,
+    { method: "PATCH", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /dashboards/{id}. */
+export async function deleteDashboard(id: string): Promise<void> {
+  const response = await fetchWithAuth(`/dashboards/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
+}
+
+/** PUT /dashboards/{id}/layout — persist tile order + sizes after a drag/resize. */
+export async function setDashboardLayout(
+  id: string,
+  request: DashboardLayoutUpdate
+): Promise<DashboardRead> {
+  return apiFetch<DashboardRead>(
+    `/dashboards/${id}/layout`,
+    { method: "PUT", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** POST /dashboards/{id}/tiles — pin a saved chart. */
+export async function addDashboardTile(
+  dashboardId: string,
+  request: DashboardTileCreate
+): Promise<DashboardTileRead> {
+  return apiFetch<DashboardTileRead>(
+    `/dashboards/${dashboardId}/tiles`,
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** PATCH /dashboards/{id}/tiles/{tileId} — update one tile's title / placement. */
+export async function updateDashboardTile(
+  dashboardId: string,
+  tileId: string,
+  request: { title?: string | null; position?: number; w?: number; h?: number }
+): Promise<DashboardTileRead> {
+  return apiFetch<DashboardTileRead>(
+    `/dashboards/${dashboardId}/tiles/${tileId}`,
+    { method: "PATCH", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** DELETE /dashboards/{id}/tiles/{tileId}. */
+export async function deleteDashboardTile(
+  dashboardId: string,
+  tileId: string
+): Promise<void> {
+  const response = await fetchWithAuth(
+    `/dashboards/${dashboardId}/tiles/${tileId}`,
+    { method: "DELETE" }
+  );
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
   }

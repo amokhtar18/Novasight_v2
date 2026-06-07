@@ -9,7 +9,7 @@ and platform administration — so users never need to open an infrastructure UI
 
 This document covers running the dev server, the runtime-config mechanism, the
 Vite proxy, local auth, the information architecture, the design system, the
-`ChartSpec` shape, and client-side dashboard persistence.
+`ChartSpec` shape, and server-persisted dashboards.
 
 ---
 
@@ -238,15 +238,17 @@ enforced by the backend — the client decode only affects what the UI *shows*.
 - The brand is the infinity/Möbius mark (`src/components/BrandMark.tsx`, themed
   via a gradient) and the matching favicon.
 
-## Dashboards (client-side persistence)
+## Dashboards (server-persisted)
 
-There is no backend dashboard endpoint yet, so dashboards are persisted in the
-browser via a Zustand `persist` store (`src/store/dashboardsStore.ts`),
-**partitioned per tenant** (`byTenant[tenantId]`) under the `novasight.dashboards`
-localStorage key. The tenant id comes from `/me` (`useTenantId`). Each tile holds
-a `ChartSpec`; re-runnable inline-dataset specs re-fetch live, while AI/NL specs
-carry a data snapshot captured at save time. The store's call sites are
-backend-friendly: swap to TanStack Query mutations when a persistence API lands.
+Dashboards are persisted server-side via the `/api/v1/dashboards` API (TanStack
+Query hooks in `src/api/hooks.ts`); tenant scoping is enforced by the backend from
+the JWT, so there is no client-side per-tenant partitioning. A dashboard is an
+ordered grid of tiles, each pinning a **saved chart** (`/api/v1/charts`). Tiles store
+no data: each embeds the chart's `ChartSpec` and re-runs its grounded query on
+display via `src/lib/useChartData.ts` (semantic specs → `/semantic/query`, dataset
+specs → `/datasets/{id}/query`), so a dashboard always reflects current data.
+Reordering/resizing persists through `PUT /dashboards/{id}/layout` with an optimistic
+cache update. See `docs/SEMANTIC_LAYER.md` for the API surface.
 
 ## Project structure
 
@@ -273,7 +275,7 @@ frontend/
     pages/              # one component per route (see table above)
     store/
       uiStore.ts        # sidebar / mobile-nav UI state
-      dashboardsStore.ts # persisted, per-tenant dashboards
+      # dashboards are server-persisted via /api/v1/dashboards (no local store)
     types/
       api.ts            # TypeScript mirrors of backend Pydantic schemas + ChartSpec
     main.tsx            # Entry: config, TanStack Query, ThemeProvider, BrowserRouter

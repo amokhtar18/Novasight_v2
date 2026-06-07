@@ -1,0 +1,99 @@
+/**
+ * Tests for DashboardCardTile — tiles re-run their saved chart's query (#10).
+ *
+ * useChartData, the tile mutation hooks, dnd-kit, and ChartRenderer are mocked so
+ * the test focuses on the tile wiring: it resolves the embedded chart's spec via
+ * useChartData and renders the chart with the tile's title.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+
+import type { ChartSpec, DashboardTileRead, QueryResponse } from "@/types/api";
+
+vi.mock("@/lib/useChartData", () => ({ useChartData: vi.fn() }));
+vi.mock("@/api/hooks", () => ({
+  useUpdateDashboardTile: vi.fn(() => ({ mutate: vi.fn() })),
+  useDeleteDashboardTile: vi.fn(() => ({ mutate: vi.fn() })),
+}));
+vi.mock("@dnd-kit/sortable", () => ({
+  useSortable: () => ({
+    attributes: {},
+    listeners: {},
+    setNodeRef: vi.fn(),
+    transform: null,
+    transition: undefined,
+    isDragging: false,
+  }),
+}));
+vi.mock("@dnd-kit/utilities", () => ({ CSS: { Transform: { toString: () => "" } } }));
+vi.mock("@/components/chart/ChartRenderer", () => ({
+  ChartRenderer: ({ title }: { title?: string }) => (
+    <div role="img" aria-label={title ?? "chart"} data-testid="chart-renderer" />
+  ),
+}));
+
+import { DashboardCardTile } from "@/components/dashboard/DashboardCardTile";
+import { useChartData } from "@/lib/useChartData";
+
+const mockUseChartData = vi.mocked(useChartData);
+
+const spec: ChartSpec = {
+  version: "1",
+  type: "bar",
+  query: { metric_refs: ["regional_sales.total_amount"] },
+  encoding: {
+    x: "regional_sales.region",
+    series: [{ field: "regional_sales.total_amount", name: "Total" }],
+  },
+  options: { title: "Total by region" },
+};
+
+const tile: DashboardTileRead = {
+  id: "tile-1",
+  chart_id: "chart-1",
+  title: "Region totals",
+  position: 0,
+  x: 0,
+  y: 0,
+  w: 6,
+  h: 4,
+  chart: {
+    id: "chart-1",
+    name: "Total by region",
+    spec,
+    source_kind: "semantic",
+    source_ref: "regional_sales",
+    owner_id: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+};
+
+const data: QueryResponse = {
+  columns: ["regional_sales.region", "regional_sales.total_amount"],
+  rows: [["west", 100]],
+  row_count: 1,
+};
+
+beforeEach(() => {
+  // @ts-expect-error partial mock
+  mockUseChartData.mockReturnValue({ data, isLoading: false, isError: false });
+});
+
+afterEach(() => vi.clearAllMocks());
+
+describe("DashboardCardTile", () => {
+  it("re-runs the chart's query and renders it with the tile title", () => {
+    render(<DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} />);
+
+    expect(mockUseChartData).toHaveBeenCalledWith(spec);
+    expect(screen.getByRole("img", { name: /region totals/i })).toBeInTheDocument();
+  });
+
+  it("falls back to the chart name when the tile has no title override", () => {
+    const untitled = { ...tile, title: null };
+    render(<DashboardCardTile tile={untitled} dashboardId="dash-1" editing={false} />);
+    expect(screen.getByRole("img", { name: /total by region/i })).toBeInTheDocument();
+  });
+});
