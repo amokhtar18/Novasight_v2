@@ -17,6 +17,10 @@ dependencies = [
     "clickhouse-connect>=0.8",
     "pydantic-settings>=2.5",
     "pyarrow>=17",
+    # Sync Postgres driver: the code location reads the backend's definition registry
+    # (schedules/pipelines/transform_jobs) synchronously to build generic, dynamic
+    # schedules. The backend itself uses asyncpg; here a sync driver is required.
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]

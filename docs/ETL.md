@@ -98,6 +98,41 @@ the periodiq heartbeat runs in the worker (registered in `app/reporting/worker.p
 UI: each pipeline row on `/pipelines` has a **Schedule** action (add cron schedules /
 delete them) and shows a *scheduled* badge.
 
-**Remaining (later slices):** routing pipeline/transform orchestration through the
-dynamic Dagster code location (#7 — `dagster_run_id` stays null for worker runs today),
-and scheduling dbt transforms (needs the dbt run path).
+## Generic Dagster code location (#7)
+
+The Dagster code location (`data-platform/orchestration/`) is **registry-driven**: it
+runs *any* tenant's pipeline or transform by id, with no per-definition Dagster object
+and no redeploy. This is the orchestration path that complements the worker dispatch
+above (the worker remains the executor; Dagster is the scheduler/launcher of record).
+
+- **Run-config contract** — `backend/app/orchestration/run_config.py` is the source of
+  truth for two generic jobs: `pipeline_job` (op `run_pipeline`, config
+  `{pipeline_id, tenant}`) and `transform_job` (op `run_transform`, config
+  `{transform_job_id, tenant}`). The code location mirrors it in
+  `novasight_orchestration/dynamic.py`; `tests/test_dynamic.py` guards the two against
+  drift (they are separate deployables and cannot share code).
+- **Registry reader** (`novasight_orchestration/registry.py`): the location cannot
+  import `backend/app`, so it reads the same control-plane Postgres **directly** with a
+  sync driver (`psycopg`), using the identical `POSTGRES__*` env (golden rule 1). Each
+  row is joined to `tenants` so it carries its **tenant slug** (golden rule 2) — the
+  generic ops resolve the definition for that tenant and never widen scope.
+- **Dynamic schedules** (`dynamic.build_schedules`, a pure function): one
+  `ScheduleDefinition` per `schedules` row, named deterministically `sched_<uuid hex>`
+  (so the backend can address it), cron from the row, and `default_status`
+  RUNNING/STOPPED from `enabled`. Unknown `target_kind`s are skipped, not fatal. The
+  read is **best-effort** in `definitions.py`: if the database is unreachable the
+  location still loads with its jobs/assets (just no dynamic schedules yet).
+- **Backend control** (`backend/app/orchestration/dagster_client.py`): `launch_run`
+  (run-now → `dagster_run_id`), `reload_location` (after a schedule row changes),
+  and `start_schedule` / `stop_schedule` (toggle live state via GraphQL, overriding the
+  loaded default). Dagster's stop mutation needs the schedule's origin id, fetched first.
+
+The schedule builder, the run-config contract, the generic-job wiring, and the backend
+client are unit-tested (`tests/test_dynamic.py`, `backend/tests/test_dagster_client.py`).
+Live launching/scheduling and the `run_transform` dbt build are verified when the stack
+is up. `run_pipeline`'s op hands off to the canonical executor (the worker path) at the
+documented stack-integration boundary, so run-now and scheduled runs share one ETL impl.
+
+**Still worker-driven today:** the periodiq dispatch (#4) above remains the active
+scheduler; switching a deployment to the Dagster schedules is a configuration choice
+(don't enable both for the same rows, or they double-fire).

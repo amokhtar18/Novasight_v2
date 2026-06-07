@@ -60,6 +60,37 @@ mutation Reload($name: String!) {
 }
 """
 
+_START_SCHEDULE = """
+mutation StartSchedule($selector: ScheduleSelector!) {
+  startSchedule(scheduleSelector: $selector) {
+    __typename
+    ... on ScheduleStateResult { scheduleState { status } }
+    ... on PythonError { message }
+  }
+}
+"""
+
+# Dagster's stop mutation takes the schedule's origin id, so we fetch it first.
+_SCHEDULE_STATE = """
+query ScheduleState($selector: ScheduleSelector!) {
+  scheduleOrError(scheduleSelector: $selector) {
+    __typename
+    ... on Schedule { scheduleState { id } }
+    ... on PythonError { message }
+  }
+}
+"""
+
+_STOP_SCHEDULE = """
+mutation StopSchedule($id: String!) {
+  stopRunningSchedule(scheduleOriginId: $id) {
+    __typename
+    ... on ScheduleStateResult { scheduleState { status } }
+    ... on PythonError { message }
+  }
+}
+"""
+
 
 class DagsterClient:
     """Thin async wrapper over the Dagster GraphQL endpoint."""
@@ -109,9 +140,41 @@ class DagsterClient:
         if result.get("__typename") == "PythonError":
             raise DagsterError(f"reload failed: {result.get('message')}")
 
+    async def start_schedule(self, schedule_name: str) -> None:
+        """Turn a schedule on. Overrides the code location's default status."""
+        data = await self._execute(
+            _START_SCHEDULE, {"selector": self._schedule_selector(schedule_name)}
+        )
+        result = data.get("startSchedule", {})
+        if result.get("__typename") != "ScheduleStateResult":
+            raise DagsterError(f"start schedule failed: {self._first_message(result)}")
+
+    async def stop_schedule(self, schedule_name: str) -> None:
+        """Turn a schedule off. Dagster's stop mutation needs the origin id, fetched first."""
+        state = await self._execute(
+            _SCHEDULE_STATE, {"selector": self._schedule_selector(schedule_name)}
+        )
+        sched = state.get("scheduleOrError", {})
+        if sched.get("__typename") != "Schedule":
+            raise DagsterError(f"schedule not found: {self._first_message(sched)}")
+        origin_id = sched.get("scheduleState", {}).get("id")
+        if not origin_id:
+            raise DagsterError("schedule has no state id")
+        data = await self._execute(_STOP_SCHEDULE, {"id": origin_id})
+        result = data.get("stopRunningSchedule", {})
+        if result.get("__typename") != "ScheduleStateResult":
+            raise DagsterError(f"stop schedule failed: {self._first_message(result)}")
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _schedule_selector(self, schedule_name: str) -> dict[str, str]:
+        return {
+            "repositoryLocationName": self._cfg.repository_location,
+            "repositoryName": self._cfg.repository_name,
+            "scheduleName": schedule_name,
+        }
 
     def _url(self) -> str:
         if not self._cfg.graphql_url:

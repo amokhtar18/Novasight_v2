@@ -128,6 +128,73 @@ async def test_reload_location_ok_and_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_start_schedule_ok_and_error() -> None:
+    captured: dict[str, Any] = {}
+
+    def ok(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"data": {"startSchedule": {"__typename": "ScheduleStateResult",
+                                              "scheduleState": {"status": "RUNNING"}}}},
+        )
+
+    await _client(ok).start_schedule("sched_abc")  # no raise
+    sel = captured["variables"]["selector"]
+    assert sel["scheduleName"] == "sched_abc"
+    assert sel["repositoryLocationName"] == "novasight_orchestration"
+
+    def err(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": {"startSchedule": {"__typename": "UnauthorizedError",
+                                             "message": "denied"}}},
+        )
+
+    with pytest.raises(DagsterError, match="denied"):
+        await _client(err).start_schedule("sched_abc")
+
+
+@pytest.mark.asyncio
+async def test_stop_schedule_fetches_origin_id_then_stops() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "scheduleOrError" in body["query"]:
+            seen.append("state")
+            assert body["variables"]["selector"]["scheduleName"] == "sched_xyz"
+            return httpx.Response(
+                200,
+                json={"data": {"scheduleOrError": {"__typename": "Schedule",
+                                                   "scheduleState": {"id": "origin-9"}}}},
+            )
+        seen.append("stop")
+        assert body["variables"]["id"] == "origin-9"
+        return httpx.Response(
+            200,
+            json={"data": {"stopRunningSchedule": {"__typename": "ScheduleStateResult",
+                                                   "scheduleState": {"status": "STOPPED"}}}},
+        )
+
+    await _client(handler).stop_schedule("sched_xyz")
+    assert seen == ["state", "stop"]
+
+
+@pytest.mark.asyncio
+async def test_stop_schedule_unknown_schedule_raises() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": {"scheduleOrError": {"__typename": "ScheduleNotFoundError",
+                                               "message": "no such schedule"}}},
+        )
+
+    with pytest.raises(DagsterError, match="not found"):
+        await _client(handler).stop_schedule("sched_missing")
+
+
+@pytest.mark.asyncio
 async def test_graphql_errors_raise() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"errors": [{"message": "nope"}]})
