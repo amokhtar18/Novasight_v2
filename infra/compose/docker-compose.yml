@@ -274,12 +274,38 @@ services:
       retries: 10
       start_period: 30s
 
+  # One-shot: create OpenMetadata's dedicated database on the shared Postgres, then
+  # exit. The stack's postgres only creates the app DB (POSTGRES_DB); OpenMetadata's
+  # Flyway migration connects straight to OM_DATABASE and fails ("database does not
+  # exist") without this. Idempotent (guarded by pg_database) and env-driven — the DB
+  # name comes from the same OPENMETADATA__DB var the OM services use (golden rule 1).
+  openmetadata-db-setup:
+    image: postgres:17-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES__PASSWORD:?set POSTGRES__PASSWORD in .env}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        DB="${OPENMETADATA__DB:-openmetadata}" &&
+        psql -h postgres -U "${POSTGRES__USER}" -d "${POSTGRES__DB}" -tc \
+          "SELECT 1 FROM pg_database WHERE datname = '$$DB'" | grep -q 1 ||
+        psql -h postgres -U "${POSTGRES__USER}" -d "${POSTGRES__DB}" -c \
+          "CREATE DATABASE \"$$DB\"" &&
+        echo "openmetadata database ready: $$DB"
+    restart: "no"
+
   # One-shot: run OpenMetadata schema migrations against Postgres, then exit.
   openmetadata-migrate:
     image: docker.getcollate.io/openmetadata/server:1.6.5
     depends_on:
       postgres:
         condition: service_healthy
+      openmetadata-db-setup:
+        condition: service_completed_successfully
       openmetadata-elasticsearch:
         condition: service_healthy
     environment: &openmetadata-env
@@ -314,7 +340,9 @@ services:
       - "${OPENMETADATA__SERVER_PORT:-8585}:8585"
       - "${OPENMETADATA__SERVER_ADMIN_PORT:-8586}:8586"
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8586/healthcheck | grep -q '\"healthy\":true'"]
+      # The OpenMetadata image ships wget, not curl; wget exits non-zero on the 500
+      # Dropwizard returns when unhealthy, so this reports health correctly.
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8586/healthcheck | grep -q '\"healthy\":true'"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -407,6 +435,10 @@ services:
     env_file:
       - ../../.env
     environment:
+      # Reach infrastructure by compose service name, not the host's localhost — the
+      # registry-driven code location reads the schedule registry from this Postgres
+      # (without it: "registry read failed: connection to 127.0.0.1:5432 refused").
+      POSTGRES__HOST: postgres
       CLICKHOUSE__HOST: clickhouse
       OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
     ports:
@@ -426,9 +458,16 @@ services:
     env_file:
       - ../../.env
     environment:
+      # Reach infrastructure by compose service name, not the host's localhost — the
+      # registry-driven code location reads the schedule registry from this Postgres
+      # (without it: "registry read failed: connection to 127.0.0.1:5432 refused").
+      POSTGRES__HOST: postgres
       CLICKHOUSE__HOST: clickhouse
       OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
-    command: ["dagster-daemon", "run"]
+    # The daemon needs the same code-location target as the webserver's default CMD
+    # (-m novasight_orchestration.definitions); without it `dagster-daemon run` has no
+    # workspace and exits with "No arguments given and no [tool.dagster] block".
+    command: ["dagster-daemon", "run", "-m", "novasight_orchestration.definitions"]
     depends_on:
       clickhouse:
         condition: service_healthy

@@ -260,10 +260,14 @@ class McpSettings(BaseSettings):
     sentinel default (golden rule 1, mirroring ``DagsterSettings.graphql_url``);
     the MCP entrypoint fails closed with a clear error when it is empty.
 
-    Env vars use the ``MCP__`` group, e.g. ``MCP__BACKEND_BASE_URL``.
+    Env vars use the ``MCP__`` group, e.g. ``MCP__BACKEND_BASE_URL``. The explicit
+    ``env_prefix`` is required (not just the parent's nested delimiter): this group is
+    a ``BaseSettings`` that also reads the environment directly, and unprefixed field
+    names such as ``path``/``host`` would otherwise bind the ubiquitous ``PATH``/``HOST``
+    OS variables (case-insensitively). Scoping to ``MCP__`` prevents that collision.
     """
 
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="MCP__", extra="ignore")
 
     # Base URL of the NovaSight API the tools proxy to, INCLUDING the version
     # prefix — e.g. http://api:8000/api/v1. Empty disables the server (it refuses

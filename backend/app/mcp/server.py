@@ -101,11 +101,19 @@ def build_server(
 
     @asynccontextmanager
     async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
-        """Release the backend HTTP connection pool on shutdown."""
+        """Release the backend HTTP connection pool on shutdown.
+
+        In stateless HTTP mode FastMCP runs this lifespan *per request*, so closing
+        the shared, process-lifetime backend pool here would kill it after the first
+        request — the next tool call then fails with "client has been closed". Only
+        close when a single lifespan spans the whole process (stdio / sse); under
+        stateless HTTP the pool is released when the process exits.
+        """
         try:
             yield
         finally:
-            await backend.aclose()
+            if not settings.stateless:
+                await backend.aclose()
 
     security = (
         TransportSecuritySettings(

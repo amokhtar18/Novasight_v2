@@ -204,6 +204,41 @@ class TestSettingsBuildsFromEnv:
         # Cube settings still load; the unconsumed sibling var is ignored.
         assert s.cube.base_url == "http://cube.example.internal:4000"
 
+    def test_mcp_path_not_clobbered_by_os_path_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``McpSettings.path`` must keep its default and not bind the OS ``PATH``.
+
+        Regression: McpSettings is a BaseSettings that reads the environment, so
+        without the ``env_prefix="MCP__"`` scope its unprefixed ``path`` field bound
+        the ubiquitous, case-insensitive ``PATH`` OS variable — the MCP server then
+        served at a garbage route (``/usr/local/bin:...``) instead of ``/mcp``.
+        """
+        for key, value in COMPLETE_ENV.items():
+            monkeypatch.setenv(key, value)
+        monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+        monkeypatch.setenv("HOST", "some-os-host")
+
+        s = get_settings()
+
+        # The OS PATH/HOST must not leak into the MCP group; defaults are preserved.
+        assert s.mcp.path == "/mcp"
+        assert s.mcp.host == "0.0.0.0"  # noqa: S104 — asserting the container-bind default
+
+    def test_mcp_prefixed_overrides_apply(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``MCP__*`` env vars still populate the MCP group through the prefix."""
+        for key, value in COMPLETE_ENV.items():
+            monkeypatch.setenv(key, value)
+        monkeypatch.setenv("MCP__BACKEND_BASE_URL", "http://api:8000/api/v1")
+        monkeypatch.setenv("MCP__PATH", "/custom-mcp")
+        monkeypatch.setenv("MCP__PORT", "8901")
+
+        s = get_settings()
+
+        assert s.mcp.backend_base_url == "http://api:8000/api/v1"
+        assert s.mcp.path == "/custom-mcp"
+        assert s.mcp.port == 8901
+
     def test_get_settings_is_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """lru_cache means repeated calls return the same object."""
         for key, value in COMPLETE_ENV.items():

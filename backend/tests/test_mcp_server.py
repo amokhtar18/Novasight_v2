@@ -287,6 +287,41 @@ def test_build_server_registers_canonical_tools() -> None:
     assert names == {"list_semantic_models", "query_semantic_model", "nl_to_sql"}
 
 
+@pytest.mark.asyncio
+async def test_stateless_lifespan_keeps_backend_pool_open() -> None:
+    """Regression: stateless HTTP runs the lifespan per request, so it must NOT close
+    the shared backend pool — otherwise the first tool call after init would hit a
+    closed client ("Cannot send a request, as the client has been closed")."""
+    client = _client_with(httpx.MockTransport(lambda r: httpx.Response(200, json=[])))
+    server = build_server(
+        McpSettings(backend_base_url="http://api:8000/api/v1", stateless=True),
+        client=client,
+    )
+    lifespan = server._mcp_server.lifespan
+    async with lifespan(server._mcp_server):
+        pass
+
+    assert not client._client.is_closed  # pool survives a per-request lifespan cycle
+    # A subsequent tool call still reaches the backend through the live pool.
+    assert await client.list_semantic_models(_AUTH) == []
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_nonstateless_lifespan_closes_backend_pool() -> None:
+    """Under stdio/sse one lifespan spans the process, so shutdown closes the pool."""
+    client = _client_with(httpx.MockTransport(lambda r: httpx.Response(200, json=[])))
+    server = build_server(
+        McpSettings(backend_base_url="http://api:8000/api/v1", stateless=False),
+        client=client,
+    )
+    lifespan = server._mcp_server.lifespan
+    async with lifespan(server._mcp_server):
+        pass
+
+    assert client._client.is_closed  # released on shutdown
+
+
 # ---------------------------------------------------------------------------
 # Tool closures — end-to-end (auth → proxy → row cap → ToolError)
 # ---------------------------------------------------------------------------
