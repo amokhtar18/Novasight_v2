@@ -243,6 +243,59 @@ class DagsterSettings(BaseSettings):
     request_timeout_seconds: float = 30.0
 
 
+class McpSettings(BaseSettings):
+    """Standalone Model Context Protocol (MCP) server (#11/#12 tail).
+
+    A thin *protocol adapter* that re-exposes the grounded, tenant-scoped chat
+    tools (list/query semantic models + validated NL→SQL) to external MCP clients
+    such as Claude Desktop. It is a **transparent bearer-token forwarder**: each
+    tool call relays the caller's ``Authorization`` header to the backend HTTP API,
+    which stays the single auth + tenancy boundary (golden rule 2 — the MCP process
+    never parses or trusts a tenant id) and the single grounding/validation
+    boundary (golden rule 3 — it introduces no new SQL path).
+
+    All fields carry safe, environment-identical defaults so the shared ``Settings``
+    object stays valid for the other backend roles that never run the MCP server.
+    The one infrastructure-pointing value — ``backend_base_url`` — has an empty
+    sentinel default (golden rule 1, mirroring ``DagsterSettings.graphql_url``);
+    the MCP entrypoint fails closed with a clear error when it is empty.
+
+    Env vars use the ``MCP__`` group, e.g. ``MCP__BACKEND_BASE_URL``.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    # Base URL of the NovaSight API the tools proxy to, INCLUDING the version
+    # prefix — e.g. http://api:8000/api/v1. Empty disables the server (it refuses
+    # to start). Env: MCP__BACKEND_BASE_URL.
+    backend_base_url: str = ""
+    # Bind address + port for the MCP server's own HTTP transport. ``0.0.0.0`` is a
+    # container-internal bind (the orchestrator controls host exposure), not a
+    # hardcoded infrastructure host. Compose publishes the same port on the host.
+    host: str = "0.0.0.0"  # noqa: S104 — container bind, not an env-specific host
+    port: int = 8900
+    # MCP transport: "streamable-http" (network service, the compose default),
+    # "sse" (legacy HTTP), or "stdio" (a client spawns the process directly).
+    transport: str = "streamable-http"
+    # Route the streamable-http transport is served under.
+    path: str = "/mcp"
+    # Stateless HTTP — every request is self-contained (no server-side session).
+    # Suits a token-forwarding proxy and horizontal scaling; the tools never need
+    # server-initiated messages.
+    stateless: bool = True
+    # Timeout (seconds) for the upstream calls to the backend API.
+    request_timeout_seconds: float = 30.0
+    # Cap on rows a tool returns, so a large result can't blow the MCP client's
+    # context window (mirrors the in-process chat loop's ``_MAX_TOOL_ROWS``).
+    max_tool_rows: int = 50
+    # Optional DNS-rebinding protection. When either list is non-empty, protection
+    # is enabled and only these ``Host`` / ``Origin`` header values are accepted
+    # (wildcard port supported, e.g. "mcp.example.com:*"). Empty leaves the SDK
+    # default (protection off) so local/compose clients connect without extra setup.
+    allowed_hosts: list[str] = []
+    allowed_origins: list[str] = []
+
+
 class AuthSettings(BaseSettings):
     # OIDC / RS256 settings. These point at deployment infrastructure, so they have
     # NO standalone default; the mode validator below makes them required whenever
@@ -412,6 +465,10 @@ class Settings(BaseSettings):
     # dbt codegen output dir (the dbt model/test wizard). All-default; writing is
     # skipped until DBT__MODELS_DIR points at the dbt project's models volume.
     dbt: DbtSettings = DbtSettings()
+    # Standalone MCP server (#11/#12 tail). All-default conventions; the server
+    # refuses to start until MCP__BACKEND_BASE_URL points at the API. Only the
+    # ``mcp`` compose role runs it — other roles ignore this group.
+    mcp: McpSettings = McpSettings()
     smtp: SmtpSettings | None = None
     # Column-level encryption. Optional — only required once a dataset tags a column
     # sensitive; the ingestion/serving paths validate its presence at point of use.

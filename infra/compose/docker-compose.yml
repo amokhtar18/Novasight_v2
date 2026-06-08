@@ -37,6 +37,9 @@ x-backend-env: &backend-env
     CUBE__MODEL_DIR: /cube-model
     # Backend↔Dagster control plane (launch/reload over GraphQL).
     DAGSTER__GRAPHQL_URL: http://dagster:3000/graphql
+    # In-cluster API URL the standalone MCP server proxies tool calls to (the `mcp`
+    # role consumes this; other roles ignore it). Includes the version prefix.
+    MCP__BACKEND_BASE_URL: http://api:8000/api/v1
     # Prompt templates bundled in the image (overrides any host-oriented .env value).
     AI__PROMPT_TEMPLATE_DIR: /app/app/ai/prompts
 
@@ -377,6 +380,23 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Standalone MCP server (#11/#12 tail): re-exposes the grounded chat tools to
+  # external MCP clients (e.g. Claude Desktop) over the streamable-http transport.
+  # Same backend image, different command; it is a thin proxy that forwards each
+  # call's bearer token to the `api` service (the single auth/tenancy/grounding
+  # boundary), so it waits for the API to be healthy. Bind port == published port
+  # (one MCP__PORT knob, no remap), so the URL is http://localhost:${MCP__PORT}/mcp.
+  mcp:
+    build: *backend-build
+    <<: *backend-env
+    command: ["python", "-m", "app.mcp.server"]
+    ports:
+      - "${MCP__PORT:-8900}:${MCP__PORT:-8900}"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   # Dagster webserver — serves the code location (dlt ingestion + dbt assets).

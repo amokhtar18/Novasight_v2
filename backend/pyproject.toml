@@ -30,6 +30,9 @@ dependencies = [
     "anthropic>=0.50",
     # SQL parser — validates generated SQL (read-only check, allow-list, tenant isolation)
     "sqlglot>=25.0",
+    # Model Context Protocol SDK — powers the standalone FastMCP server (app/mcp/)
+    # that re-exposes the grounded chat tools to external MCP clients (#11/#12 tail).
+    "mcp>=1.2",
     # Background jobs: Dramatiq actors on the same Redis the app already uses, with
     # periodiq as the cron-style scheduler (Phase 5 reporting + KPI alerts). The
     # Redis client comes from the top-level ``redis`` dependency above (not the

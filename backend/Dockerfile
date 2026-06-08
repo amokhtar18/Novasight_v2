@@ -2,11 +2,12 @@
 #
 # Production image for the NovaSight backend.
 #
-# ONE image, THREE runtime roles — they share the same code and dependencies and
+# ONE image, SEVERAL runtime roles — they share the same code and dependencies and
 # differ only by the process they launch (golden rule 4: thin slices, no duplication):
 #   * API        (default CMD): uvicorn app.main:app
 #   * worker:     dramatiq app.reporting.worker      (reporting 5.1 + KPI alerts 5.2)
 #   * scheduler:  periodiq app.reporting.worker      (periodiq heartbeat)
+#   * mcp:        python -m app.mcp.server           (MCP server for external clients)
 #   * migrations: alembic upgrade head               (run as a job/initContainer)
 #
 # Golden rule 1 — NO build-time secrets and NO environment-specific config is baked
