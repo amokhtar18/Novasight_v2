@@ -105,6 +105,15 @@ model `sql` (a SELECT), and optional column data tests.
   `{{ config(materialized=...) }}` header) plus a `schema.yml` of column/model
   `data_tests`. Stale `.sql` files are pruned on rename/delete. Isolation is by
   directory + the tenant's target schema, mirroring the Cube codegen.
+- **Incremental models**: choosing `materialization='incremental'` unlocks an optional
+  `incremental` block (schema `IncrementalConfig`): a `unique_key` (one or more column
+  identifiers, so runs **upsert** instead of duplicating), an `incremental_strategy`
+  (`append`/`merge`/`delete+insert`/`insert_overwrite`), and an `on_schema_change`
+  policy (`ignore`/`fail`/`append_new_columns`/`sync_all_columns`). These are closed
+  literals + identifiers, so the codegen interpolates them into the `{{ config(...) }}`
+  header injection-free; they are stored under the model's `config` JSON (no migration)
+  and surfaced back as the typed `incremental` field. The wizard reveals the fields only
+  when the materialization is incremental, and the API rejects them otherwise (422).
 
 The pure render + writer are unit-tested (`tests/test_dbt_codegen.py`,
 `tests/test_dbt_models_api.py`). Materializing the generated models to ClickHouse runs

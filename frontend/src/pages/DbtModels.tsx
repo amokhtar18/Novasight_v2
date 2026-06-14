@@ -28,9 +28,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type {
+  DbtIncrementalStrategy,
   DbtLayer,
   DbtMaterialization,
   DbtModelDefCreate,
+  DbtOnSchemaChange,
   DbtTestDef,
   DbtTestType,
 } from "@/types/api";
@@ -38,6 +40,18 @@ import type {
 const LAYERS: DbtLayer[] = ["staging", "intermediate", "marts"];
 const MATERIALIZATIONS: DbtMaterialization[] = ["view", "table", "incremental"];
 const TEST_TYPES: DbtTestType[] = ["not_null", "unique", "accepted_values"];
+const STRATEGIES: DbtIncrementalStrategy[] = [
+  "append",
+  "merge",
+  "delete+insert",
+  "insert_overwrite",
+];
+const SCHEMA_CHANGES: DbtOnSchemaChange[] = [
+  "ignore",
+  "fail",
+  "append_new_columns",
+  "sync_all_columns",
+];
 
 interface TestRow {
   column: string;
@@ -58,6 +72,9 @@ export function DbtModels() {
   const [materialization, setMaterialization] = useState<DbtMaterialization>("table");
   const [sql, setSql] = useState("");
   const [tests, setTests] = useState<TestRow[]>([emptyTest()]);
+  const [uniqueKey, setUniqueKey] = useState("");
+  const [strategy, setStrategy] = useState<DbtIncrementalStrategy>("merge");
+  const [onSchemaChange, setOnSchemaChange] = useState<DbtOnSchemaChange>("ignore");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   function reset() {
@@ -66,6 +83,9 @@ export function DbtModels() {
     setMaterialization("table");
     setSql("");
     setTests([emptyTest()]);
+    setUniqueKey("");
+    setStrategy("merge");
+    setOnSchemaChange("ignore");
   }
 
   async function handleCreate() {
@@ -91,6 +111,16 @@ export function DbtModels() {
       sql: sql.trim(),
       tests: cleanTests,
     };
+    if (materialization === "incremental") {
+      payload.incremental = {
+        unique_key: uniqueKey
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+        incremental_strategy: strategy,
+        on_schema_change: onSchemaChange,
+      };
+    }
     try {
       const created = await createModel.mutateAsync(payload);
       setOpen(false);
@@ -223,6 +253,59 @@ export function DbtModels() {
               className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
+
+          {materialization === "incremental" && (
+            <div className="space-y-3 rounded-lg border bg-background/40 p-3">
+              <h4 className="text-sm font-medium">Incremental settings</h4>
+              <div className="space-y-1.5">
+                <Label htmlFor="dm-unique-key">Unique key (columns)</Label>
+                <Input
+                  id="dm-unique-key"
+                  value={uniqueKey}
+                  onChange={(e) => setUniqueKey(e.target.value)}
+                  placeholder="order_id, line_no"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Comma-separated. Rows matching these keys are upserted instead of
+                  duplicated on each run.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="dm-strategy">Strategy</Label>
+                  <Select
+                    id="dm-strategy"
+                    value={strategy}
+                    onChange={(e) =>
+                      setStrategy(e.target.value as DbtIncrementalStrategy)
+                    }
+                  >
+                    {STRATEGIES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dm-schema-change">On schema change</Label>
+                  <Select
+                    id="dm-schema-change"
+                    value={onSchemaChange}
+                    onChange={(e) =>
+                      setOnSchemaChange(e.target.value as DbtOnSchemaChange)
+                    }
+                  >
+                    {SCHEMA_CHANGES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2 rounded-lg border bg-background/40 p-3">
             <div className="flex items-center justify-between">

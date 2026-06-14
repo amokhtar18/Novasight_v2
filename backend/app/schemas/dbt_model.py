@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 Identifier = Annotated[
     str,
@@ -26,6 +26,23 @@ Identifier = Annotated[
 Layer = Literal["staging", "intermediate", "marts"]
 Materialization = Literal["view", "table", "incremental"]
 TestType = Literal["not_null", "unique", "accepted_values", "relationships"]
+# dbt incremental strategies (closed set) and schema-evolution policy.
+IncrementalStrategy = Literal["append", "merge", "delete+insert", "insert_overwrite"]
+OnSchemaChange = Literal["ignore", "fail", "append_new_columns", "sync_all_columns"]
+
+
+class IncrementalConfig(BaseModel):
+    """dbt incremental settings — only applied when ``materialization='incremental'``.
+
+    ``unique_key`` is one or more **column identifiers** (so an incremental run can
+    upsert rather than blindly append); strategy and schema-change policy are closed
+    sets. Everything here is a validated identifier or a ``Literal``, so the codegen
+    can interpolate it into the ``{{ config(...) }}`` header injection-free.
+    """
+
+    unique_key: list[Identifier] = Field(default_factory=list, max_length=16)
+    incremental_strategy: IncrementalStrategy | None = None
+    on_schema_change: OnSchemaChange | None = None
 
 
 class DbtTestDef(BaseModel):
@@ -45,8 +62,17 @@ class DbtModelCreate(BaseModel):
     materialization: Materialization = "table"
     sql: str = Field(..., min_length=1, max_length=20000)
     config: dict[str, Any] = Field(default_factory=dict)
+    incremental: IncrementalConfig | None = None
     tests: list[DbtTestDef] = Field(default_factory=list)
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def _incremental_only_for_incremental(self) -> DbtModelCreate:
+        if self.incremental is not None and self.materialization != "incremental":
+            raise ValueError(
+                "incremental settings require materialization='incremental'"
+            )
+        return self
 
 
 class DbtModelUpdate(BaseModel):
@@ -57,6 +83,7 @@ class DbtModelUpdate(BaseModel):
     materialization: Materialization | None = None
     sql: str | None = Field(default=None, min_length=1, max_length=20000)
     config: dict[str, Any] | None = None
+    incremental: IncrementalConfig | None = None
     tests: list[DbtTestDef] | None = None
     enabled: bool | None = None
 
@@ -79,6 +106,8 @@ class DbtModelRead(BaseModel):
     materialization: str
     sql: str | None
     config: dict[str, Any]
+    # Typed view of the incremental settings stored in ``config`` (None unless set).
+    incremental: IncrementalConfig | None = None
     enabled: bool
     tests: list[DbtTestRead]
     created_at: datetime

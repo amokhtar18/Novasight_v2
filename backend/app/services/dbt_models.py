@@ -61,12 +61,15 @@ class DbtModelService:
 
     async def create(self, ctx: TenantContext, data: DbtModelCreate) -> DbtModel:
         await self._require_name_free(ctx, data.name)
+        config = dict(data.config)
+        if data.incremental is not None:
+            config["incremental"] = data.incremental.model_dump(exclude_none=True)
         model = DbtModel(
             tenant_id=uuid.UUID(ctx.tenant_id),
             name=data.name,
             layer=data.layer,
             materialization=data.materialization,
-            config=data.config,
+            config=config,
             sql=data.sql,
             enabled=data.enabled,
             tests=[self._test_row(ctx, t) for t in data.tests],
@@ -91,6 +94,12 @@ class DbtModelService:
             model.sql = data.sql
         if data.config is not None:
             model.config = data.config
+        if data.incremental is not None:
+            # Merge the typed incremental settings over the (possibly just-set) config.
+            model.config = {
+                **(model.config or {}),
+                "incremental": data.incremental.model_dump(exclude_none=True),
+            }
         if data.enabled is not None:
             model.enabled = data.enabled
         if data.tests is not None:
@@ -139,6 +148,13 @@ class DbtModelService:
                 name=m.name,
                 materialization=m.materialization,
                 sql=m.sql or "",
+                unique_key=list((m.config or {}).get("incremental", {}).get("unique_key", [])),
+                incremental_strategy=(m.config or {})
+                .get("incremental", {})
+                .get("incremental_strategy"),
+                on_schema_change=(m.config or {})
+                .get("incremental", {})
+                .get("on_schema_change"),
                 tests=[
                     DbtTestInput(
                         test_type=t.test_type, column_name=t.column_name, config=t.config

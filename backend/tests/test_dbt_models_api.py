@@ -138,6 +138,47 @@ async def test_create_writes_codegen_and_round_trips(
 
 
 @pytest.mark.asyncio
+async def test_incremental_config_round_trips_and_renders(
+    client_with_db: TestClient, make_tenant: Any, dbt_dir: Path
+) -> None:
+    await make_tenant("local")
+    body = {
+        "name": "mart_events",
+        "layer": "marts",
+        "materialization": "incremental",
+        "sql": "select * from {{ ref('stg_events') }}",
+        "incremental": {
+            "unique_key": ["event_id"],
+            "incremental_strategy": "merge",
+            "on_schema_change": "append_new_columns",
+        },
+    }
+    resp = client_with_db.post("/api/v1/dbt-models", headers=_auth("local", SU), json=body)
+    assert resp.status_code == 201, resp.text
+    # The typed incremental settings round-trip on read.
+    assert resp.json()["incremental"]["unique_key"] == ["event_id"]
+    assert resp.json()["incremental"]["incremental_strategy"] == "merge"
+
+    # The generated model carries the full incremental config header.
+    schema = resources_for_slug("local").dbt_schema
+    sql = (dbt_dir / f"tenant_{schema}" / "mart_events.sql").read_text(encoding="utf-8")
+    assert "materialized='incremental'" in sql
+    assert "unique_key=['event_id']" in sql
+    assert "incremental_strategy='merge'" in sql
+    assert "on_schema_change='append_new_columns'" in sql
+
+
+@pytest.mark.asyncio
+async def test_incremental_settings_rejected_for_non_incremental(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    body = {**_body("mart_bad"), "incremental": {"unique_key": ["id"]}}
+    resp = client_with_db.post("/api/v1/dbt-models", headers=_auth("local", SU), json=body)
+    assert resp.status_code == 422  # materialization defaults to 'table'
+
+
+@pytest.mark.asyncio
 async def test_duplicate_name_conflicts(client_with_db: TestClient, make_tenant: Any) -> None:
     await make_tenant("local")
     client_with_db.post("/api/v1/dbt-models", headers=_auth("local", SU), json=_body())

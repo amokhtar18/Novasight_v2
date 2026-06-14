@@ -42,6 +42,30 @@ def test_render_model_sql_has_config_header() -> None:
     assert "sum(amount) as total" in sql
 
 
+def test_render_incremental_config_header() -> None:
+    model = DbtModelInput(
+        name="mart_orders",
+        materialization="incremental",
+        sql="select * from {{ ref('stg_orders') }}",
+        unique_key=["order_id", "line_no"],
+        incremental_strategy="merge",
+        on_schema_change="append_new_columns",
+    )
+    header = render_model_sql(model).splitlines()[0]
+    assert header == (
+        "{{ config(materialized='incremental', unique_key=['order_id', 'line_no'], "
+        "incremental_strategy='merge', on_schema_change='append_new_columns') }}"
+    )
+
+
+def test_incremental_args_only_for_incremental_materialization() -> None:
+    # unique_key on a non-incremental model is ignored (no upsert config leaks in).
+    model = DbtModelInput(
+        name="m", materialization="table", sql="select 1", unique_key=["id"]
+    )
+    assert render_model_sql(model).startswith("{{ config(materialized='table') }}")
+
+
 def test_render_schema_yml_groups_tests() -> None:
     parsed = yaml.safe_load(render_schema_yml([_model()]))
     assert parsed["version"] == 2

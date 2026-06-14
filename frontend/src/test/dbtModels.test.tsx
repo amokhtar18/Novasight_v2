@@ -70,4 +70,31 @@ describe("DbtModels wizard", () => {
       ],
     });
   });
+
+  it("includes incremental settings when materialization is incremental", async () => {
+    render(<DbtModels />);
+    fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);
+
+    setValue("dm-name", "mart_events");
+    setValue("dm-sql", "select * from {{ ref('stg') }}");
+    setValue("dm-mat", "incremental");
+    // Incremental fields appear only once the materialization flips.
+    setValue("dm-unique-key", "event_id, ts");
+    setValue("dm-strategy", "merge");
+    setValue("dm-schema-change", "append_new_columns");
+
+    fireEvent.click(screen.getByRole("button", { name: /create model/i }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalled());
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        materialization: "incremental",
+        incremental: {
+          unique_key: ["event_id", "ts"],
+          incremental_strategy: "merge",
+          on_schema_change: "append_new_columns",
+        },
+      })
+    );
+  });
 });

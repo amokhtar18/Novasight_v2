@@ -327,6 +327,23 @@ export interface SemanticModelDefCreate {
 export type DbtLayer = "staging" | "intermediate" | "marts";
 export type DbtMaterialization = "view" | "table" | "incremental";
 export type DbtTestType = "not_null" | "unique" | "accepted_values" | "relationships";
+export type DbtIncrementalStrategy =
+  | "append"
+  | "merge"
+  | "delete+insert"
+  | "insert_overwrite";
+export type DbtOnSchemaChange =
+  | "ignore"
+  | "fail"
+  | "append_new_columns"
+  | "sync_all_columns";
+
+/** dbt incremental settings — only applied when materialization is "incremental". */
+export interface DbtIncrementalConfig {
+  unique_key?: string[];
+  incremental_strategy?: DbtIncrementalStrategy | null;
+  on_schema_change?: DbtOnSchemaChange | null;
+}
 
 export interface DbtTestDef {
   column_name?: string | null;
@@ -348,6 +365,7 @@ export interface DbtModelDefRead {
   materialization: string;
   sql: string | null;
   config: Record<string, unknown>;
+  incremental?: DbtIncrementalConfig | null;
   enabled: boolean;
   tests: DbtTestReadModel[];
   created_at: string;
@@ -360,6 +378,7 @@ export interface DbtModelDefCreate {
   materialization?: DbtMaterialization;
   sql: string;
   config?: Record<string, unknown>;
+  incremental?: DbtIncrementalConfig | null;
   tests?: DbtTestDef[];
   enabled?: boolean;
 }

@@ -21,6 +21,7 @@ from app.schemas.dbt_model import (
     DbtModelRead,
     DbtModelUpdate,
     DbtTestRead,
+    IncrementalConfig,
 )
 from app.services.dbt_models import DbtModelService, get_dbt_model_service
 from app.tenancy.context import TenantContext, get_tenant_context
@@ -29,6 +30,7 @@ router = APIRouter(prefix="/dbt-models", tags=["dbt-models"])
 
 
 def _to_read(m: DbtModel) -> DbtModelRead:
+    inc_raw = (m.config or {}).get("incremental")
     return DbtModelRead(
         id=m.id,
         name=m.name,
@@ -36,6 +38,7 @@ def _to_read(m: DbtModel) -> DbtModelRead:
         materialization=m.materialization,
         sql=m.sql,
         config=m.config,
+        incremental=IncrementalConfig(**inc_raw) if inc_raw else None,
         enabled=m.enabled,
         tests=[
             DbtTestRead(

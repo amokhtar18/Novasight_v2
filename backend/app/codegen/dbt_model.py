@@ -33,12 +33,21 @@ class DbtTestInput:
 
 @dataclass(frozen=True)
 class DbtModelInput:
-    """One model to render."""
+    """One model to render.
+
+    The ``unique_key`` / ``incremental_strategy`` / ``on_schema_change`` fields are
+    only emitted for ``materialization == "incremental"``; they originate from the
+    validated ``IncrementalConfig`` (identifiers + closed literals), so they are safe
+    to interpolate into the dbt ``config()`` header.
+    """
 
     name: str
     materialization: str
     sql: str
     tests: list[DbtTestInput] = field(default_factory=list)
+    unique_key: list[str] = field(default_factory=list)
+    incremental_strategy: str | None = None
+    on_schema_change: str | None = None
 
 
 def tenant_dir_relpath(dbt_schema: str) -> str:
@@ -47,8 +56,21 @@ def tenant_dir_relpath(dbt_schema: str) -> str:
 
 
 def render_model_sql(model: DbtModelInput) -> str:
-    """Render one model's ``.sql`` — a materialization config header + the user SQL."""
-    header = f"{{{{ config(materialized='{model.materialization}') }}}}"
+    """Render one model's ``.sql`` — a materialization config header + the user SQL.
+
+    For incremental models the header also carries ``unique_key`` (so runs upsert),
+    ``incremental_strategy``, and ``on_schema_change`` when provided.
+    """
+    args = [f"materialized='{model.materialization}'"]
+    if model.materialization == "incremental":
+        if model.unique_key:
+            keys = ", ".join(f"'{k}'" for k in model.unique_key)
+            args.append(f"unique_key=[{keys}]")
+        if model.incremental_strategy:
+            args.append(f"incremental_strategy='{model.incremental_strategy}'")
+        if model.on_schema_change:
+            args.append(f"on_schema_change='{model.on_schema_change}'")
+    header = f"{{{{ config({', '.join(args)}) }}}}"
     return f"{header}\n\n{model.sql.strip()}\n"
 
 
