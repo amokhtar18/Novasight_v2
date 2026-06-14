@@ -15,10 +15,11 @@ import { ChartRenderer } from "@/components/chart/ChartRenderer";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useDeleteDashboardTile, useUpdateDashboardTile } from "@/api/hooks";
 import { useChartData } from "@/lib/useChartData";
 import { cn } from "@/lib/cn";
-import type { DashboardTileRead } from "@/types/api";
+import type { DashboardTileRead, SemanticFilter } from "@/types/api";
 
 type TileSize = "sm" | "md" | "lg";
 
@@ -41,9 +42,20 @@ interface TileProps {
   tile: DashboardTileRead;
   dashboardId: string;
   editing: boolean;
+  /**
+   * An optional dashboard-level filter (view-time). It is applied to this tile
+   * only when the tile is a semantic chart whose cube matches the filter member's
+   * cube, so a filter never breaks a tile that can't resolve it.
+   */
+  activeFilter?: SemanticFilter | null;
 }
 
-export function DashboardCardTile({ tile, dashboardId, editing }: TileProps) {
+/** The cube a member belongs to (the part before the first dot), or undefined. */
+function cubeOf(member: string | undefined): string | undefined {
+  return member?.includes(".") ? member.split(".")[0] : undefined;
+}
+
+export function DashboardCardTile({ tile, dashboardId, editing, activeFilter }: TileProps) {
   const updateTile = useUpdateDashboardTile(dashboardId);
   const deleteTile = useDeleteDashboardTile(dashboardId);
 
@@ -54,7 +66,14 @@ export function DashboardCardTile({ tile, dashboardId, editing }: TileProps) {
 
   const spec = tile.chart.spec;
   const title = tile.title ?? tile.chart.name;
-  const { data, isLoading, isError } = useChartData(spec);
+
+  // Apply the dashboard filter only to a semantic tile on the same cube.
+  const tileCube = cubeOf((spec.query.metric_refs ?? [])[0]);
+  const filterApplies =
+    !!activeFilter && !!tileCube && cubeOf(activeFilter.member) === tileCube;
+  const appliedFilters = filterApplies ? [activeFilter as SemanticFilter] : undefined;
+
+  const { data, isLoading, isError } = useChartData(spec, appliedFilters);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -87,6 +106,11 @@ export function DashboardCardTile({ tile, dashboardId, editing }: TileProps) {
         <h3 className="min-w-0 flex-1 truncate text-sm font-medium" title={title}>
           {title}
         </h3>
+        {filterApplies && !editing && (
+          <Badge variant="info" className="shrink-0">
+            Filtered
+          </Badge>
+        )}
         {editing && (
           <>
             <Select

@@ -25,15 +25,22 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys, useSetDashboardLayout } from "@/api/hooks";
 import { DashboardCardTile } from "./DashboardCardTile";
-import type { DashboardRead, DashboardTileRead } from "@/types/api";
+import type { DashboardRead, DashboardTileRead, SemanticFilter } from "@/types/api";
 
 interface DashboardGridProps {
   tiles: DashboardTileRead[];
   dashboardId: string;
   editing: boolean;
+  /** View-time dashboard filter applied to matching semantic tiles. */
+  activeFilter?: SemanticFilter | null;
 }
 
-export function DashboardGrid({ tiles, dashboardId, editing }: DashboardGridProps) {
+export function DashboardGrid({
+  tiles,
+  dashboardId,
+  editing,
+  activeFilter,
+}: DashboardGridProps) {
   const queryClient = useQueryClient();
   const setLayout = useSetDashboardLayout(dashboardId);
 
@@ -81,6 +88,7 @@ export function DashboardGrid({ tiles, dashboardId, editing }: DashboardGridProp
               tile={tile}
               dashboardId={dashboardId}
               editing={editing}
+              activeFilter={activeFilter}
             />
           ))}
         </div>

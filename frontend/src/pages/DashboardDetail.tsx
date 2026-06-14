@@ -11,11 +11,13 @@ import { ArrowLeft, Check, LayoutDashboard, Pencil, Plus } from "lucide-react";
 import { useDashboard, useUpdateDashboard } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
+import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
+import type { SemanticFilter } from "@/types/api";
 
 export function DashboardDetail() {
   const { dashboardId = "" } = useParams();
@@ -24,6 +26,7 @@ export function DashboardDetail() {
 
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [activeFilter, setActiveFilter] = useState<SemanticFilter | null>(null);
 
   function commitRename() {
     if (board && nameDraft.trim() && nameDraft !== board.name) {
@@ -138,7 +141,17 @@ export function DashboardDetail() {
           }
         />
       ) : (
-        <DashboardGrid tiles={board.tiles} dashboardId={board.id} editing={editing} />
+        <>
+          {!editing && (
+            <DashboardFilterBar value={activeFilter} onChange={setActiveFilter} />
+          )}
+          <DashboardGrid
+            tiles={board.tiles}
+            dashboardId={board.id}
+            editing={editing}
+            activeFilter={editing ? null : activeFilter}
+          />
+        </>
       )}
     </div>
   );

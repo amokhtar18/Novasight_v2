@@ -254,6 +254,16 @@ specs → `/datasets/{id}/query`), so a dashboard always reflects current data.
 Reordering/resizing persists through `PUT /dashboards/{id}/layout` with an optimistic
 cache update. See `docs/SEMANTIC_LAYER.md` for the API surface.
 
+**View-time filter bar** (`DashboardFilterBar`): in view mode the dashboard shows a
+filter — pick a governed dimension (from `/semantic/models`) + a value — handed to
+each tile via `DashboardGrid`. A tile applies it only when it is a **semantic** chart
+on the **same cube** as the filter member (a non-matching tile renders unfiltered and
+shows no "Filtered" badge), so a filter never breaks an unrelated tile. The filter
+flows into `useChartData(spec, filters)` → `/semantic/query`, where the server
+re-validates each member against the governed allow-list (`SemanticFilter`). It is a
+single `equals` filter held in page state (not yet persisted); multi-value/operators
+and persistence are later slices.
+
 ## Project structure
 
 ```
@@ -267,7 +277,7 @@ frontend/
     components/
       BrandMark.tsx     # infinity/Möbius brand mark (SVG)
       chart/            # ChartRenderer (ECharts), TableRenderer, SpecChart, NLChartPanel
-      dashboard/        # AddToDashboard, DashboardGrid + DashboardCardTile (dnd-kit)
+      dashboard/        # AddToDashboard, DashboardGrid + DashboardCardTile (dnd-kit), DashboardFilterBar
       data/             # UploadCard (drag-drop CSV + validation)
       layout/           # AppShell, Sidebar, TopBar, PageHeader, nav
       ui/               # hand-rolled shadcn-style primitives

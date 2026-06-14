@@ -9,7 +9,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import type { ChartSpec, DashboardTileRead, QueryResponse } from "@/types/api";
+import type {
+  ChartSpec,
+  DashboardTileRead,
+  QueryResponse,
+  SemanticFilter,
+} from "@/types/api";
 
 vi.mock("@/lib/useChartData", () => ({ useChartData: vi.fn() }));
 vi.mock("@/api/hooks", () => ({
@@ -83,11 +88,22 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
+const sameCubeFilter: SemanticFilter = {
+  member: "regional_sales.region",
+  operator: "equals",
+  values: ["west"],
+};
+const otherCubeFilter: SemanticFilter = {
+  member: "orders.status",
+  operator: "equals",
+  values: ["paid"],
+};
+
 describe("DashboardCardTile", () => {
   it("re-runs the chart's query and renders it with the tile title", () => {
     render(<DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} />);
 
-    expect(mockUseChartData).toHaveBeenCalledWith(spec);
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined);
     expect(screen.getByRole("img", { name: /region totals/i })).toBeInTheDocument();
   });
 
@@ -95,5 +111,31 @@ describe("DashboardCardTile", () => {
     const untitled = { ...tile, title: null };
     render(<DashboardCardTile tile={untitled} dashboardId="dash-1" editing={false} />);
     expect(screen.getByRole("img", { name: /total by region/i })).toBeInTheDocument();
+  });
+
+  it("applies the dashboard filter when it targets the tile's cube", () => {
+    render(
+      <DashboardCardTile
+        tile={tile}
+        dashboardId="dash-1"
+        editing={false}
+        activeFilter={sameCubeFilter}
+      />
+    );
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, [sameCubeFilter]);
+    expect(screen.getByText(/filtered/i)).toBeInTheDocument();
+  });
+
+  it("ignores a filter on a different cube", () => {
+    render(
+      <DashboardCardTile
+        tile={tile}
+        dashboardId="dash-1"
+        editing={false}
+        activeFilter={otherCubeFilter}
+      />
+    );
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined);
+    expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
   });
 });
