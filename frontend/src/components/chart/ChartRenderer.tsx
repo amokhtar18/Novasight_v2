@@ -26,6 +26,7 @@ import type { EChartsOption } from "echarts";
 import { readChartTheme, type ChartTheme } from "@/lib/chartTheme";
 import { useTheme } from "@/lib/theme";
 import { TableRenderer } from "@/components/chart/TableRenderer";
+import { NumberRenderer } from "@/components/chart/NumberRenderer";
 import type { ChartSpec, QueryResponse } from "@/types/api";
 
 // Register only what we use.
@@ -76,6 +77,11 @@ export function buildEChartsOption(
   if (spec.type === "table") {
     // Tables are not an ECharts option; the renderer presents them separately.
     throw new Error("table charts are rendered without ECharts (see Task 3.2)");
+  }
+
+  if (spec.type === "number") {
+    // Number (KPI) tiles are not an ECharts option; presented separately.
+    throw new Error("number charts are rendered without ECharts (see NumberRenderer)");
   }
 
   if (x === null || x === undefined) {
@@ -211,11 +217,12 @@ export function ChartRenderer({
   // Re-theme charts when the user flips light/dark.
   const { resolvedTheme } = useTheme();
 
-  const isTable = spec.type === "table";
+  // Table + number tiles are rendered without ECharts (see below).
+  const isEcharts = spec.type !== "table" && spec.type !== "number";
 
-  // Initialise chart instance on mount (skip for table specs).
+  // Initialise chart instance on mount (skip for non-ECharts specs).
   useEffect(() => {
-    if (isTable || !containerRef.current) return;
+    if (!isEcharts || !containerRef.current) return;
     const instance = echarts.init(containerRef.current);
     chartRef.current = instance;
 
@@ -229,21 +236,24 @@ export function ChartRenderer({
       instance.dispose();
       chartRef.current = null;
     };
-  }, [isTable]);
+  }, [isEcharts]);
 
   // Update chart option whenever spec, data, or theme changes.
   useEffect(() => {
-    if (isTable || !chartRef.current) return;
+    if (!isEcharts || !chartRef.current) return;
     try {
       const option = buildEChartsOption(spec, data, readChartTheme());
       chartRef.current.setOption(option, true /* notMerge */);
     } catch (err) {
       console.error("[ChartRenderer] Failed to build chart option:", err);
     }
-  }, [spec, data, resolvedTheme, isTable]);
+  }, [spec, data, resolvedTheme, isEcharts]);
 
-  if (isTable) {
+  if (spec.type === "table") {
     return <TableRenderer spec={spec} data={data} className={className} />;
+  }
+  if (spec.type === "number") {
+    return <NumberRenderer spec={spec} data={data} className={className} />;
   }
 
   return (

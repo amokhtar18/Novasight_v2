@@ -149,6 +149,21 @@ describe("buildEChartsOption — error handling", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Number (KPI) tiles — rendered without ECharts
+// ---------------------------------------------------------------------------
+
+describe("buildEChartsOption — number", () => {
+  it("throws (number tiles are rendered by NumberRenderer, not ECharts)", () => {
+    const numberSpec: ChartSpec = {
+      type: "number",
+      query: countQuery,
+      encoding: { series: [{ field: "count", name: "Count" }] },
+    };
+    expect(() => buildEChartsOption(numberSpec, sampleQueryResponse)).toThrow(/number/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Multiple series
 // ---------------------------------------------------------------------------
 

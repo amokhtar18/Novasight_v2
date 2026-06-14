@@ -66,7 +66,7 @@ export interface QueryResponse {
  * aggregation, and encoding `field` values are display references to columns in a
  * `QueryResponse`.
  */
-export type ChartType = "bar" | "line" | "area" | "pie" | "table";
+export type ChartType = "bar" | "line" | "area" | "pie" | "table" | "number";
 
 /** Where a chart's data comes from. At least one source must be present. */
 export interface ChartQuery {

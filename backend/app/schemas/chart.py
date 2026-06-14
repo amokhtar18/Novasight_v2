@@ -44,10 +44,11 @@ FieldName = Annotated[
     StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$", min_length=1, max_length=128),
 ]
 
-# The chart kinds the renderer supports. ``table`` is included in the contract
-# (it is a valid way to present a query result) even though it is not an x/series
-# chart; the renderer handles it specially.
-ChartType = Literal["bar", "line", "area", "pie", "table"]
+# The chart kinds the renderer supports. ``table`` and ``number`` are included in
+# the contract (both are valid ways to present a query result) even though they are
+# not x/series charts; the renderer handles them specially. ``number`` is a single
+# "big number" KPI (the total of its series across the result).
+ChartType = Literal["bar", "line", "area", "pie", "table", "number"]
 
 
 class ChartQuery(BaseModel):
@@ -124,7 +125,8 @@ class ChartSpec(BaseModel):
     @model_validator(mode="after")
     def _require_x_for_axis_charts(self) -> ChartSpec:
         # Axis charts are meaningless without a category axis; a pie needs a label
-        # column too. A table is the only type that may omit ``x``.
-        if self.type != "table" and self.encoding.x is None:
+        # column too. ``table`` and ``number`` present a result without an axis, so
+        # they may omit ``x``.
+        if self.type not in ("table", "number") and self.encoding.x is None:
             raise ValueError(f"chart type '{self.type}' requires encoding.x")
         return self

@@ -91,6 +91,19 @@ def test_table_may_omit_x() -> None:
     assert spec.encoding.x is None
 
 
+def test_number_may_omit_x() -> None:
+    """A number (KPI) tile is a single value and so does not need a category axis."""
+    spec = ChartSpec.model_validate(
+        {
+            "type": "number",
+            "query": {"metric_refs": ["orders.revenue"]},
+            "encoding": {"series": [{"field": "orders.revenue"}]},
+        }
+    )
+    assert spec.type == "number"
+    assert spec.encoding.x is None
+
+
 def test_at_least_one_series_required() -> None:
     with pytest.raises(ValidationError):
         ChartSpec.model_validate(

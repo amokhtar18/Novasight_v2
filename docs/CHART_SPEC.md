@@ -29,7 +29,7 @@ both reading the one canonical fixture so the two languages cannot drift.
 ```jsonc
 {
   "version": "1",                // contract version; bump on breaking changes
-  "type": "bar",                 // bar | line | area | pie | table
+  "type": "bar",                 // bar | line | area | pie | table | number
   "query": {                     // WHERE the data comes from (≥1 source required)
     "dataset_id": "…uuid…",      //   dataset the inline query runs against
     "query": { /* QueryRequest */ }, //   structured aggregation (Phase 1 path)
@@ -53,9 +53,11 @@ both reading the one canonical fixture so the two languages cannot drift.
 
 ### `type`
 
-`bar`, `line`, `area`, `pie`, `table`. `area` renders as a line series with an area
-fill. `table` presents the query result as columns and is the only type that may
-omit `encoding.x`.
+`bar`, `line`, `area`, `pie`, `table`, `number`. `area` renders as a line series with
+an area fill. `table` presents the query result as columns. `number` is a single
+"big number" KPI tile that shows the **total of its first series** across the result
+(a single-aggregate query shows that value; a grouped query shows the grand total).
+`table` and `number` are the two types that may omit `encoding.x`.
 
 ### `query` — query/metric refs
 
@@ -89,7 +91,7 @@ The Pydantic schema enforces (and the frontend type mirrors):
 
 - a `ChartQuery` must have an inline `query` **or** at least one `metric_refs` entry;
 - `encoding.series` has at least one entry;
-- `encoding.x` is required for every type except `table`;
+- `encoding.x` is required for every type except `table` and `number`;
 - `field`/`x`/`metric_refs` match the bounded field-name pattern above.
 
 ## Round-trip guarantee
