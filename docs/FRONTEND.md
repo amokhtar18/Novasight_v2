@@ -275,6 +275,13 @@ query path re-validates the member every time a tile runs. Set-membership operat
 values (match any/none); comparison operators take a single value. Applying filters to
 dataset-path tiles is a later slice.
 
+**Cross-filtering**: clicking a data point on a category-axis chart (bar/line/area/pie)
+sets the dashboard filter to that chart's dimension `equals` the clicked category — so a
+chart doubles as a filter control. `ChartRenderer` reports the clicked category via
+`onSelectCategory`; the tile maps it to its `encoding.x` dimension and calls
+`onCrossFilter`, which `DashboardDetail` routes through the same persist path as the bar.
+Wired for semantic tiles only, and disabled in edit mode.
+
 ## Project structure
 
 ```

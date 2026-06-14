@@ -48,6 +48,11 @@ interface TileProps {
    * cube, so a filter never breaks a tile that can't resolve it.
    */
   activeFilter?: SemanticFilter | null;
+  /**
+   * Cross-filtering: called with this tile's dimension + the clicked category when
+   * the user clicks a data point. Only wired for semantic tiles with an x dimension.
+   */
+  onCrossFilter?: (member: string, value: string) => void;
 }
 
 /** The cube a member belongs to (the part before the first dot), or undefined. */
@@ -55,7 +60,13 @@ function cubeOf(member: string | undefined): string | undefined {
   return member?.includes(".") ? member.split(".")[0] : undefined;
 }
 
-export function DashboardCardTile({ tile, dashboardId, editing, activeFilter }: TileProps) {
+export function DashboardCardTile({
+  tile,
+  dashboardId,
+  editing,
+  activeFilter,
+  onCrossFilter,
+}: TileProps) {
   const updateTile = useUpdateDashboardTile(dashboardId);
   const deleteTile = useDeleteDashboardTile(dashboardId);
 
@@ -72,6 +83,13 @@ export function DashboardCardTile({ tile, dashboardId, editing, activeFilter }: 
   const filterApplies =
     !!activeFilter && !!tileCube && cubeOf(activeFilter.member) === tileCube;
   const appliedFilters = filterApplies ? [activeFilter as SemanticFilter] : undefined;
+
+  // Cross-filter only from a semantic tile that has a dimension axis to filter on.
+  const crossDimension = tileCube && spec.encoding.x ? spec.encoding.x : undefined;
+  const onSelectCategory =
+    onCrossFilter && crossDimension
+      ? (value: string) => onCrossFilter(crossDimension, value)
+      : undefined;
 
   const { data, isLoading, isError } = useChartData(spec, appliedFilters);
 
@@ -146,7 +164,13 @@ export function DashboardCardTile({ tile, dashboardId, editing, activeFilter }: 
             <Spinner label="Loading chart" />
           </div>
         ) : data && data.row_count > 0 ? (
-          <ChartRenderer spec={spec} data={data} title={title} className="h-64" />
+          <ChartRenderer
+            spec={spec}
+            data={data}
+            title={title}
+            className="h-64"
+            onSelectCategory={editing ? undefined : onSelectCategory}
+          />
         ) : isError ? (
           <EmptyState title="Couldn't load data" description="This tile's query failed to run." />
         ) : (

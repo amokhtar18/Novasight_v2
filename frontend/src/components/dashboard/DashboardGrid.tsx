@@ -33,6 +33,8 @@ interface DashboardGridProps {
   editing: boolean;
   /** View-time dashboard filter applied to matching semantic tiles. */
   activeFilter?: SemanticFilter | null;
+  /** Cross-filtering: set the dashboard filter from a clicked chart point. */
+  onCrossFilter?: (member: string, value: string) => void;
 }
 
 export function DashboardGrid({
@@ -40,6 +42,7 @@ export function DashboardGrid({
   dashboardId,
   editing,
   activeFilter,
+  onCrossFilter,
 }: DashboardGridProps) {
   const queryClient = useQueryClient();
   const setLayout = useSetDashboardLayout(dashboardId);
@@ -89,6 +92,7 @@ export function DashboardGrid({
               dashboardId={dashboardId}
               editing={editing}
               activeFilter={activeFilter}
+              onCrossFilter={onCrossFilter}
             />
           ))}
         </div>

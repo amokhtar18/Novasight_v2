@@ -251,6 +251,12 @@ interface ChartRendererProps {
   /** Optional accessible title for the chart region. */
   title?: string;
   className?: string;
+  /**
+   * Called with the clicked category when the user clicks a data point on a
+   * category-axis chart (bar/line/area/pie). Used for dashboard cross-filtering.
+   * Never fires for value-axis (scatter) or non-ECharts (table/number) renders.
+   */
+  onSelectCategory?: (category: string) => void;
 }
 
 /**
@@ -262,9 +268,17 @@ export function ChartRenderer({
   data,
   title,
   className = "",
+  onSelectCategory,
 }: ChartRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  // Latest select handler, read by the (once-attached) click listener so it never
+  // goes stale without re-binding the listener. Updated in an effect (not during
+  // render) per react-hooks rules.
+  const onSelectRef = useRef(onSelectCategory);
+  useEffect(() => {
+    onSelectRef.current = onSelectCategory;
+  });
   // Re-theme charts when the user flips light/dark.
   const { resolvedTheme } = useTheme();
 
@@ -276,6 +290,13 @@ export function ChartRenderer({
     if (!isEcharts || !containerRef.current) return;
     const instance = echarts.init(containerRef.current);
     chartRef.current = instance;
+
+    // Cross-filtering: a click on a category-axis point reports its category. Pie
+    // slices and bar/line/area categories carry a `name`; scatter points don't.
+    instance.on("click", (params) => {
+      const name = (params as { name?: string }).name;
+      if (name && onSelectRef.current) onSelectRef.current(String(name));
+    });
 
     const observer = new ResizeObserver(() => {
       instance.resize();

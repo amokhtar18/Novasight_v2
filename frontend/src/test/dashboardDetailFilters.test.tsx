@@ -20,7 +20,17 @@ vi.mock("@/api/hooks", () => ({
   useUpdateDashboard: vi.fn(),
 }));
 vi.mock("@/components/dashboard/DashboardGrid", () => ({
-  DashboardGrid: () => <div data-testid="grid" />,
+  DashboardGrid: ({
+    onCrossFilter,
+  }: {
+    onCrossFilter?: (member: string, value: string) => void;
+  }) => (
+    <div data-testid="grid">
+      {onCrossFilter && (
+        <button onClick={() => onCrossFilter("regional_sales.region", "west")}>cross</button>
+      )}
+    </div>
+  ),
 }));
 vi.mock("@/components/dashboard/DashboardFilterBar", () => ({
   DashboardFilterBar: ({
@@ -118,5 +128,19 @@ describe("DashboardDetail filter persistence", () => {
 
     fireEvent.click(screen.getByText("clear-filter"));
     expect(mutate).toHaveBeenLastCalledWith({ id: "dash-1", patch: { filters: [] } });
+  });
+
+  it("persists a cross-filter from a clicked chart point", () => {
+    // @ts-expect-error partial mock
+    vi.mocked(useDashboard).mockReturnValue({ data: board(), isLoading: false, isError: false });
+    render(<DashboardDetail />);
+
+    fireEvent.click(screen.getByText("cross"));
+    expect(mutate).toHaveBeenLastCalledWith({
+      id: "dash-1",
+      patch: {
+        filters: [{ member: "regional_sales.region", operator: "equals", values: ["west"] }],
+      },
+    });
   });
 });

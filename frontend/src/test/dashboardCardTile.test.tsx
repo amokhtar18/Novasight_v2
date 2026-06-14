@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 import type {
   ChartSpec,
@@ -33,8 +33,20 @@ vi.mock("@dnd-kit/sortable", () => ({
 }));
 vi.mock("@dnd-kit/utilities", () => ({ CSS: { Transform: { toString: () => "" } } }));
 vi.mock("@/components/chart/ChartRenderer", () => ({
-  ChartRenderer: ({ title }: { title?: string }) => (
-    <div role="img" aria-label={title ?? "chart"} data-testid="chart-renderer" />
+  ChartRenderer: ({
+    title,
+    onSelectCategory,
+  }: {
+    title?: string;
+    onSelectCategory?: (c: string) => void;
+  }) => (
+    <div role="img" aria-label={title ?? "chart"} data-testid="chart-renderer">
+      {onSelectCategory && (
+        <button type="button" onClick={() => onSelectCategory("west")}>
+          point
+        </button>
+      )}
+    </div>
   ),
 }));
 
@@ -137,5 +149,32 @@ describe("DashboardCardTile", () => {
     );
     expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined);
     expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
+  });
+
+  it("cross-filters from a clicked category using the tile's dimension", () => {
+    const onCrossFilter = vi.fn();
+    render(
+      <DashboardCardTile
+        tile={tile}
+        dashboardId="dash-1"
+        editing={false}
+        onCrossFilter={onCrossFilter}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "point" }));
+    expect(onCrossFilter).toHaveBeenCalledWith("regional_sales.region", "west");
+  });
+
+  it("does not wire cross-filtering while editing", () => {
+    const onCrossFilter = vi.fn();
+    render(
+      <DashboardCardTile
+        tile={tile}
+        dashboardId="dash-1"
+        editing={true}
+        onCrossFilter={onCrossFilter}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "point" })).not.toBeInTheDocument();
   });
 });

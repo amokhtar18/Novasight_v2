@@ -62,6 +62,11 @@ export function DashboardDetail() {
     }
   }
 
+  /** Cross-filtering: a clicked chart point sets the dashboard filter to that value. */
+  function handleCrossFilter(member: string, value: string) {
+    handleFilterChange({ member, operator: "equals", values: [value] });
+  }
+
   const backLink = (
     <Link
       to="/dashboards"
@@ -182,6 +187,7 @@ export function DashboardDetail() {
             dashboardId={board.id}
             editing={editing}
             activeFilter={editing ? null : activeFilter}
+            onCrossFilter={editing ? undefined : handleCrossFilter}
           />
         </>
       )}
