@@ -29,7 +29,7 @@ both reading the one canonical fixture so the two languages cannot drift.
 ```jsonc
 {
   "version": "1",                // contract version; bump on breaking changes
-  "type": "bar",                 // bar | line | area | pie | table | number
+  "type": "bar",                 // bar | line | area | pie | table | number | scatter
   "query": {                     // WHERE the data comes from (≥1 source required)
     "dataset_id": "…uuid…",      //   dataset the inline query runs against
     "query": { /* QueryRequest */ }, //   structured aggregation (Phase 1 path)
@@ -53,11 +53,13 @@ both reading the one canonical fixture so the two languages cannot drift.
 
 ### `type`
 
-`bar`, `line`, `area`, `pie`, `table`, `number`. `area` renders as a line series with
-an area fill. `table` presents the query result as columns. `number` is a single
-"big number" KPI tile that shows the **total of its first series** across the result
-(a single-aggregate query shows that value; a grouped query shows the grand total).
-`table` and `number` are the two types that may omit `encoding.x`.
+`bar`, `line`, `area`, `pie`, `table`, `number`, `scatter`. `area` renders as a line
+series with an area fill. `table` presents the query result as columns. `number` is a
+single "big number" KPI tile that shows the **total of its first series** across the
+result (a single-aggregate query shows that value; a grouped query shows the grand
+total). `scatter` plots each series' values against a **numeric `x`** (a value axis,
+not categories) as `[x, y]` points. `table` and `number` are the two types that may
+omit `encoding.x`; `scatter`, like the other axis charts, requires it.
 
 ### `query` — query/metric refs
 

@@ -104,6 +104,30 @@ def test_number_may_omit_x() -> None:
     assert spec.encoding.x is None
 
 
+def test_scatter_requires_x() -> None:
+    """Scatter plots x vs y, so (unlike table/number) it still needs encoding.x."""
+    with pytest.raises(ValidationError, match=r"requires encoding\.x"):
+        ChartSpec.model_validate(
+            {
+                "type": "scatter",
+                "query": {"metric_refs": ["m"]},
+                "encoding": {"series": [{"field": "rating"}]},
+            }
+        )
+
+
+def test_scatter_round_trips_with_x() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "scatter",
+            "query": {"metric_refs": ["orders.price", "orders.rating"]},
+            "encoding": {"x": "orders.price", "series": [{"field": "orders.rating"}]},
+        }
+    )
+    assert spec.type == "scatter"
+    assert spec.encoding.x == "orders.price"
+
+
 def test_at_least_one_series_required() -> None:
     with pytest.raises(ValidationError):
         ChartSpec.model_validate(

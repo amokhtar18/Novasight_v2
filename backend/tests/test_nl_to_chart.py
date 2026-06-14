@@ -380,15 +380,15 @@ async def test_unknown_extra_field_is_rejected() -> None:
 
 @pytest.mark.asyncio
 async def test_invalid_chart_type_is_rejected() -> None:
-    """An unsupported chart type (e.g. 'scatter') is rejected."""
+    """An unsupported chart type (e.g. 'treemap') is rejected."""
     ctx = _make_ctx()
-    bad_spec = {**_VALID_SPEC_DICT, "type": "scatter"}
+    bad_spec = {**_VALID_SPEC_DICT, "type": "treemap"}
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(bad_spec))
     )
 
     with pytest.raises(ChartValidationError):
-        await svc.generate(ctx, request="Show sales scatter")
+        await svc.generate(ctx, request="Show sales treemap")
 
     mock_query.assert_not_called()
 

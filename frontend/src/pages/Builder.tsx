@@ -46,7 +46,7 @@ import type {
   SemanticQueryRequest,
 } from "@/types/api";
 
-const CHART_TYPES: ChartType[] = ["bar", "line", "area", "pie", "table", "number"];
+const CHART_TYPES: ChartType[] = ["bar", "line", "area", "pie", "table", "number", "scatter"];
 const AGG_FUNCTIONS: AggFunction[] = ["count", "sum", "avg", "min", "max"];
 const METRIC_ALIAS = "value";
 const DEFAULT_LIMIT = 50;

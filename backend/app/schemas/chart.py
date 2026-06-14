@@ -47,8 +47,9 @@ FieldName = Annotated[
 # The chart kinds the renderer supports. ``table`` and ``number`` are included in
 # the contract (both are valid ways to present a query result) even though they are
 # not x/series charts; the renderer handles them specially. ``number`` is a single
-# "big number" KPI (the total of its series across the result).
-ChartType = Literal["bar", "line", "area", "pie", "table", "number"]
+# "big number" KPI (the total of its series across the result). ``scatter`` plots
+# each series against a numeric ``x`` (a value axis, not categories).
+ChartType = Literal["bar", "line", "area", "pie", "table", "number", "scatter"]
 
 
 class ChartQuery(BaseModel):

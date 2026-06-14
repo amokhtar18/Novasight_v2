@@ -149,6 +149,38 @@ describe("buildEChartsOption — error handling", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Scatter chart
+// ---------------------------------------------------------------------------
+
+describe("buildEChartsOption — scatter", () => {
+  const scatterData: QueryResponse = {
+    columns: ["price", "rating"],
+    rows: [
+      [10, 4.2],
+      [25, 3.8],
+    ],
+    row_count: 2,
+  };
+  const scatterSpec: ChartSpec = {
+    type: "scatter",
+    query: countQuery,
+    encoding: { x: "price", series: [{ field: "rating", name: "Rating" }] },
+  };
+
+  it("uses a value x-axis and emits [x, y] point data", () => {
+    const option = buildEChartsOption(scatterSpec, scatterData);
+    const xAxis = option.xAxis as { type: string };
+    expect(xAxis.type).toBe("value");
+    const series = option.series as Array<{ type: string; data: number[][] }>;
+    expect(series[0].type).toBe("scatter");
+    expect(series[0].data).toEqual([
+      [10, 4.2],
+      [25, 3.8],
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Number (KPI) tiles — rendered without ECharts
 // ---------------------------------------------------------------------------
 

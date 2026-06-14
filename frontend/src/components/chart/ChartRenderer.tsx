@@ -13,7 +13,7 @@ import { useEffect, useRef } from "react";
 
 // Tree-shaken ECharts imports — only load what we use.
 import * as echarts from "echarts/core";
-import { BarChart, LineChart, PieChart } from "echarts/charts";
+import { BarChart, LineChart, PieChart, ScatterChart } from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
@@ -34,6 +34,7 @@ echarts.use([
   BarChart,
   LineChart,
   PieChart,
+  ScatterChart,
   GridComponent,
   LegendComponent,
   TooltipComponent,
@@ -88,6 +89,56 @@ export function buildEChartsOption(
     throw new Error(`chart type "${spec.type}" requires encoding.x`);
   }
   const xIdx = colIndex(x);
+
+  if (spec.type === "scatter") {
+    // Scatter plots numeric x vs each series' y as [x, y] points (value axes).
+    const seriesList = series.map((s) => {
+      const yIdx = colIndex(s.field);
+      return {
+        name: seriesLabel(s),
+        type: "scatter" as const,
+        itemStyle: s.color ? { color: s.color } : undefined,
+        data: rows.map((row) => [
+          row[xIdx] === null ? 0 : (row[xIdx] as number),
+          row[yIdx] === null ? 0 : (row[yIdx] as number),
+        ]),
+      };
+    });
+
+    return {
+      color: theme.palette,
+      textStyle: { color: theme.text },
+      title: options.title
+        ? { text: options.title, textStyle: { color: theme.text } }
+        : undefined,
+      tooltip: {
+        trigger: "item",
+        backgroundColor: theme.tooltipBg,
+        borderColor: theme.tooltipBorder,
+        textStyle: { color: theme.text },
+      },
+      grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
+      legend: showLegend
+        ? { data: series.map(seriesLabel), textStyle: { color: theme.text }, top: 0 }
+        : undefined,
+      xAxis: {
+        type: "value",
+        name: options.x_axis_label ?? undefined,
+        axisLabel: { color: theme.text },
+        axisLine: { lineStyle: { color: theme.axisLine } },
+        splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
+        nameTextStyle: { color: theme.text },
+      },
+      yAxis: {
+        type: "value",
+        name: options.y_axis_label ?? undefined,
+        axisLabel: { color: theme.text },
+        splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
+        nameTextStyle: { color: theme.text },
+      },
+      series: seriesList,
+    };
+  }
 
   const categories = rows.map((row) => {
     const val = row[xIdx];
