@@ -141,6 +141,42 @@ describe("DashboardFilterBar", () => {
     expect(screen.queryByText(/Orders · Status/)).not.toBeInTheDocument();
   });
 
+  it("splits a comma list into multiple values for set-membership operators", () => {
+    const onChange = vi.fn();
+    render(
+      <DashboardFilterBar
+        value={{ member: "regional_sales.region", operator: "equals", values: [] }}
+        onChange={onChange}
+      />
+    );
+    fireEvent.change(document.querySelector("#dash-filter-val")!, {
+      target: { value: "west, east" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      member: "regional_sales.region",
+      operator: "equals",
+      values: ["west", "east"],
+    });
+  });
+
+  it("keeps a single value for comparison operators", () => {
+    const onChange = vi.fn();
+    render(
+      <DashboardFilterBar
+        value={{ member: "regional_sales.region", operator: "gt", values: [] }}
+        onChange={onChange}
+      />
+    );
+    fireEvent.change(document.querySelector("#dash-filter-val")!, {
+      target: { value: "100, 200" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      member: "regional_sales.region",
+      operator: "gt",
+      values: ["100"],
+    });
+  });
+
   it("clears the filter", () => {
     const onChange = vi.fn();
     render(

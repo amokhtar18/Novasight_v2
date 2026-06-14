@@ -270,8 +270,10 @@ and a value — **persisted on the dashboard** (`dashboards.filters` JSON, migra
 `0008`): changing it `PATCH`es `/dashboards/{id}` with `filters`, and the bar
 initialises from `DashboardRead.filters` on load, so it survives reload and is shared
 with anyone who opens the dashboard. Persisting a filter never widens data access — the
-query path re-validates the member every time a tile runs. Multi-value filters and
-dataset-tile filtering are later slices.
+query path re-validates the member every time a tile runs. Set-membership operators
+(`equals`/`notEquals`/`contains`/`notContains`) accept a **comma-separated list** of
+values (match any/none); comparison operators take a single value. Applying filters to
+dataset-path tiles is a later slice.
 
 ## Project structure
 

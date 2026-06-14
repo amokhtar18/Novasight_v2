@@ -54,6 +54,23 @@ const OPERATORS: { value: SemanticFilterOperator; label: string }[] = [
 
 const VALUELESS: ReadonlySet<SemanticFilterOperator> = new Set(["set", "notSet"]);
 
+// Set-membership operators accept a comma-separated list (matches any/none of them);
+// comparison operators (gt/gte/lt/lte) take a single value.
+const MULTI_VALUE: ReadonlySet<SemanticFilterOperator> = new Set([
+  "equals",
+  "notEquals",
+  "contains",
+  "notContains",
+]);
+
+/** Parse the value input for an operator into Cube's `values` list. */
+function parseValues(operator: SemanticFilterOperator, text: string): string[] {
+  if (VALUELESS.has(operator)) return [];
+  const parts = text.split(",").map((s) => s.trim()).filter(Boolean);
+  // Comparison operators take a single value; set-membership ops take the whole list.
+  return MULTI_VALUE.has(operator) ? parts : parts.slice(0, 1);
+}
+
 export function DashboardFilterBar({ value, onChange, cubes }: DashboardFilterBarProps) {
   const { data: models } = useSemanticModels();
 
@@ -75,7 +92,7 @@ export function DashboardFilterBar({ value, onChange, cubes }: DashboardFilterBa
 
   const member = value?.member ?? "";
   const operator: SemanticFilterOperator = value?.operator ?? "equals";
-  const text = value?.values[0] ?? "";
+  const text = value?.values.join(", ") ?? "";
 
   function emit(
     nextMember: string,
@@ -84,14 +101,15 @@ export function DashboardFilterBar({ value, onChange, cubes }: DashboardFilterBa
   ) {
     if (!nextMember) {
       onChange(null);
-    } else if (VALUELESS.has(nextOperator)) {
+      return;
+    }
+    if (VALUELESS.has(nextOperator)) {
       // Presence checks need no value — active as soon as a member is chosen.
       onChange({ member: nextMember, operator: nextOperator, values: [] });
-    } else if (nextText.trim()) {
-      onChange({ member: nextMember, operator: nextOperator, values: [nextText.trim()] });
-    } else {
-      onChange(null);
+      return;
     }
+    const values = parseValues(nextOperator, nextText);
+    onChange(values.length > 0 ? { member: nextMember, operator: nextOperator, values } : null);
   }
 
   // Nothing to filter on (no governed dimensions) → don't render the bar.
@@ -149,7 +167,7 @@ export function DashboardFilterBar({ value, onChange, cubes }: DashboardFilterBa
           id="dash-filter-val"
           value={valueless ? "" : text}
           onChange={(e) => emit(member, operator, e.target.value)}
-          placeholder={valueless ? "—" : "value"}
+          placeholder={valueless ? "—" : MULTI_VALUE.has(operator) ? "value, value, …" : "value"}
           disabled={!member || valueless}
           className="w-48"
         />
