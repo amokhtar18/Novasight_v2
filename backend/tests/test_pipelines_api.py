@@ -153,6 +153,31 @@ async def test_create_get_and_run_now(
 
 
 @pytest.mark.asyncio
+async def test_recent_runs_feed_and_isolation(
+    client_with_db: TestClient, make_tenant: Any, session: AsyncSession
+) -> None:
+    local = await make_tenant("local")
+    await make_tenant("other")
+    local_src = await _make_source(session, local)
+
+    pid = client_with_db.post(
+        "/api/v1/pipelines", headers=_auth("local", SU), json=_body(local_src, "local_pipe")
+    ).json()["id"]
+    run = client_with_db.post(f"/api/v1/pipelines/{pid}/run", headers=_auth("local", SU)).json()
+
+    # The literal /runs segment resolves to the feed (not parsed as a pipeline id).
+    feed = client_with_db.get("/api/v1/pipelines/runs", headers=_auth("local"))
+    assert feed.status_code == 200, feed.text
+    body = feed.json()
+    assert len(body) == 1
+    assert body[0]["id"] == run["id"]
+    assert body[0]["pipeline_name"] == "local_pipe"  # joined name present
+
+    # Another tenant sees none of local's runs.
+    assert client_with_db.get("/api/v1/pipelines/runs", headers=_auth("other")).json() == []
+
+
+@pytest.mark.asyncio
 async def test_create_rejects_cross_tenant_source(
     client_with_db: TestClient, make_tenant: Any, session: AsyncSession
 ) -> None:

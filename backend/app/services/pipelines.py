@@ -113,6 +113,24 @@ class PipelineService:
         )
         return list(result.scalars().all())
 
+    async def list_recent_runs(
+        self, ctx: TenantContext, limit: int = 50
+    ) -> list[tuple[PipelineRun, str]]:
+        """Recent runs across all the tenant's pipelines, newest first.
+
+        Returns each run paired with its pipeline's name (one query, no N+1) for the
+        Operations monitoring feed. Scoped to ``ctx.tenant_id`` — another tenant's
+        runs are never visible.
+        """
+        result = await self._db.execute(
+            select(PipelineRun, Pipeline.name)
+            .join(Pipeline, Pipeline.id == PipelineRun.pipeline_id)
+            .where(PipelineRun.tenant_id == uuid.UUID(ctx.tenant_id))
+            .order_by(PipelineRun.created_at.desc())
+            .limit(limit)
+        )
+        return [(run, name) for run, name in result.all()]
+
     async def run_now(self, ctx: TenantContext, pipeline_id: uuid.UUID) -> PipelineRun:
         """Record a queued run and enqueue its execution (off the request path)."""
         pipeline = await self.get_for_tenant(ctx, pipeline_id)

@@ -51,7 +51,11 @@ tenant context. Mutations and **run-now** require the tenant superuser role.
 - `PATCH`/`DELETE /pipelines/{id}` — update / delete.
 - `POST /pipelines/{id}/run` — **202**: records a `queued` PipelineRun and enqueues a
   worker; returns the run. A disabled pipeline returns 409.
-- `GET /pipelines/{id}/runs` — run history (status, rows, timings, error).
+- `GET /pipelines/{id}/runs` — run history for one pipeline (status, rows, timings, error).
+- `GET /pipelines/runs?limit=` — **tenant-wide** recent runs across all pipelines, newest
+  first, each joined to its `pipeline_name` (the Operations monitoring feed). Declared
+  before `/{pipeline_id}` so the literal `runs` segment isn't parsed as an id. Tenant-
+  scoped: another tenant's runs are never returned.
 
 A pipeline (or its source) from another tenant is indistinguishable from not-found
 (404). Implementation: `services/pipelines.py` (enqueue is injectable so the request
@@ -97,6 +101,24 @@ the periodiq heartbeat runs in the worker (registered in `app/reporting/worker.p
 
 UI: each pipeline row on `/pipelines` has a **Schedule** action (add cron schedules /
 delete them) and shows a *scheduled* badge.
+
+## Operations console (UI)
+
+The `/operations` page (`frontend/src/pages/Operations.tsx`) is the cross-pipeline
+control room — what the per-pipeline `/pipelines` view can't give:
+
+- **Schedules** — every cron schedule in the tenant in one list (cron + owning
+  pipeline name). A superuser can **pause/resume** (`PATCH /schedules/{id}` flipping
+  `enabled`) or delete; non-superusers see a read-only list (the backend enforces the
+  role regardless — the UI only hides controls).
+- **Recent runs** — the tenant-wide `GET /pipelines/runs` feed, polled every 10s so a
+  run's `queued → running → success | error` progress shows live, each row labelled with
+  its pipeline name, row count / error, and relative time.
+
+Both surfaces are tenant-scoped through the JWT and reuse the existing schedules /
+pipeline-runs APIs (no new write path). Covered by `frontend/src/test/operations.test.tsx`
+(empty states, feed rendering, pause flipping `enabled`, superuser gating) and the
+backend feed + isolation test in `backend/tests/test_pipelines_api.py`.
 
 ## Generic Dagster code location (#7)
 

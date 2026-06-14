@@ -41,6 +41,7 @@ import {
   listDbtModels,
   listPipelineRuns,
   listPipelines,
+  listRecentRuns,
   listSchedules,
   listSemanticModelDefs,
   listSemanticModels,
@@ -62,6 +63,7 @@ import {
   testSource,
   updateDashboard,
   updateDashboardTile,
+  updateSchedule,
   updateUser,
   uploadDataset,
 } from "./client";
@@ -81,6 +83,7 @@ import type {
   PipelineCreate,
   QueryRequest,
   ScheduleCreate,
+  ScheduleUpdate,
   SemanticModelDefCreate,
   SemanticQueryRequest,
   SourceConnectionCreate,
@@ -102,6 +105,7 @@ export const queryKeys = {
   sources: () => ["sources"] as const,
   pipelines: () => ["pipelines"] as const,
   pipelineRuns: (id: string) => ["pipelines", id, "runs"] as const,
+  recentRuns: () => ["pipelines", "runs", "recent"] as const,
   schedules: () => ["schedules"] as const,
   dbtModels: () => ["dbt-models"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
@@ -388,6 +392,19 @@ export function usePipelineRuns(id: string | null) {
   });
 }
 
+/**
+ * Query: recent runs across all the tenant's pipelines (the Operations monitor).
+ * Polls so the feed stays live while a run progresses.
+ */
+export function useRecentRuns(limit = 50) {
+  return useQuery({
+    queryKey: queryKeys.recentRuns(),
+    queryFn: () => listRecentRuns(limit),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
 /** Mutation: create a pipeline. Invalidates the pipelines list. */
 export function useCreatePipeline() {
   const client = useQueryClient();
@@ -435,6 +452,18 @@ export function useCreateSchedule() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: ScheduleCreate) => createSchedule(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.schedules() });
+    },
+  });
+}
+
+/** Mutation: update a schedule (e.g. pause/resume). Invalidates the schedules list. */
+export function useUpdateSchedule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: ScheduleUpdate }) =>
+      updateSchedule(id, patch),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.schedules() });
     },

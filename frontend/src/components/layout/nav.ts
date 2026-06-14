@@ -4,6 +4,7 @@
  */
 
 import {
+  Activity,
   BarChart3,
   Boxes,
   Database,
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutGrid, end: true },
   { to: "/data", label: "Data sources", icon: Database },
   { to: "/pipelines", label: "Pipelines", icon: Workflow },
+  { to: "/operations", label: "Operations", icon: Activity },
   { to: "/transforms", label: "Transforms", icon: Boxes },
   { to: "/models", label: "Semantic models", icon: Layers },
   { to: "/explore", label: "Ask AI", icon: Sparkles },
@@ -54,6 +56,7 @@ export function titleForPath(pathname: string): string {
   if (pathname === "/") return "Overview";
   if (pathname.startsWith("/data")) return "Data sources";
   if (pathname.startsWith("/pipelines")) return "Pipelines";
+  if (pathname.startsWith("/operations")) return "Operations";
   if (pathname.startsWith("/transforms")) return "Transforms";
   if (pathname.startsWith("/models")) return "Semantic models";
   if (pathname.startsWith("/explore")) return "Ask AI";

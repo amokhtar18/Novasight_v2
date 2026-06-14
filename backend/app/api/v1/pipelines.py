@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.core.security import Principal, require_tenant_superuser
 from app.models.pipeline import Pipeline, PipelineRun
@@ -18,6 +18,7 @@ from app.schemas.pipeline import (
     PipelineCreate,
     PipelineRead,
     PipelineRunRead,
+    PipelineRunSummary,
     PipelineUpdate,
 )
 from app.services.pipelines import PipelineService, get_pipeline_service
@@ -53,6 +54,21 @@ def _run_to_read(r: PipelineRun) -> PipelineRunRead:
     )
 
 
+def _run_to_summary(r: PipelineRun, pipeline_name: str) -> PipelineRunSummary:
+    return PipelineRunSummary(
+        id=r.id,
+        pipeline_id=r.pipeline_id,
+        pipeline_name=pipeline_name,
+        status=r.status,
+        dagster_run_id=r.dagster_run_id,
+        rows=r.rows,
+        started_at=r.started_at,
+        finished_at=r.finished_at,
+        error=r.error,
+        created_at=r.created_at,
+    )
+
+
 @router.get("", response_model=list[PipelineRead])
 async def list_pipelines(
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
@@ -60,6 +76,20 @@ async def list_pipelines(
 ) -> list[PipelineRead]:
     """List the tenant's pipelines."""
     return [_to_read(p) for p in await svc.list_for_tenant(ctx)]
+
+
+@router.get("/runs", response_model=list[PipelineRunSummary])
+async def list_recent_runs(
+    limit: int = Query(default=50, ge=1, le=200),
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: PipelineService = Depends(get_pipeline_service),  # noqa: B008
+) -> list[PipelineRunSummary]:
+    """Recent runs across all the tenant's pipelines (the monitoring feed).
+
+    Declared before ``/{pipeline_id}`` so the literal ``runs`` segment isn't parsed
+    as a pipeline id.
+    """
+    return [_run_to_summary(r, name) for r, name in await svc.list_recent_runs(ctx, limit)]
 
 
 @router.get("/{pipeline_id}", response_model=PipelineRead)

@@ -239,6 +239,11 @@ export interface PipelineRunRead {
   created_at: string;
 }
 
+/** A run joined with its pipeline's name — the tenant-wide monitoring feed. */
+export interface PipelineRunSummary extends PipelineRunRead {
+  pipeline_name: string;
+}
+
 // Schedules — /api/v1/schedules (mirrors schemas/schedule.py)
 export interface ScheduleRead {
   id: string;
@@ -256,6 +261,12 @@ export interface ScheduleCreate {
   target_kind?: "pipeline";
   target_id: string;
   cron: string;
+  enabled?: boolean;
+}
+
+export interface ScheduleUpdate {
+  name?: string;
+  cron?: string;
   enabled?: boolean;
 }
 

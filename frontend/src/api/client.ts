@@ -39,11 +39,13 @@ import type {
   PipelineCreate,
   PipelineRead,
   PipelineRunRead,
+  PipelineRunSummary,
   QueryRequest,
   QueryResponse,
   SavedChartRead,
   ScheduleCreate,
   ScheduleRead,
+  ScheduleUpdate,
   SourceConnectionCreate,
   SourceConnectionRead,
   SourceTestResponse,
@@ -314,6 +316,15 @@ export async function listPipelineRuns(id: string): Promise<PipelineRunRead[]> {
   return apiFetch<PipelineRunRead[]>(`/pipelines/${id}/runs`, {}, { Accept: "application/json" });
 }
 
+/** GET /pipelines/runs — recent runs across all the tenant's pipelines (monitoring feed). */
+export async function listRecentRuns(limit = 50): Promise<PipelineRunSummary[]> {
+  return apiFetch<PipelineRunSummary[]>(
+    `/pipelines/runs?limit=${limit}`,
+    {},
+    { Accept: "application/json" }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // ETL: schedules (mutations require superuser)
 // ---------------------------------------------------------------------------
@@ -328,6 +339,18 @@ export async function createSchedule(request: ScheduleCreate): Promise<ScheduleR
   return apiFetch<ScheduleRead>(
     "/schedules",
     { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** PATCH /schedules/{id} — partial update (e.g. pause/resume via `enabled`). */
+export async function updateSchedule(
+  id: string,
+  request: ScheduleUpdate
+): Promise<ScheduleRead> {
+  return apiFetch<ScheduleRead>(
+    `/schedules/${id}`,
+    { method: "PATCH", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
 }

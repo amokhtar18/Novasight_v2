@@ -79,3 +79,13 @@ class PipelineRunRead(BaseModel):
     finished_at: datetime.datetime | None
     error: str | None
     created_at: datetime.datetime
+
+
+class PipelineRunSummary(PipelineRunRead):
+    """A run with its pipeline's name — the tenant-wide monitoring feed.
+
+    Adds ``pipeline_name`` so the Operations view can show recent runs across all
+    of the tenant's pipelines without an extra per-run lookup.
+    """
+
+    pipeline_name: str
