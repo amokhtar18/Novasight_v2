@@ -27,10 +27,27 @@ export function DashboardDetail() {
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [activeFilter, setActiveFilter] = useState<SemanticFilter | null>(null);
+  // Track which dashboard the active filter was initialised from, so we seed it from
+  // the persisted filters once per dashboard without an effect (and without clobbering
+  // an in-session edit on a background refetch). This is React's "adjust state during
+  // render" pattern.
+  const [filterInitFor, setFilterInitFor] = useState<string | null>(null);
+  if (board && filterInitFor !== board.id) {
+    setFilterInitFor(board.id);
+    setActiveFilter(board.filters?.[0] ?? null);
+  }
 
   function commitRename() {
     if (board && nameDraft.trim() && nameDraft !== board.name) {
       updateDashboard.mutate({ id: board.id, patch: { name: nameDraft.trim() } });
+    }
+  }
+
+  /** Apply a filter and persist it on the dashboard so it survives reload/sharing. */
+  function handleFilterChange(filter: SemanticFilter | null) {
+    setActiveFilter(filter);
+    if (board) {
+      updateDashboard.mutate({ id: board.id, patch: { filters: filter ? [filter] : [] } });
     }
   }
 
@@ -143,7 +160,7 @@ export function DashboardDetail() {
       ) : (
         <>
           {!editing && (
-            <DashboardFilterBar value={activeFilter} onChange={setActiveFilter} />
+            <DashboardFilterBar value={activeFilter} onChange={handleFilterChange} />
           )}
           <DashboardGrid
             tiles={board.tiles}

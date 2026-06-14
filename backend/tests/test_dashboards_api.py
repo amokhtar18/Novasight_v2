@@ -114,6 +114,38 @@ def _make_chart(client: TestClient, tenant: str = "local", name: str = "Sales") 
 
 
 @pytest.mark.asyncio
+async def test_filters_persist_and_round_trip(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    did = client_with_db.post(
+        "/api/v1/dashboards", headers=_auth(), json={"name": "Sales"}
+    ).json()["id"]
+    # A new dashboard has no filters.
+    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["filters"] == []
+
+    # PATCH persists a filter; GET returns it.
+    patch = client_with_db.patch(
+        f"/api/v1/dashboards/{did}",
+        headers=_auth(),
+        json={
+            "filters": [
+                {"member": "regional_sales.region", "operator": "equals", "values": ["west"]}
+            ]
+        },
+    )
+    assert patch.status_code == 200, patch.text
+    got = client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()
+    assert got["filters"] == [
+        {"member": "regional_sales.region", "operator": "equals", "values": ["west"]}
+    ]
+
+    # Filters can be cleared with an empty list.
+    client_with_db.patch(f"/api/v1/dashboards/{did}", headers=_auth(), json={"filters": []})
+    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["filters"] == []
+
+
+@pytest.mark.asyncio
 async def test_create_pin_and_get(client_with_db: TestClient, make_tenant: Any) -> None:
     await make_tenant("local")
     chart_id = _make_chart(client_with_db)

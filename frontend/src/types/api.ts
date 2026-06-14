@@ -479,6 +479,8 @@ export interface DashboardRead {
   owner_id: string | null;
   created_at: string;
   updated_at: string;
+  /** View-time filters applied across the dashboard's matching semantic tiles. */
+  filters?: SemanticFilter[];
   tiles: DashboardTileRead[];
 }
 
@@ -490,6 +492,8 @@ export interface DashboardCreate {
 export interface DashboardUpdate {
   name?: string | null;
   description?: string | null;
+  /** Replaces the dashboard's view-time filters when provided. */
+  filters?: SemanticFilter[];
 }
 
 export interface DashboardTileCreate {

@@ -14,6 +14,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.schemas.saved_chart import ChartRead
+from app.schemas.semantic import SemanticFilter
 
 
 class DashboardCreate(BaseModel):
@@ -24,10 +25,17 @@ class DashboardCreate(BaseModel):
 
 
 class DashboardUpdate(BaseModel):
-    """Body for ``PATCH /dashboards/{id}`` — partial."""
+    """Body for ``PATCH /dashboards/{id}`` — partial.
+
+    ``filters`` (when provided) replaces the dashboard's view-time filters. Each
+    member is shape-validated here and re-validated against the governed allow-list
+    by the semantic query path when a tile runs — persisting a filter never widens
+    data access.
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
+    filters: list[SemanticFilter] | None = Field(default=None, max_length=20)
 
 
 class DashboardTileCreate(BaseModel):
@@ -102,4 +110,5 @@ class DashboardRead(BaseModel):
     owner_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    filters: list[SemanticFilter] = Field(default_factory=list)
     tiles: list[DashboardTileRead]

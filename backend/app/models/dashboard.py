@@ -8,8 +8,9 @@ superseded). Both tenant-scoped (see ``tenancy-isolation``).
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -28,6 +29,12 @@ class Dashboard(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # View-time dashboard filters (a list of SemanticFilter dicts). Applied to matching
+    # semantic tiles at render; each member is re-validated by the query path. Nullable
+    # so the column can be added to existing rows without a backfill (read as []).
+    filters: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True, default=list
     )
 
     tiles: Mapped[list[DashboardTile]] = relationship(
