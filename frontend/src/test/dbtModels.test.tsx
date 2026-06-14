@@ -71,6 +71,34 @@ describe("DbtModels wizard", () => {
     });
   });
 
+  it("posts a relationships test with its to/field config", async () => {
+    render(<DbtModels />);
+    fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);
+
+    setValue("dm-name", "mart_orders");
+    setValue("dm-sql", "select customer_id from {{ ref('stg') }}");
+    setValue("t-col-0", "customer_id");
+    setValue("t-type-0", "relationships");
+    // The to/field inputs appear once the type flips to relationships.
+    setValue("t-to-0", "ref('stg_customers')");
+    setValue("t-field-0", "id");
+
+    fireEvent.click(screen.getByRole("button", { name: /create model/i }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalled());
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: [
+          {
+            column_name: "customer_id",
+            test_type: "relationships",
+            config: { to: "ref('stg_customers')", field: "id" },
+          },
+        ],
+      })
+    );
+  });
+
   it("includes incremental settings when materialization is incremental", async () => {
     render(<DbtModels />);
     fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);

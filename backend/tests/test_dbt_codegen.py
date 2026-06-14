@@ -79,6 +79,25 @@ def test_render_schema_yml_groups_tests() -> None:
     assert accepted["accepted_values"]["values"] == ["west", "east"]
 
 
+def test_render_relationships_test() -> None:
+    model = DbtModelInput(
+        name="mart_orders",
+        materialization="table",
+        sql="select customer_id from {{ ref('stg_orders') }}",
+        tests=[
+            DbtTestInput(
+                test_type="relationships",
+                column_name="customer_id",
+                config={"to": "ref('stg_customers')", "field": "id"},
+            )
+        ],
+    )
+    parsed = yaml.safe_load(render_schema_yml([model]))
+    col = next(c for c in parsed["models"][0]["columns"] if c["name"] == "customer_id")
+    rel = next(t for t in col["data_tests"] if isinstance(t, dict))
+    assert rel["relationships"] == {"to": "ref('stg_customers')", "field": "id"}
+
+
 def test_writer_prunes_stale_models(tmp_path: Path) -> None:
     root = str(tmp_path / "models")
     write_tenant_dbt_models(root, "tenant_acme", [_model()])

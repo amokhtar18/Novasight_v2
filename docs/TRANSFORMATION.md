@@ -98,7 +98,9 @@ model `sql` (a SELECT), and optional column data tests.
   `GET/POST /api/v1/dbt-models`, `GET/PATCH/DELETE /api/v1/dbt-models/{id}`. Reads need
   a tenant context; mutations require the tenant superuser role. Names are unique per
   tenant; `layer`/`materialization`/`test_type` are closed sets; the SQL is the user's
-  transformation (custom SQL is a first-class dbt path).
+  transformation (custom SQL is a first-class dbt path). The wizard exposes all four
+  data tests: `not_null`, `unique`, `accepted_values` (a value list) and
+  `relationships` (referential integrity — a `to` model ref + `field` column).
 - **Codegen** (`backend/app/codegen/dbt_model.py`): the single writer. On every change
   the service re-renders the tenant's enabled models into
   `<DBT__MODELS_DIR>/tenant_<dbt_schema>/` — one `<name>.sql` (with a

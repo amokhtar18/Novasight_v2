@@ -39,7 +39,12 @@ import type {
 
 const LAYERS: DbtLayer[] = ["staging", "intermediate", "marts"];
 const MATERIALIZATIONS: DbtMaterialization[] = ["view", "table", "incremental"];
-const TEST_TYPES: DbtTestType[] = ["not_null", "unique", "accepted_values"];
+const TEST_TYPES: DbtTestType[] = [
+  "not_null",
+  "unique",
+  "accepted_values",
+  "relationships",
+];
 const STRATEGIES: DbtIncrementalStrategy[] = [
   "append",
   "merge",
@@ -57,9 +62,11 @@ interface TestRow {
   column: string;
   type: DbtTestType;
   values: string; // comma-separated, used for accepted_values
+  to: string; // relationships: the referenced model, e.g. ref('stg_customers')
+  field: string; // relationships: the referenced column
 }
 
-const emptyTest = (): TestRow => ({ column: "", type: "not_null", values: "" });
+const emptyTest = (): TestRow => ({ column: "", type: "not_null", values: "", to: "", field: "" });
 
 export function DbtModels() {
   const { data: models, isLoading } = useDbtModels();
@@ -101,7 +108,9 @@ export function DbtModels() {
         config:
           t.type === "accepted_values"
             ? { values: t.values.split(",").map((v) => v.trim()).filter(Boolean) }
-            : {},
+            : t.type === "relationships"
+              ? { to: t.to.trim(), field: t.field.trim() }
+              : {},
       }));
 
     const payload: DbtModelDefCreate = {
@@ -355,20 +364,51 @@ export function DbtModels() {
                     ))}
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`t-vals-${i}`} className="text-xs text-muted-foreground">
-                    Values
-                  </Label>
-                  <Input
-                    id={`t-vals-${i}`}
-                    value={row.values}
-                    onChange={(e) =>
-                      setTests((rows) => rows.map((r, j) => (j === i ? { ...r, values: e.target.value } : r)))
-                    }
-                    placeholder={row.type === "accepted_values" ? "west, east" : "(n/a)"}
-                    disabled={row.type !== "accepted_values"}
-                  />
-                </div>
+                {row.type === "relationships" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`t-to-${i}`} className="text-xs text-muted-foreground">
+                        To
+                      </Label>
+                      <Input
+                        id={`t-to-${i}`}
+                        value={row.to}
+                        onChange={(e) =>
+                          setTests((rows) => rows.map((r, j) => (j === i ? { ...r, to: e.target.value } : r)))
+                        }
+                        placeholder="ref('stg_customers')"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`t-field-${i}`} className="text-xs text-muted-foreground">
+                        Field
+                      </Label>
+                      <Input
+                        id={`t-field-${i}`}
+                        value={row.field}
+                        onChange={(e) =>
+                          setTests((rows) => rows.map((r, j) => (j === i ? { ...r, field: e.target.value } : r)))
+                        }
+                        placeholder="id"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Label htmlFor={`t-vals-${i}`} className="text-xs text-muted-foreground">
+                      Values
+                    </Label>
+                    <Input
+                      id={`t-vals-${i}`}
+                      value={row.values}
+                      onChange={(e) =>
+                        setTests((rows) => rows.map((r, j) => (j === i ? { ...r, values: e.target.value } : r)))
+                      }
+                      placeholder={row.type === "accepted_values" ? "west, east" : "(n/a)"}
+                      disabled={row.type !== "accepted_values"}
+                    />
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setTests((rows) => (rows.length > 1 ? rows.filter((_, j) => j !== i) : rows))}
