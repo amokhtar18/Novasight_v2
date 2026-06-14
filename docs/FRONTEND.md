@@ -255,10 +255,13 @@ Reordering/resizing persists through `PUT /dashboards/{id}/layout` with an optim
 cache update. See `docs/SEMANTIC_LAYER.md` for the API surface.
 
 **View-time filter bar** (`DashboardFilterBar`): in view mode the dashboard shows a
-filter — pick a governed dimension (from `/semantic/models`) + a value — handed to
-each tile via `DashboardGrid`. A tile applies it only when it is a **semantic** chart
-on the **same cube** as the filter member (a non-matching tile renders unfiltered and
-shows no "Filtered" badge), so a filter never breaks an unrelated tile. The filter
+filter — pick a governed dimension + a value — handed to each tile via `DashboardGrid`.
+The dimension list is scoped to the **cubes the dashboard's tiles actually use**
+(`DashboardDetail` derives the cube set from the tiles' specs), so the bar never offers
+a filter that would affect nothing. A tile applies the filter only when it is a
+**semantic** chart on the **same cube** as the filter member (a non-matching tile
+renders unfiltered and shows no "Filtered" badge), so a filter never breaks an
+unrelated tile. The filter
 flows into `useChartData(spec, filters)` → `/semantic/query`, where the server
 re-validates each member against the governed allow-list (`SemanticFilter`). It is a
 single filter — a governed dimension, an **operator** (`equals`/`notEquals`/`contains`/

@@ -24,6 +24,17 @@ import type { SemanticFilter, SemanticFilterOperator } from "@/types/api";
 interface DashboardFilterBarProps {
   value: SemanticFilter | null;
   onChange: (filter: SemanticFilter | null) => void;
+  /**
+   * The cubes present on the dashboard's tiles. When provided, only dimensions on
+   * those cubes are offered — a filter on a cube no tile uses would affect nothing.
+   * Omitted → offer every governed dimension.
+   */
+  cubes?: ReadonlySet<string>;
+}
+
+/** The cube a fully-qualified member belongs to (the part before the first dot). */
+function cubeOf(member: string): string | undefined {
+  return member.includes(".") ? member.split(".")[0] : undefined;
 }
 
 // Operators offered, with friendly labels. `set`/`notSet` are presence checks that
@@ -43,16 +54,23 @@ const OPERATORS: { value: SemanticFilterOperator; label: string }[] = [
 
 const VALUELESS: ReadonlySet<SemanticFilterOperator> = new Set(["set", "notSet"]);
 
-export function DashboardFilterBar({ value, onChange }: DashboardFilterBarProps) {
+export function DashboardFilterBar({ value, onChange, cubes }: DashboardFilterBarProps) {
   const { data: models } = useSemanticModels();
 
-  // Flatten every governed dimension into a pick list, labelled by its model.
+  // Flatten governed dimensions into a pick list, labelled by their model. When the
+  // dashboard's cubes are known, keep only dimensions on a cube some tile uses.
   const options = useMemo(
     () =>
-      (models ?? []).flatMap((m) =>
-        m.dimensions.map((d) => ({ value: d.name, label: `${m.title} · ${d.title}` }))
-      ),
-    [models]
+      (models ?? [])
+        .flatMap((m) =>
+          m.dimensions.map((d) => ({ value: d.name, label: `${m.title} · ${d.title}` }))
+        )
+        .filter((o) => {
+          if (!cubes) return true;
+          const cube = cubeOf(o.value);
+          return cube !== undefined && cubes.has(cube);
+        }),
+    [models, cubes]
   );
 
   const member = value?.member ?? "";

@@ -4,7 +4,7 @@
  * saved chart's grounded query, so the dashboard always reflects current data.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, LayoutDashboard, Pencil, Plus } from "lucide-react";
 
@@ -42,6 +42,17 @@ export function DashboardDetail() {
       updateDashboard.mutate({ id: board.id, patch: { name: nameDraft.trim() } });
     }
   }
+
+  // The cubes the dashboard's semantic tiles use — so the filter bar only offers
+  // dimensions that can actually affect a tile.
+  const tileCubes = useMemo(() => {
+    const cubes = new Set<string>();
+    for (const tile of board?.tiles ?? []) {
+      const member = (tile.chart.spec.query.metric_refs ?? [])[0];
+      if (member && member.includes(".")) cubes.add(member.split(".")[0]);
+    }
+    return cubes;
+  }, [board?.tiles]);
 
   /** Apply a filter and persist it on the dashboard so it survives reload/sharing. */
   function handleFilterChange(filter: SemanticFilter | null) {
@@ -160,7 +171,11 @@ export function DashboardDetail() {
       ) : (
         <>
           {!editing && (
-            <DashboardFilterBar value={activeFilter} onChange={handleFilterChange} />
+            <DashboardFilterBar
+              value={activeFilter}
+              onChange={handleFilterChange}
+              cubes={tileCubes}
+            />
           )}
           <DashboardGrid
             tiles={board.tiles}

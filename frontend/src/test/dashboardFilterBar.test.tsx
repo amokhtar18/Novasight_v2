@@ -115,6 +115,32 @@ describe("DashboardFilterBar", () => {
     expect(document.querySelector("#dash-filter-val")).toBeDisabled();
   });
 
+  it("offers only dimensions on a cube present in `cubes`", () => {
+    // @ts-expect-error partial mock
+    vi.mocked(useSemanticModels).mockReturnValue({
+      data: [
+        ...models,
+        {
+          name: "orders",
+          title: "Orders",
+          measures: [{ name: "orders.count", title: "Count", type: "number" }],
+          dimensions: [{ name: "orders.status", title: "Status", type: "string" }],
+        },
+      ],
+      isLoading: false,
+    });
+    // Only the regional_sales cube is on the dashboard → orders.status is hidden.
+    render(
+      <DashboardFilterBar
+        value={null}
+        onChange={vi.fn()}
+        cubes={new Set(["regional_sales"])}
+      />
+    );
+    expect(screen.getByText(/Regional Sales · Region/)).toBeInTheDocument();
+    expect(screen.queryByText(/Orders · Status/)).not.toBeInTheDocument();
+  });
+
   it("clears the filter", () => {
     const onChange = vi.fn();
     render(
