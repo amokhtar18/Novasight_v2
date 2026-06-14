@@ -7,8 +7,8 @@
  * an unrelated tile. The dimension options come from the tenant's governed semantic
  * models, so the bar can only offer fields the server will accept (it re-validates).
  *
- * This is intentionally a single equals filter for now; multi-value/operators are a
- * later slice. Nothing is persisted yet — the filter lives in page state.
+ * A single filter on one member; values is one entry. Multi-value and dataset-tile
+ * filtering are later slices. The filter is persisted by the dashboard.
  */
 
 import { useMemo } from "react";
@@ -19,12 +19,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import type { SemanticFilter } from "@/types/api";
+import type { SemanticFilter, SemanticFilterOperator } from "@/types/api";
 
 interface DashboardFilterBarProps {
   value: SemanticFilter | null;
   onChange: (filter: SemanticFilter | null) => void;
 }
+
+// Operators offered, with friendly labels. `set`/`notSet` are presence checks that
+// take no value (mirrors the closed set the API accepts).
+const OPERATORS: { value: SemanticFilterOperator; label: string }[] = [
+  { value: "equals", label: "equals" },
+  { value: "notEquals", label: "not equals" },
+  { value: "contains", label: "contains" },
+  { value: "notContains", label: "not contains" },
+  { value: "gt", label: ">" },
+  { value: "gte", label: "≥" },
+  { value: "lt", label: "<" },
+  { value: "lte", label: "≤" },
+  { value: "set", label: "is set" },
+  { value: "notSet", label: "is not set" },
+];
+
+const VALUELESS: ReadonlySet<SemanticFilterOperator> = new Set(["set", "notSet"]);
 
 export function DashboardFilterBar({ value, onChange }: DashboardFilterBarProps) {
   const { data: models } = useSemanticModels();
@@ -39,11 +56,21 @@ export function DashboardFilterBar({ value, onChange }: DashboardFilterBarProps)
   );
 
   const member = value?.member ?? "";
+  const operator: SemanticFilterOperator = value?.operator ?? "equals";
   const text = value?.values[0] ?? "";
 
-  function apply(nextMember: string, nextText: string) {
-    if (nextMember && nextText.trim()) {
-      onChange({ member: nextMember, operator: "equals", values: [nextText.trim()] });
+  function emit(
+    nextMember: string,
+    nextOperator: SemanticFilterOperator,
+    nextText: string
+  ) {
+    if (!nextMember) {
+      onChange(null);
+    } else if (VALUELESS.has(nextOperator)) {
+      // Presence checks need no value — active as soon as a member is chosen.
+      onChange({ member: nextMember, operator: nextOperator, values: [] });
+    } else if (nextText.trim()) {
+      onChange({ member: nextMember, operator: nextOperator, values: [nextText.trim()] });
     } else {
       onChange(null);
     }
@@ -51,6 +78,8 @@ export function DashboardFilterBar({ value, onChange }: DashboardFilterBarProps)
 
   // Nothing to filter on (no governed dimensions) → don't render the bar.
   if (options.length === 0) return null;
+
+  const valueless = VALUELESS.has(operator);
 
   return (
     <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border bg-card/50 p-3">
@@ -65,7 +94,7 @@ export function DashboardFilterBar({ value, onChange }: DashboardFilterBarProps)
         <Select
           id="dash-filter-dim"
           value={member}
-          onChange={(e) => apply(e.target.value, text)}
+          onChange={(e) => emit(e.target.value, operator, text)}
           className="w-56"
         >
           <option value="">No filter</option>
@@ -77,15 +106,33 @@ export function DashboardFilterBar({ value, onChange }: DashboardFilterBarProps)
         </Select>
       </div>
       <div className="space-y-1">
+        <Label htmlFor="dash-filter-op" className="text-xs text-muted-foreground">
+          Operator
+        </Label>
+        <Select
+          id="dash-filter-op"
+          value={operator}
+          onChange={(e) => emit(member, e.target.value as SemanticFilterOperator, text)}
+          disabled={!member}
+          className="w-36"
+        >
+          {OPERATORS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="space-y-1">
         <Label htmlFor="dash-filter-val" className="text-xs text-muted-foreground">
-          Equals
+          Value
         </Label>
         <Input
           id="dash-filter-val"
-          value={text}
-          onChange={(e) => apply(member, e.target.value)}
-          placeholder="value"
-          disabled={!member}
+          value={valueless ? "" : text}
+          onChange={(e) => emit(member, operator, e.target.value)}
+          placeholder={valueless ? "—" : "value"}
+          disabled={!member || valueless}
           className="w-48"
         />
       </div>

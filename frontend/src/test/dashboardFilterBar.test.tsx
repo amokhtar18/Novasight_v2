@@ -73,6 +73,48 @@ describe("DashboardFilterBar", () => {
     });
   });
 
+  it("keeps the chosen operator when a value is typed", () => {
+    const onChange = vi.fn();
+    render(
+      <DashboardFilterBar
+        value={{ member: "regional_sales.region", operator: "contains", values: [] }}
+        onChange={onChange}
+      />
+    );
+    fireEvent.change(document.querySelector("#dash-filter-val")!, { target: { value: "wes" } });
+    expect(onChange).toHaveBeenLastCalledWith({
+      member: "regional_sales.region",
+      operator: "contains",
+      values: ["wes"],
+    });
+  });
+
+  it("emits a valueless filter immediately when a presence operator is picked", () => {
+    const onChange = vi.fn();
+    render(
+      <DashboardFilterBar
+        value={{ member: "regional_sales.region", operator: "equals", values: ["west"] }}
+        onChange={onChange}
+      />
+    );
+    fireEvent.change(document.querySelector("#dash-filter-op")!, { target: { value: "set" } });
+    expect(onChange).toHaveBeenLastCalledWith({
+      member: "regional_sales.region",
+      operator: "set",
+      values: [],
+    });
+  });
+
+  it("disables the value input for a presence operator", () => {
+    render(
+      <DashboardFilterBar
+        value={{ member: "regional_sales.region", operator: "set", values: [] }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(document.querySelector("#dash-filter-val")).toBeDisabled();
+  });
+
   it("clears the filter", () => {
     const onChange = vi.fn();
     render(

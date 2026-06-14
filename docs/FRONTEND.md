@@ -261,12 +261,14 @@ on the **same cube** as the filter member (a non-matching tile renders unfiltere
 shows no "Filtered" badge), so a filter never breaks an unrelated tile. The filter
 flows into `useChartData(spec, filters)` → `/semantic/query`, where the server
 re-validates each member against the governed allow-list (`SemanticFilter`). It is a
-single `equals` filter, **persisted on the dashboard** (`dashboards.filters` JSON,
-migration `0008`): changing it `PATCH`es `/dashboards/{id}` with `filters`, and the
-bar initialises from `DashboardRead.filters` on load, so it survives reload and is
-shared with anyone who opens the dashboard. Persisting a filter never widens data
-access — the query path re-validates the member every time a tile runs.
-Multi-value/operators are a later slice.
+single filter — a governed dimension, an **operator** (`equals`/`notEquals`/`contains`/
+`notContains`/`gt`/`gte`/`lt`/`lte`, plus the value-less presence checks `set`/`notSet`),
+and a value — **persisted on the dashboard** (`dashboards.filters` JSON, migration
+`0008`): changing it `PATCH`es `/dashboards/{id}` with `filters`, and the bar
+initialises from `DashboardRead.filters` on load, so it survives reload and is shared
+with anyone who opens the dashboard. Persisting a filter never widens data access — the
+query path re-validates the member every time a tile runs. Multi-value filters and
+dataset-tile filtering are later slices.
 
 ## Project structure
 
