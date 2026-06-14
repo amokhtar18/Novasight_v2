@@ -297,9 +297,20 @@ export interface DimensionDef {
   primary_key?: boolean;
 }
 
+export type SemanticJoinRelationship = "one_to_one" | "one_to_many" | "many_to_one";
+
+/** A join from this model to another cube by column equality. */
+export interface SemanticJoinDef {
+  name: string;
+  relationship: SemanticJoinRelationship;
+  local_key: string;
+  foreign_key: string;
+}
+
 export interface SemanticModelConfig {
   measures: MeasureDef[];
   dimensions: DimensionDef[];
+  joins?: SemanticJoinDef[];
 }
 
 export interface SemanticModelDefRead {

@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.codegen import CubeModelInput, render_tenant_models, tenant_model_relpath
 from app.schemas.semantic_model import (
     DimensionDef,
+    JoinDef,
     MeasureDef,
     SemanticModelConfig,
 )
@@ -40,6 +41,38 @@ def test_render_emits_cube_without_guard() -> None:
     assert 'region: { sql: "region", type: "string"' in js
     assert "public: true" in js
     assert "primaryKey: true" in js
+
+
+def test_render_joins_block() -> None:
+    config = SemanticModelConfig(
+        measures=[MeasureDef(name="rows", type="count")],
+        joins=[
+            JoinDef(
+                name="customers",
+                relationship="many_to_one",
+                local_key="customer_id",
+                foreign_key="id",
+            )
+        ],
+    )
+    js = render_tenant_models([CubeModelInput("orders", "mart_orders", config)])
+    assert "joins: {" in js
+    assert "relationship: `many_to_one`" in js
+    # The join condition is built from validated identifiers only.
+    expected = (
+        "customers: { relationship: `many_to_one`, "
+        "sql: `${CUBE}.customer_id = ${customers}.id` }"
+    )
+    assert expected in js
+
+
+def test_no_joins_block_when_empty() -> None:
+    js = render_tenant_models(
+        [CubeModelInput("m", "t", SemanticModelConfig(
+            measures=[MeasureDef(name="rows", type="count")],
+        ))]
+    )
+    assert "joins:" not in js
 
 
 def test_count_measure_omits_sql() -> None:

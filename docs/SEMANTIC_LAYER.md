@@ -438,10 +438,22 @@ Cube model file.
 
 - **`GET/POST /api/v1/semantic-models`**, **`GET/PATCH/DELETE /api/v1/semantic-models/{id}`**
   — tenant-scoped CRUD over model definitions (name, `base_table`, and `config` =
-  measures + dimensions). Reads need a tenant context; **mutations require the tenant
-  superuser role** (defining the governed layer writes to the shared Cube model volume
-  and affects every query). Names are unique per tenant (a name becomes a cube name).
+  measures + dimensions + optional joins). Reads need a tenant context; **mutations require
+  the tenant superuser role** (defining the governed layer writes to the shared Cube model
+  volume and affects every query). Names are unique per tenant (a name becomes a cube name).
   Members and column refs are strict identifiers — no arbitrary SQL reaches the model.
+
+#### Joins
+
+A model's `config.joins` (schema `JoinDef`) declares joins to **other cubes** so a query
+can combine their members. Each join is `{ name (target cube), relationship
+(one_to_one/one_to_many/many_to_one), local_key, foreign_key }` — all validated
+identifiers plus a closed relationship literal, **never free SQL**. The codegen renders a
+Cube `joins` block whose condition is built from those identifiers:
+`` sql: `${CUBE}.<local_key> = ${<target>}.<foreign_key>` `` (so it stays injection-free,
+the same posture as members). A model may join each target cube at most once (422
+otherwise). Models with no joins render exactly as before (no `joins` block). The wizard
+exposes an optional Joins section.
 
 ### Codegen — directory-level isolation via repositoryFactory
 

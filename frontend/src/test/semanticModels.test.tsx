@@ -77,6 +77,41 @@ describe("SemanticModels", () => {
     });
   });
 
+  it("includes a join when a join row is filled", async () => {
+    render(<SemanticModels />);
+    fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);
+
+    setValue("sm-name", "orders");
+    setValue("sm-table", "mart_orders");
+    setValue("m-name-0", "rows");
+    setValue("m-type-0", "count");
+
+    // Joins start collapsed; the Joins section's "Add" is the last Add button.
+    const addButtons = screen.getAllByRole("button", { name: /^add$/i });
+    fireEvent.click(addButtons[addButtons.length - 1]);
+    setValue("j-name-0", "customers");
+    setValue("j-local-0", "customer_id");
+    setValue("j-foreign-0", "id");
+
+    fireEvent.click(screen.getByRole("button", { name: /create model/i }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalled());
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          joins: [
+            {
+              name: "customers",
+              relationship: "many_to_one",
+              local_key: "customer_id",
+              foreign_key: "id",
+            },
+          ],
+        }),
+      })
+    );
+  });
+
   it("lists existing models with member counts", () => {
     // @ts-expect-error partial mock
     mockDefs.mockReturnValue({

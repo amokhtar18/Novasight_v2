@@ -34,11 +34,17 @@ import {
 import type {
   DimensionType,
   MeasureType,
+  SemanticJoinRelationship,
   SemanticModelDefCreate,
 } from "@/types/api";
 
 const MEASURE_TYPES: MeasureType[] = ["count", "sum", "avg", "min", "max", "count_distinct"];
 const DIMENSION_TYPES: DimensionType[] = ["string", "number", "time", "boolean"];
+const JOIN_RELATIONSHIPS: SemanticJoinRelationship[] = [
+  "many_to_one",
+  "one_to_many",
+  "one_to_one",
+];
 
 interface MeasureRow {
   name: string;
@@ -50,9 +56,21 @@ interface DimensionRow {
   type: DimensionType;
   sql: string;
 }
+interface JoinRow {
+  name: string;
+  relationship: SemanticJoinRelationship;
+  localKey: string;
+  foreignKey: string;
+}
 
 const emptyMeasure = (): MeasureRow => ({ name: "", type: "sum", sql: "" });
 const emptyDimension = (): DimensionRow => ({ name: "", type: "string", sql: "" });
+const emptyJoin = (): JoinRow => ({
+  name: "",
+  relationship: "many_to_one",
+  localKey: "",
+  foreignKey: "",
+});
 
 export function SemanticModels() {
   const { data: models, isLoading } = useSemanticModelDefs();
@@ -64,6 +82,7 @@ export function SemanticModels() {
   const [baseTable, setBaseTable] = useState("");
   const [measures, setMeasures] = useState<MeasureRow[]>([emptyMeasure()]);
   const [dimensions, setDimensions] = useState<DimensionRow[]>([emptyDimension()]);
+  const [joins, setJoins] = useState<JoinRow[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   function reset() {
@@ -71,6 +90,7 @@ export function SemanticModels() {
     setBaseTable("");
     setMeasures([emptyMeasure()]);
     setDimensions([emptyDimension()]);
+    setJoins([]);
   }
 
   async function handleCreate() {
@@ -84,6 +104,14 @@ export function SemanticModels() {
     const cleanDimensions = dimensions
       .filter((d) => d.name.trim())
       .map((d) => ({ name: d.name.trim(), type: d.type, sql: d.sql.trim() }));
+    const cleanJoins = joins
+      .filter((j) => j.name.trim() && j.localKey.trim() && j.foreignKey.trim())
+      .map((j) => ({
+        name: j.name.trim(),
+        relationship: j.relationship,
+        local_key: j.localKey.trim(),
+        foreign_key: j.foreignKey.trim(),
+      }));
 
     if (!name.trim() || !baseTable.trim()) {
       toast.error("Name and base table are required");
@@ -97,7 +125,11 @@ export function SemanticModels() {
     const payload: SemanticModelDefCreate = {
       name: name.trim(),
       base_table: baseTable.trim(),
-      config: { measures: cleanMeasures, dimensions: cleanDimensions },
+      config: {
+        measures: cleanMeasures,
+        dimensions: cleanDimensions,
+        ...(cleanJoins.length > 0 ? { joins: cleanJoins } : {}),
+      },
     };
     try {
       const created = await createModel.mutateAsync(payload);
@@ -166,6 +198,11 @@ export function SemanticModels() {
                   {m.config.dimensions.length} dimension
                   {m.config.dimensions.length === 1 ? "" : "s"}
                 </Badge>
+                {m.config.joins && m.config.joins.length > 0 && (
+                  <Badge variant="secondary">
+                    {m.config.joins.length} join{m.config.joins.length === 1 ? "" : "s"}
+                  </Badge>
+                )}
                 {!m.enabled && <Badge variant="info">disabled</Badge>}
               </div>
               <button
@@ -302,6 +339,70 @@ export function SemanticModels() {
                 />
               </div>
             ))}
+          </MemberSection>
+
+          {/* Joins (optional) */}
+          <MemberSection
+            title="Joins (optional)"
+            onAdd={() => setJoins((rows) => [...rows, emptyJoin()])}
+          >
+            {joins.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Join another model to query its members alongside this one.
+              </p>
+            ) : (
+              joins.map((row, i) => (
+                <div key={i} className="grid grid-cols-[1fr_9rem_1fr_1fr_auto] items-end gap-2">
+                  <Field label="Target model" htmlFor={`j-name-${i}`}>
+                    <Input
+                      id={`j-name-${i}`}
+                      value={row.name}
+                      onChange={(e) => setJoins(update(joins, i, { name: e.target.value }))}
+                      placeholder="customers"
+                    />
+                  </Field>
+                  <Field label="Relationship" htmlFor={`j-rel-${i}`}>
+                    <Select
+                      id={`j-rel-${i}`}
+                      value={row.relationship}
+                      onChange={(e) =>
+                        setJoins(
+                          update(joins, i, {
+                            relationship: e.target.value as SemanticJoinRelationship,
+                          })
+                        )
+                      }
+                    >
+                      {JOIN_RELATIONSHIPS.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="This column" htmlFor={`j-local-${i}`}>
+                    <Input
+                      id={`j-local-${i}`}
+                      value={row.localKey}
+                      onChange={(e) => setJoins(update(joins, i, { localKey: e.target.value }))}
+                      placeholder="customer_id"
+                    />
+                  </Field>
+                  <Field label="Target column" htmlFor={`j-foreign-${i}`}>
+                    <Input
+                      id={`j-foreign-${i}`}
+                      value={row.foreignKey}
+                      onChange={(e) => setJoins(update(joins, i, { foreignKey: e.target.value }))}
+                      placeholder="id"
+                    />
+                  </Field>
+                  <RemoveButton
+                    label={`Remove join ${i + 1}`}
+                    onClick={() => setJoins((rows) => rows.filter((_, j) => j !== i))}
+                  />
+                </div>
+              ))
+            )}
           </MemberSection>
         </div>
 

@@ -25,7 +25,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.schemas.semantic_model import DimensionDef, MeasureDef, SemanticModelConfig
+from app.schemas.semantic_model import (
+    DimensionDef,
+    JoinDef,
+    MeasureDef,
+    SemanticModelConfig,
+)
 
 # NovaSight measure type → Cube measure type.
 _MEASURE_TYPE: dict[str, str] = {
@@ -97,14 +102,17 @@ def _render_cube(model: CubeModelInput) -> str:
     # are safe inside the backtick templates below.
     measures = ",\n".join(_render_measure(m) for m in model.config.measures)
     dimensions = ",\n".join(_render_dimension(d) for d in model.config.dimensions)
-    return (
-        f"cube(`{model.name}`, {{\n"
+    parts = [
         f"  sql_table: `\\`${{COMPILE_CONTEXT.securityContext.clickhouse_db}}\\`."
-        f"\\`{model.base_table}\\``,\n"
-        f"  measures: {{\n{measures}\n  }},\n"
-        f"  dimensions: {{\n{dimensions}\n  }},\n"
-        f"}});"
-    )
+        f"\\`{model.base_table}\\``,",
+    ]
+    if model.config.joins:
+        joins = ",\n".join(_render_join(j) for j in model.config.joins)
+        parts.append(f"  joins: {{\n{joins}\n  }},")
+    parts.append(f"  measures: {{\n{measures}\n  }},")
+    parts.append(f"  dimensions: {{\n{dimensions}\n  }},")
+    body = "\n".join(parts)
+    return f"cube(`{model.name}`, {{\n{body}\n}});"
 
 
 def _render_measure(m: MeasureDef) -> str:
@@ -116,6 +124,13 @@ def _render_measure(m: MeasureDef) -> str:
     if m.description:
         parts.append(f"description: {json.dumps(m.description)}")
     return f"    {m.name}: {{ {', '.join(parts)} }}"
+
+
+def _render_join(j: JoinDef) -> str:
+    # All identifiers (target cube + both key columns) → safe inside the template.
+    # ``${CUBE}`` is this cube's alias; ``${<target>}`` is the joined cube's alias.
+    sql = f"`${{CUBE}}.{j.local_key} = ${{{j.name}}}.{j.foreign_key}`"
+    return f"    {j.name}: {{ relationship: `{j.relationship}`, sql: {sql} }}"
 
 
 def _render_dimension(d: DimensionDef) -> str:

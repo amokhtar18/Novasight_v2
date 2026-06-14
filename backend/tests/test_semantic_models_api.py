@@ -146,6 +146,51 @@ async def test_create_writes_codegen_and_round_trips(
 
 
 @pytest.mark.asyncio
+async def test_join_round_trips_and_renders(
+    client_with_db: TestClient, make_tenant: Any, model_dir: Path
+) -> None:
+    await make_tenant("local")
+    body = {
+        "name": "orders",
+        "base_table": "mart_orders",
+        "config": {
+            "measures": [{"name": "rows", "type": "count"}],
+            "dimensions": [{"name": "status", "type": "string", "sql": "status"}],
+            "joins": [
+                {
+                    "name": "customers",
+                    "relationship": "many_to_one",
+                    "local_key": "customer_id",
+                    "foreign_key": "id",
+                }
+            ],
+        },
+    }
+    resp = client_with_db.post("/api/v1/semantic-models", headers=_auth("local", SU), json=body)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["config"]["joins"][0]["name"] == "customers"
+
+    db = resources_for_slug("local").clickhouse_db
+    generated = (model_dir / db / "models.js").read_text(encoding="utf-8")
+    assert "joins: {" in generated
+    assert "${CUBE}.customer_id = ${customers}.id" in generated
+
+
+@pytest.mark.asyncio
+async def test_duplicate_join_target_rejected(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    body = _model_body("orders")
+    body["config"]["joins"] = [
+        {"name": "customers", "relationship": "many_to_one", "local_key": "c", "foreign_key": "id"},
+        {"name": "customers", "relationship": "one_to_one", "local_key": "c2", "foreign_key": "id"},
+    ]
+    resp = client_with_db.post("/api/v1/semantic-models", headers=_auth("local", SU), json=body)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_duplicate_name_conflicts(client_with_db: TestClient, make_tenant: Any) -> None:
     await make_tenant("local")
     client_with_db.post("/api/v1/semantic-models", headers=_auth("local", SU), json=_model_body())

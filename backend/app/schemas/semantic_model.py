@@ -32,6 +32,9 @@ MeasureType = Literal["count", "sum", "avg", "min", "max", "count_distinct"]
 # Cube dimension types (closed set).
 DimensionType = Literal["string", "number", "time", "boolean"]
 
+# Cube join cardinality (closed set).
+JoinRelationship = Literal["one_to_one", "one_to_many", "many_to_one"]
+
 
 class MeasureDef(BaseModel):
     """One governed measure, e.g. ``sum(amount) AS total_amount``."""
@@ -61,11 +64,27 @@ class DimensionDef(BaseModel):
     primary_key: bool = False
 
 
+class JoinDef(BaseModel):
+    """A join to another cube: ``this.local_key = <name>.foreign_key``.
+
+    ``name`` is the **target cube** (another semantic model) to join to. The join is
+    expressed only as an equality of two **column identifiers** plus a closed
+    ``relationship`` literal — no free SQL — so the codegen renders it injection-free
+    (same defense-in-depth posture as measures/dimensions).
+    """
+
+    name: Identifier
+    relationship: JoinRelationship
+    local_key: Identifier
+    foreign_key: Identifier
+
+
 class SemanticModelConfig(BaseModel):
-    """The wizard payload: the measures + dimensions of a model."""
+    """The wizard payload: the measures + dimensions (+ joins) of a model."""
 
     measures: list[MeasureDef] = Field(default_factory=list)
     dimensions: list[DimensionDef] = Field(default_factory=list)
+    joins: list[JoinDef] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _require_members_and_unique_names(self) -> SemanticModelConfig:
@@ -74,6 +93,9 @@ class SemanticModelConfig(BaseModel):
         names = [m.name for m in self.measures] + [d.name for d in self.dimensions]
         if len(names) != len(set(names)):
             raise ValueError("measure/dimension names must be unique within a model")
+        join_targets = [j.name for j in self.joins]
+        if len(join_targets) != len(set(join_targets)):
+            raise ValueError("a model can join each target cube at most once")
         return self
 
 
