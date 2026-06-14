@@ -14,6 +14,7 @@ import { LayoutDashboard, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAddDashboardTile, useCreateChart, useCreateDashboard, useDashboards } from "@/api/hooks";
+import { useIdentity } from "@/lib/identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,7 @@ export function AddToDashboard({
   className,
 }: AddToDashboardProps) {
   const navigate = useNavigate();
+  const { canEdit } = useIdentity();
   const { data: boards = [] } = useDashboards();
   const createChart = useCreateChart();
   const createDashboard = useCreateDashboard();
@@ -65,6 +67,9 @@ export function AddToDashboard({
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<string>(NEW);
   const [newName, setNewName] = useState("");
+
+  // Read-only viewers don't see content-creation controls (the backend also rejects).
+  if (!canEdit) return null;
 
   const creating = target === NEW || boards.length === 0;
   const pending = createChart.isPending || createDashboard.isPending || addTile.isPending;

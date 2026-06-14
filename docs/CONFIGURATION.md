@@ -46,6 +46,7 @@ human reference.
 | `AUTH__ROLES_CLAIM` | str | `"roles"` | deployment | Name of the JWT claim carrying the principal's roles list. |
 | `AUTH__PLATFORM_ADMIN_ROLE` | str | `"platform_admin"` | deployment | Role required to operate the control plane (provision/de-provision tenants). Platform role, not tenant-scoped. |
 | `AUTH__TENANT_SUPERUSER_ROLE` | str | `"superuser"` | deployment | Tenant-scoped role required to create/run/schedule pipelines and dbt jobs. A platform admin is implicitly allowed. |
+| `AUTH__TENANT_VIEWER_ROLE` | str | `"viewer"` | deployment | Tenant-scoped **restricting** role: a user holding it is read-only and cannot create/edit content (charts, dashboards). A superuser/platform admin outranks it; a user with no roles is a normal member. |
 | `DAGSTER__GRAPHQL_URL` | str | `""` | deployment | Dagster GraphQL endpoint the backend uses to launch runs + reload the code location (e.g. `http://dagster:3000/graphql`). Empty disables the control plane; orchestration endpoints then fail closed with 503. |
 | `DAGSTER__REPOSITORY_LOCATION` / `__REPOSITORY_NAME` | str | `novasight_orchestration` / `__repository__` | convention | Code location (the `-m` module) and Definitions repository name the dynamic jobs/schedules live in. |
 | `SEED_TENANT__SLUG` / `__NAME` / `__ADMIN_EMAIL` | str | — | deployment | bootstrap tenant identity used by the seed script; slug derives the tenant's Iceberg namespace / ClickHouse db / dbt schema |

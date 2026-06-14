@@ -36,6 +36,7 @@ import type { UserRead } from "@/types/api";
 
 const SUPERUSER_ROLE = "superuser";
 const PLATFORM_ADMIN_ROLE = "platform_admin";
+const VIEWER_ROLE = "viewer";
 
 function errMsg(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -54,6 +55,7 @@ export function UsersPanel() {
   const [password, setPassword] = useState("");
   const [superuser, setSuperuser] = useState(false);
   const [platformAdmin, setPlatformAdmin] = useState(false);
+  const [viewer, setViewer] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<UserRead | null>(null);
 
@@ -63,6 +65,7 @@ export function UsersPanel() {
     setPassword("");
     setSuperuser(false);
     setPlatformAdmin(false);
+    setViewer(false);
   }
 
   function handleCreate(e: React.FormEvent) {
@@ -70,6 +73,7 @@ export function UsersPanel() {
     const roles = [
       ...(superuser ? [SUPERUSER_ROLE] : []),
       ...(platformAdmin ? [PLATFORM_ADMIN_ROLE] : []),
+      ...(viewer ? [VIEWER_ROLE] : []),
     ];
     createUser.mutate(
       { email: email.trim(), name: name.trim() || null, password, roles },
@@ -145,6 +149,7 @@ export function UsersPanel() {
                 <tr>
                   <th className="px-3 py-2 font-medium">User</th>
                   <th className="px-3 py-2 font-medium">Superuser</th>
+                  <th className="px-3 py-2 font-medium">Viewer</th>
                   {isPlatformAdmin && <th className="px-3 py-2 font-medium">Platform admin</th>}
                   <th className="px-3 py-2 font-medium">Active</th>
                   <th className="px-3 py-2" />
@@ -162,6 +167,13 @@ export function UsersPanel() {
                         checked={u.roles.includes(SUPERUSER_ROLE)}
                         onCheckedChange={(on) => toggleRole(u, SUPERUSER_ROLE, on)}
                         aria-label="Toggle superuser"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Switch
+                        checked={u.roles.includes(VIEWER_ROLE)}
+                        onCheckedChange={(on) => toggleRole(u, VIEWER_ROLE, on)}
+                        aria-label="Toggle viewer (read-only)"
                       />
                     </td>
                     {isPlatformAdmin && (
@@ -198,7 +210,10 @@ export function UsersPanel() {
                 ))}
                 {(users ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                    <td
+                      colSpan={isPlatformAdmin ? 6 : 5}
+                      className="px-3 py-6 text-center text-muted-foreground"
+                    >
                       No users yet.
                     </td>
                   </tr>
@@ -247,6 +262,10 @@ export function UsersPanel() {
           <div className="flex items-center justify-between">
             <Label htmlFor="u-superuser">Superuser (manage data + schedules)</Label>
             <Switch id="u-superuser" checked={superuser} onCheckedChange={setSuperuser} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="u-viewer">Viewer (read-only)</Label>
+            <Switch id="u-viewer" checked={viewer} onCheckedChange={setViewer} />
           </div>
           {isPlatformAdmin && (
             <div className="flex items-center justify-between">

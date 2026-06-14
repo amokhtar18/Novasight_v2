@@ -16,6 +16,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { SaveChartButton } from "@/components/chart/SaveChartButton";
 import { useCreateChart } from "@/api/hooks";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
 
 const mockUseCreateChart = vi.mocked(useCreateChart);
@@ -57,9 +58,14 @@ function makeMutationReturn(overrides: {
 beforeEach(() => {
   // @ts-expect-error partial mock
   mockUseCreateChart.mockReturnValue(makeMutationReturn({}));
+  // Default: an empty session → a normal member (canEdit). Viewer test overrides.
+  useAuthStore.getState().clear();
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  useAuthStore.getState().clear();
+});
 
 describe("SaveChartButton", () => {
   it("opens a dialog seeded with the suggested name", () => {
@@ -105,6 +111,16 @@ describe("SaveChartButton", () => {
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
     );
     expect(toast.success).toHaveBeenCalledWith('Saved “Region totals”');
+  });
+
+  it("renders nothing for a read-only viewer", () => {
+    useAuthStore.getState().setSession({
+      accessToken: "t",
+      refreshToken: "r",
+      user: { id: "u1", email: "v@x", name: "V", tenant: "local", roles: ["viewer"] },
+    });
+    const { container } = render(<SaveChartButton spec={spec} defaultName="x" />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("does not submit a blank name", () => {

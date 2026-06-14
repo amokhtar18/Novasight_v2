@@ -2,9 +2,9 @@
 
 Replaces the old client-side localStorage store: dashboards now survive across
 devices and are shareable within a tenant. A dashboard is an ordered grid of tiles,
-each pinning a saved ``Chart``. Managing dashboards is a normal BI action, so reads
-and writes require only a tenant context. The tenant is resolved from the JWT — never
-a body/path value.
+each pinning a saved ``Chart``. **Reads** require only a tenant context; **mutations**
+additionally require an editor (any tenant member except a read-only ``viewer`` — see
+``require_tenant_editor``). The tenant is resolved from the JWT — never a body/path value.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.core.security import Principal, require_tenant_editor
 from app.schemas.dashboard import (
     DashboardCreate,
     DashboardLayoutUpdate,
@@ -41,6 +42,7 @@ async def list_dashboards(
 async def create_dashboard(
     payload: DashboardCreate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> DashboardRead:
     """Create an empty dashboard."""
@@ -62,6 +64,7 @@ async def update_dashboard(
     dashboard_id: uuid.UUID,
     payload: DashboardUpdate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> DashboardRead:
     """Rename / re-describe a dashboard."""
@@ -72,6 +75,7 @@ async def update_dashboard(
 async def delete_dashboard(
     dashboard_id: uuid.UUID,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> Response:
     """Delete a dashboard and its tiles."""
@@ -84,6 +88,7 @@ async def set_layout(
     dashboard_id: uuid.UUID,
     payload: DashboardLayoutUpdate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> DashboardRead:
     """Persist the whole grid (tile order + sizes) after a drag/resize."""
@@ -99,6 +104,7 @@ async def add_tile(
     dashboard_id: uuid.UUID,
     payload: DashboardTileCreate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> DashboardTileRead:
     """Pin a saved chart onto the dashboard (404 if the chart isn't in the tenant)."""
@@ -111,6 +117,7 @@ async def update_tile(
     tile_id: uuid.UUID,
     payload: DashboardTileUpdate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> DashboardTileRead:
     """Update one tile's title / placement."""
@@ -124,6 +131,7 @@ async def delete_tile(
     dashboard_id: uuid.UUID,
     tile_id: uuid.UUID,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: DashboardService = Depends(get_dashboard_service),  # noqa: B008
 ) -> Response:
     """Remove a tile from the dashboard."""

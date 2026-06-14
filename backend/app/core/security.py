@@ -289,6 +289,32 @@ async def require_platform_admin(
     return principal
 
 
+async def require_tenant_editor(
+    principal: Principal = Depends(get_principal),  # noqa: B008
+    settings: Settings = Depends(get_settings),  # noqa: B008
+) -> Principal:
+    """Dependency: authorize a caller who may create/edit tenant content.
+
+    Gates content mutations (charts, dashboards) that any tenant member may perform —
+    *except* a read-only **viewer**. ``viewer`` is a restricting role: a principal
+    holding it is rejected with 403 unless they also hold a role that outranks it
+    (tenant superuser or platform admin). Role names come from settings (golden rule 1).
+    Non-breaking: a principal with no roles is a normal member and is allowed.
+    """
+    auth = settings.auth
+    roles = principal.roles
+    is_viewer = auth.tenant_viewer_role in roles
+    outranks = (
+        auth.tenant_superuser_role in roles or auth.platform_admin_role in roles
+    )
+    if is_viewer and not outranks:
+        logger.warning("Principal sub=%r is a read-only viewer", principal.subject)
+        raise HTTPException(
+            status_code=403, detail="Read-only (viewer) users cannot modify content"
+        )
+    return principal
+
+
 async def require_tenant_superuser(
     principal: Principal = Depends(get_principal),  # noqa: B008
     settings: Settings = Depends(get_settings),  # noqa: B008

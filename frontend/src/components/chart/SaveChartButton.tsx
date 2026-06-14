@@ -11,6 +11,7 @@ import { Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { useCreateChart } from "@/api/hooks";
+import { useIdentity } from "@/lib/identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +50,10 @@ export function SaveChartButton({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(defaultName);
   const { mutate, isPending } = useCreateChart();
+  const { canEdit } = useIdentity();
+
+  // Read-only viewers don't see content-creation controls (the backend also rejects).
+  if (!canEdit) return null;
 
   // Seed the name from the current suggested title each time the dialog opens.
   function openDialog() {

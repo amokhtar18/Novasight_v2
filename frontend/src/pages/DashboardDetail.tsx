@@ -9,6 +9,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, LayoutDashboard, Pencil, Plus } from "lucide-react";
 
 import { useDashboard, useUpdateDashboard } from "@/api/hooks";
+import { useIdentity } from "@/lib/identity";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
@@ -21,6 +22,7 @@ import type { SemanticFilter } from "@/types/api";
 
 export function DashboardDetail() {
   const { dashboardId = "" } = useParams();
+  const { canEdit } = useIdentity();
   const { data: board, isLoading, isError } = useDashboard(dashboardId || null);
   const updateDashboard = useUpdateDashboard();
 
@@ -54,10 +56,13 @@ export function DashboardDetail() {
     return cubes;
   }, [board?.tiles]);
 
-  /** Apply a filter and persist it on the dashboard so it survives reload/sharing. */
+  /**
+   * Apply a filter. An editor persists it on the dashboard (survives reload/sharing);
+   * a read-only viewer filters locally only (the backend would reject the write).
+   */
   function handleFilterChange(filter: SemanticFilter | null) {
     setActiveFilter(filter);
-    if (board) {
+    if (board && canEdit) {
       updateDashboard.mutate({ id: board.id, patch: { filters: filter ? [filter] : [] } });
     }
   }
@@ -121,35 +126,37 @@ export function DashboardDetail() {
         }
         description={`${board.tiles.length} chart${board.tiles.length === 1 ? "" : "s"}`}
         actions={
-          <>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/build">
-                <Plus className="h-4 w-4" aria-hidden />
-                Add chart
-              </Link>
-            </Button>
-            <Button
-              size="sm"
-              variant={editing ? "default" : "outline"}
-              onClick={() => {
-                if (!editing) setNameDraft(board.name);
-                else commitRename();
-                setEditing((v) => !v);
-              }}
-            >
-              {editing ? (
-                <>
-                  <Check className="h-4 w-4" aria-hidden />
-                  Done
-                </>
-              ) : (
-                <>
-                  <Pencil className="h-4 w-4" aria-hidden />
-                  Edit
-                </>
-              )}
-            </Button>
-          </>
+          canEdit ? (
+            <>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/build">
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add chart
+                </Link>
+              </Button>
+              <Button
+                size="sm"
+                variant={editing ? "default" : "outline"}
+                onClick={() => {
+                  if (!editing) setNameDraft(board.name);
+                  else commitRename();
+                  setEditing((v) => !v);
+                }}
+              >
+                {editing ? (
+                  <>
+                    <Check className="h-4 w-4" aria-hidden />
+                    Done
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-4 w-4" aria-hidden />
+                    Edit
+                  </>
+                )}
+              </Button>
+            </>
+          ) : undefined
         }
       />
 

@@ -1,9 +1,10 @@
 """Saved-chart endpoints — tenant-scoped CRUD over persisted charts (#9 / #10).
 
 A chart is a named ``ChartSpec`` the user built (manually on a semantic model, or via
-the AI path) and chose to keep. Saving is a normal BI action, so reads and writes
-require only a tenant context — any authenticated tenant user may manage their
-tenant's charts. The tenant is resolved from the JWT, never a body/path value.
+the AI path) and chose to keep. Saving is a normal BI action, so **reads** require only
+a tenant context; **mutations** additionally require an editor (any tenant member except
+a read-only ``viewer`` — see ``require_tenant_editor``). The tenant is resolved from the
+JWT, never a body/path value.
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.core.security import Principal, require_tenant_editor
 from app.schemas.saved_chart import ChartCreate, ChartRead, ChartUpdate
 from app.services.charts import ChartService, chart_to_read, get_chart_service
 from app.tenancy.context import TenantContext, get_tenant_context
@@ -44,6 +46,7 @@ async def get_chart(
 async def create_chart(
     payload: ChartCreate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: ChartService = Depends(get_chart_service),  # noqa: B008
 ) -> ChartRead:
     """Save a new chart for the tenant."""
@@ -55,6 +58,7 @@ async def update_chart(
     chart_id: uuid.UUID,
     payload: ChartUpdate,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: ChartService = Depends(get_chart_service),  # noqa: B008
 ) -> ChartRead:
     """Update a saved chart (partial)."""
@@ -65,6 +69,7 @@ async def update_chart(
 async def delete_chart(
     chart_id: uuid.UUID,
     ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_editor),  # noqa: B008
     svc: ChartService = Depends(get_chart_service),  # noqa: B008
 ) -> Response:
     """Delete a saved chart."""

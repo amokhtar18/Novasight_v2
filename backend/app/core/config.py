@@ -347,6 +347,11 @@ class AuthSettings(BaseSettings):
     # default, overridable via AUTH__TENANT_SUPERUSER_ROLE.
     tenant_superuser_role: str = "superuser"
 
+    # Tenant-scoped *restricting* role: a user holding it is read-only and may not
+    # create/edit content (charts, dashboards). A superuser/platform-admin outranks it.
+    # Convention with a safe default, overridable via AUTH__TENANT_VIEWER_ROLE.
+    tenant_viewer_role: str = "viewer"
+
     @property
     def hs256_secret(self) -> str | None:
         """The active HS256 secret for issuing/verifying password-mode tokens.

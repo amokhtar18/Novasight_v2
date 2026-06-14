@@ -90,16 +90,35 @@ def client_with_db(session: AsyncSession) -> TestClient:  # type: ignore[return]
     get_settings.cache_clear()
 
 
-def _auth(tenant: str = "local") -> dict[str, str]:
+def _auth(tenant: str = "local", roles: list[str] | None = None) -> dict[str, str]:
     payload = {
         "sub": "caller",
         "email": "c@x",
         "tenant": tenant,
-        "roles": [],
+        "roles": roles or [],
         "typ": "access",
         "exp": int(time.time()) + 3600,
     }
     return {"Authorization": f"Bearer {jwt.encode(payload, _SESSION_SECRET, algorithm='HS256')}"}
+
+
+@pytest.mark.asyncio
+async def test_viewer_is_read_only(client_with_db: TestClient, make_tenant: Any) -> None:
+    await make_tenant("local")
+    viewer = _auth("local", ["viewer"])
+    did = client_with_db.post(
+        "/api/v1/dashboards", headers=_auth(), json={"name": "Overview"}
+    ).json()["id"]
+    # A read-only viewer cannot create or modify dashboards…
+    create = client_with_db.post("/api/v1/dashboards", headers=viewer, json={"name": "X"})
+    assert create.status_code == 403
+    patch = client_with_db.patch(
+        f"/api/v1/dashboards/{did}", headers=viewer, json={"name": "Y"}
+    )
+    assert patch.status_code == 403
+    # …but can still read them.
+    assert client_with_db.get("/api/v1/dashboards", headers=viewer).status_code == 200
+    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=viewer).status_code == 200
 
 
 def _make_chart(client: TestClient, tenant: str = "local", name: str = "Sales") -> str:

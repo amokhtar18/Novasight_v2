@@ -90,16 +90,35 @@ def client_with_db(session: AsyncSession) -> TestClient:  # type: ignore[return]
     get_settings.cache_clear()
 
 
-def _auth(tenant: str = "local") -> dict[str, str]:
+def _auth(tenant: str = "local", roles: list[str] | None = None) -> dict[str, str]:
     payload = {
         "sub": "caller",
         "email": "c@x",
         "tenant": tenant,
-        "roles": [],
+        "roles": roles or [],
         "typ": "access",
         "exp": int(time.time()) + 3600,
     }
     return {"Authorization": f"Bearer {jwt.encode(payload, _SESSION_SECRET, algorithm='HS256')}"}
+
+
+@pytest.mark.asyncio
+async def test_viewer_is_read_only(client_with_db: TestClient, make_tenant: Any) -> None:
+    await make_tenant("local")
+    body = {
+        "name": "X", "spec": _spec(), "source_kind": "semantic", "source_ref": "regional_sales",
+    }
+    viewer = _auth("local", ["viewer"])
+    # A read-only viewer cannot create; a normal member (no roles) can.
+    assert client_with_db.post("/api/v1/charts", headers=viewer, json=body).status_code == 403
+    cid = client_with_db.post("/api/v1/charts", headers=_auth(), json=body).json()["id"]
+    # A viewer can still read…
+    assert client_with_db.get("/api/v1/charts", headers=viewer).status_code == 200
+    # …but not delete.
+    assert client_with_db.delete(f"/api/v1/charts/{cid}", headers=viewer).status_code == 403
+    # A superuser who also holds viewer outranks the restriction.
+    su = _auth("local", ["viewer", "superuser"])
+    assert client_with_db.delete(f"/api/v1/charts/{cid}", headers=su).status_code == 204
 
 
 @pytest.mark.asyncio

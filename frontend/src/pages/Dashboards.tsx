@@ -9,6 +9,7 @@ import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useCreateDashboard, useDashboards, useDeleteDashboard } from "@/api/hooks";
+import { useIdentity } from "@/lib/identity";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import { formatRelativeTime } from "@/lib/format";
 
 export function Dashboards() {
   const navigate = useNavigate();
+  const { canEdit } = useIdentity();
   const { data: boards, isLoading } = useDashboards();
   const createDashboard = useCreateDashboard();
   const deleteDashboard = useDeleteDashboard();
@@ -60,10 +62,12 @@ export function Dashboards() {
         title="Dashboards"
         description="Collections of charts you've pinned. Saved to your account and shared across this tenant."
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="h-4 w-4" aria-hidden />
-            New dashboard
-          </Button>
+          canEdit ? (
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="h-4 w-4" aria-hidden />
+              New dashboard
+            </Button>
+          ) : undefined
         }
       />
 
@@ -77,10 +81,12 @@ export function Dashboards() {
           title="No dashboards yet"
           description="Build a chart and pin it, or create an empty dashboard to start."
           action={
-            <Button onClick={() => setOpen(true)}>
-              <Plus className="h-4 w-4" aria-hidden />
-              New dashboard
-            </Button>
+            canEdit ? (
+              <Button onClick={() => setOpen(true)}>
+                <Plus className="h-4 w-4" aria-hidden />
+                New dashboard
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -102,14 +108,16 @@ export function Dashboards() {
                   {b.tile_count} chart{b.tile_count === 1 ? "" : "s"}
                 </Badge>
               </Link>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(b.id)}
-                aria-label={`Delete ${b.name}`}
-                className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(b.id)}
+                  aria-label={`Delete ${b.name}`}
+                  className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>

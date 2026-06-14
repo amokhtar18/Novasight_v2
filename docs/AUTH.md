@@ -40,7 +40,7 @@ from a server-verified source instead of decoding the token itself.
 ## Roles & authorization
 
 Roles live on the `users` row (`roles` JSON list) and are embedded into the issued
-token. Two role gates back the dependencies in `app/core/security.py`:
+token. Three role gates back the dependencies in `app/core/security.py`:
 
 - **`platform_admin`** (`AUTH__PLATFORM_ADMIN_ROLE`) — `require_platform_admin`;
   the cross-tenant control plane (provision/de-provision/list tenants). Not
@@ -48,6 +48,15 @@ token. Two role gates back the dependencies in `app/core/security.py`:
 - **`superuser`** (`AUTH__TENANT_SUPERUSER_ROLE`) — `require_tenant_superuser`;
   tenant-scoped orchestration and user management. A platform admin is implicitly
   allowed.
+- **`viewer`** (`AUTH__TENANT_VIEWER_ROLE`) — `require_tenant_editor`; a *restricting*
+  role. Content mutations (charts, dashboards) are open to any tenant member **except**
+  a viewer, who is read-only. A superuser/platform admin outranks the restriction; a
+  user with **no** roles is a normal member who may create/edit content. This is the
+  only tier below the default member — assigning `viewer` downgrades a user to read-only.
+
+The model, low to high: **viewer** (read-only) < **member** (default; create/edit
+charts + dashboards) < **superuser** (+ data plane + user mgmt) < **platform_admin**
+(+ cross-tenant provisioning).
 
 ## User management (`/api/v1/users`, tenant-scoped)
 
