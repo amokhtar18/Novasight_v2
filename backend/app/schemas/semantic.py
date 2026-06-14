@@ -13,7 +13,7 @@ query runs, so a caller can never reach a measure/dimension Cube does not expose
 """
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
@@ -27,6 +27,46 @@ SemanticRef = Annotated[
 
 # Ordering direction Cube accepts.
 OrderDir = Annotated[str, StringConstraints(pattern=r"^(asc|desc)$")]
+
+# Cube filter operators we expose (a closed set mapped 1:1 to Cube's operators).
+FilterOperator = Literal[
+    "equals",
+    "notEquals",
+    "contains",
+    "notContains",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "set",
+    "notSet",
+]
+
+# Operators that are presence checks and so take no values.
+_VALUELESS_OPERATORS = frozenset({"set", "notSet"})
+
+
+class SemanticFilter(BaseModel):
+    """A filter on a governed member: ``member <operator> values``.
+
+    ``member`` is a governed measure or dimension (re-checked against the allow-list
+    in the service, exactly like measures/dimensions — a filter is never a way to
+    reach an ungoverned field). Operators map 1:1 to Cube's; ``set``/``notSet`` are
+    presence checks that take no values, every other operator needs at least one.
+    """
+
+    member: SemanticRef
+    operator: FilterOperator
+    values: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _values_match_operator(self) -> SemanticFilter:
+        if self.operator in _VALUELESS_OPERATORS:
+            if self.values:
+                raise ValueError(f"operator '{self.operator}' takes no values")
+        elif not self.values:
+            raise ValueError(f"operator '{self.operator}' requires at least one value")
+        return self
 
 
 class SemanticField(BaseModel):
@@ -62,6 +102,9 @@ class SemanticQueryRequest(BaseModel):
     # Optional ordering: ``{"sales.total_amount": "desc"}``. Keys must be queried
     # members; the service rejects anything not in measures/dimensions.
     order: dict[SemanticRef, OrderDir] = Field(default_factory=dict)
+    # Optional filters on governed members. Each member is re-checked against the
+    # governed allow-list in the service (a filter never reaches an ungoverned field).
+    filters: list[SemanticFilter] = Field(default_factory=list)
     # Per-request row cap; the service clamps it to ``settings.max_query_rows`` so a
     # caller can never exceed the platform limit.
     limit: int | None = Field(default=None, ge=1)

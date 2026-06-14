@@ -373,6 +373,9 @@ the tenant is resolved from the JWT, never a body/path value.
   { "measures": ["regional_sales.total_amount"],
     "dimensions": ["regional_sales.region"],
     "order": { "regional_sales.total_amount": "desc" },
+    "filters": [
+      { "member": "regional_sales.region", "operator": "equals", "values": ["west"] }
+    ],
     "limit": 50 }
   ```
 
@@ -383,9 +386,19 @@ the tenant is resolved from the JWT, never a body/path value.
   the shared `ChartRenderer` consumes for AI charts, so manual and AI charts render
   identically.
 
+  **Filters** (`filters`, schema `SemanticFilter`) constrain the result by a governed
+  member: `{ member, operator, values }`. Operators are a closed set mapped 1:1 to
+  Cube's (`equals`/`notEquals`/`contains`/`notContains`/`gt`/`gte`/`lt`/`lte`/`set`/
+  `notSet`); `set`/`notSet` take no values, the rest require at least one (422 at the
+  schema boundary otherwise). Each filter `member` is re-checked against the governed
+  allow-list just like measures/dimensions — a filter is **never** a way to reach an
+  ungoverned field (422 if it is). A filtered member need not also be selected (a
+  dashboard may filter on a dimension it doesn't display). This is the foundation the
+  dashboard filter bar builds on.
+
 Implementation: `backend/app/api/v1/semantic.py` → `services/semantic.py`
 (`SemanticService`, fail-closed `SemanticValidationError`) → `ai/semantic/client.py`
-(`SemanticLayerClient.query`, now with an optional `limit`).
+(`SemanticLayerClient.query`, with optional `limit` and `filters`).
 
 ## HTTP API: saved charts
 

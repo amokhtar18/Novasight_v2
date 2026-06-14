@@ -84,12 +84,17 @@ class SemanticService:
         self._check_grounded(req, allowed_measures, allowed_dimensions)
 
         limit = self._clamp_limit(req.limit)
+        cube_filters = [
+            {"member": f.member, "operator": f.operator, "values": list(f.values)}
+            for f in req.filters
+        ]
         cube_rows = await self._client.query(
             ctx,
             measures=req.measures,
             dimensions=req.dimensions,
             order=dict(req.order) or None,
             limit=limit,
+            filters=cube_filters or None,
         )
 
         # Columns: dimensions first, then measures — the order the builder maps onto
@@ -163,6 +168,15 @@ class SemanticService:
         if bad_order:
             raise SemanticValidationError(
                 f"Cannot order by unselected field(s): {', '.join(sorted(bad_order))}"
+            )
+        # Filter members must be governed (a measure or dimension), but — unlike
+        # order — need not be selected: a dashboard may filter on a dimension it
+        # doesn't also display. Fail closed on anything outside the allow-list.
+        allowed_members = allowed_measures | allowed_dimensions
+        bad_filters = [f.member for f in req.filters if f.member not in allowed_members]
+        if bad_filters:
+            raise SemanticValidationError(
+                f"Cannot filter by unknown field(s): {', '.join(sorted(set(bad_filters)))}"
             )
 
     def _clamp_limit(self, limit: int | None) -> int:

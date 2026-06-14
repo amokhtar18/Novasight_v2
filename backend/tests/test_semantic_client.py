@@ -231,6 +231,36 @@ async def test_request_body_includes_order_when_given() -> None:
 
 
 @pytest.mark.asyncio
+async def test_request_body_omits_filters_when_none() -> None:
+    """When ``filters`` is None the key must be absent from the body."""
+    ctx = _make_ctx("acme")
+    client, captured = _make_client(response_body=_cube_response([]))
+
+    await client.query(ctx, measures=[MEASURE_TOTAL_AMOUNT], dimensions=[DIM_REGION], filters=None)
+
+    body = json.loads(captured[0].content)
+    assert "filters" not in body["query"]
+
+
+@pytest.mark.asyncio
+async def test_request_body_includes_filters_when_given() -> None:
+    """When ``filters`` is provided it must appear verbatim in the query body."""
+    ctx = _make_ctx("acme")
+    filters = [{"member": DIM_REGION, "operator": "equals", "values": ["west"]}]
+    client, captured = _make_client(response_body=_cube_response([]))
+
+    await client.query(
+        ctx,
+        measures=[MEASURE_TOTAL_AMOUNT],
+        dimensions=[DIM_REGION],
+        filters=filters,
+    )
+
+    body = json.loads(captured[0].content)
+    assert body["query"]["filters"] == filters
+
+
+@pytest.mark.asyncio
 async def test_request_targets_load_endpoint() -> None:
     """The request must POST to ``{base_url}/cubejs-api/v1/load``."""
     ctx = _make_ctx("acme")

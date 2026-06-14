@@ -71,6 +71,7 @@ class _FakeCube:
 
     def __init__(self) -> None:
         self.seen_dbs: list[str] = []
+        self.seen_filters: list[list[dict[str, Any]] | None] = []
 
     async def meta(self, ctx: TenantContext) -> dict[str, Any]:
         self.seen_dbs.append(ctx.clickhouse_db)
@@ -84,8 +85,10 @@ class _FakeCube:
         dimensions: list[str],
         order: dict[str, str] | None = None,
         limit: int | None = None,
+        filters: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         self.seen_dbs.append(ctx.clickhouse_db)
+        self.seen_filters.append(filters)
         return [
             {"regional_sales.region": "west", "regional_sales.total_amount": Decimal("100.5")},
             {"regional_sales.region": "east", "regional_sales.total_amount": Decimal("200")},
@@ -186,6 +189,71 @@ async def test_query_rejects_ungrounded_measure(
     )
     assert resp.status_code == 422, resp.text
     assert "Unknown measure" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_query_forwards_governed_filter_to_cube(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
+) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "dimensions": ["regional_sales.region"],
+            "filters": [
+                {
+                    "member": "regional_sales.region",
+                    "operator": "equals",
+                    "values": ["west"],
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    # The validated filter is forwarded to Cube in its native shape.
+    assert fake_cube.seen_filters[-1] == [
+        {"member": "regional_sales.region", "operator": "equals", "values": ["west"]}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_ungoverned_filter_member(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "dimensions": [],
+            "filters": [
+                {"member": "regional_sales.secret", "operator": "equals", "values": ["x"]}
+            ],
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    assert "filter" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_filter_value_mismatch(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    # 'equals' needs at least one value — the schema validator rejects it (422).
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "dimensions": [],
+            "filters": [{"member": "regional_sales.region", "operator": "equals", "values": []}],
+        },
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

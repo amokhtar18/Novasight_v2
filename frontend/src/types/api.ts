@@ -161,12 +161,35 @@ export interface SemanticModelRead {
   dimensions: SemanticField[];
 }
 
+/** Cube filter operators exposed by the semantic query API (mirrors schemas/semantic.py). */
+export type SemanticFilterOperator =
+  | "equals"
+  | "notEquals"
+  | "contains"
+  | "notContains"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "set"
+  | "notSet";
+
+/** A filter on a governed member: `member <operator> values`. */
+export interface SemanticFilter {
+  member: string;
+  operator: SemanticFilterOperator;
+  /** Empty for `set`/`notSet`; at least one value otherwise. */
+  values: string[];
+}
+
 /** A structured, grounded query against the semantic layer. */
 export interface SemanticQueryRequest {
   measures: string[];
   dimensions: string[];
   /** Ordering, e.g. { "regional_sales.total_amount": "desc" }. */
   order?: Record<string, "asc" | "desc">;
+  /** Filters on governed members; each is re-validated server-side. */
+  filters?: SemanticFilter[];
   limit?: number;
 }
 
