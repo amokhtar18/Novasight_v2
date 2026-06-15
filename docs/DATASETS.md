@@ -9,9 +9,9 @@ ClickHouse database (Task 1.3), and the aggregation query endpoint (Task 1.4).
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/v1/datasets/upload` | Upload a CSV; stores the raw object and records a `Dataset`. Returns `201` + `DatasetRead`. |
+| `POST` | `/api/v1/datasets/upload` | Upload a CSV; stores the raw object, records a `Dataset`, then **materializes** it (CSV → Iceberg → ClickHouse) so it is immediately queryable. Returns `201` + `DatasetRead` (`status: "ingested"`). |
 | `GET`  | `/api/v1/datasets` | List the authenticated tenant's datasets only. |
-| `POST` | `/api/v1/datasets/{id}/query` | Run a safe, read-only aggregation over one of the tenant's datasets. Returns `200` + `QueryResponse`. |
+| `POST` | `/api/v1/datasets/{id}/query` | Run a safe, read-only aggregation over one of the tenant's datasets. Returns `200` + `QueryResponse`; `409` if the dataset is not yet materialized. |
 
 Both require a valid bearer token. The tenant is resolved from the verified JWT via
 `get_tenant_context` — there is **no** tenant id in any request body, query, or path.
@@ -23,6 +23,41 @@ Both require a valid bearer token. The tenant is resolved from the verified JWT 
   rejected with `413` and nothing is stored. The body is read in chunks so we never buffer
   more than the limit.
 - Empty filename / empty body → `400`.
+
+## Materialization on upload (lifecycle)
+
+Upload is not just a record step — it drives the same ingestion chain that runs in the
+cloud, synchronously, so the dataset is queryable as soon as the `201` returns:
+
+1. `DatasetService.upload` stores the raw bytes + the `Dataset` row (`status: "uploaded"`).
+2. `CsvIcebergPipeline.run` loads the CSV into an Iceberg table in the tenant's namespace
+   (creating the namespace if needed) — see [Iceberg ingestion pipeline](#iceberg-ingestion-pipeline-task-12).
+3. `ClickHouseDatasetService.register_dataset` exposes that Iceberg table as an
+   `IcebergS3`-engine table in the tenant's ClickHouse database (creating the database if
+   needed) — see [Querying via ClickHouse](#querying-via-clickhouse-task-13).
+4. On success the dataset is marked **`ingested`**; on failure it is marked **`failed`**
+   and the endpoint returns `502` (the raw object + row are preserved so the failure is
+   visible and the dataset can be re-uploaded).
+
+```
+uploaded ──(pipeline + register ok)──▶ ingested   (queryable)
+         └─(pipeline or register fails)─▶ failed   (502; re-upload to retry)
+```
+
+Steps 2–3 self-provision the tenant's Iceberg namespace and ClickHouse database
+idempotently, so no separate provisioning step is required for the dataset path. The wiring
+lives in `app/api/v1/datasets.py::upload_dataset`; the heavy, blocking `register_dataset`
+call is offloaded with `asyncio.to_thread` so the event loop is not stalled for the upload.
+
+> **Infrastructure dependency.** Materialization needs a reachable **Iceberg REST catalog**
+> (`ICEBERG__CATALOG_URI`). The dev/on-prem compose stack runs one as the `iceberg-rest`
+> service, backed by the same MinIO warehouse (`ICEBERG__WAREHOUSE`); see
+> `infra/compose/README.md`. ClickHouse's `IcebergS3` engine then reads the table files
+> directly from MinIO by location — it does not talk to the catalog.
+
+> **Future:** materialization is synchronous for this slice (a thin end-to-end path). Moving
+> it to the Dramatiq worker — returning `201` immediately with `status: "uploaded"` and
+> flipping to `ingested` asynchronously — is the natural next step for large uploads.
 
 ## Storage layout (tenant isolation)
 
@@ -202,6 +237,14 @@ never free SQL — which is what makes it safe:
 
 Response (`QueryResponse`): ordered `columns`, `rows` (list of value lists), and
 `row_count`. With no `dimensions` the result is a single global-aggregate row.
+
+### Readiness (fail closed, not 500)
+
+The endpoint only queries datasets that finished [materializing](#materialization-on-upload-lifecycle).
+A dataset whose `status` is not `ingested` (still `uploaded`, or `failed`) returns `409`
+**before** any ClickHouse access — there is no table to read. As defence in depth, a
+ClickHouse `UNKNOWN_DATABASE`/`UNKNOWN_TABLE` error (e.g. a dataset uploaded before
+materialization existed) is also mapped to `409` rather than surfacing as a `500`.
 
 ### Safety (golden rule 3 — read-only, validated)
 

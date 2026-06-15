@@ -110,6 +110,17 @@ class DatasetService:
         )
         return list(result.scalars().all())
 
+    async def update_status(self, dataset: Dataset, status: str) -> None:
+        """Persist a new lifecycle status for ``dataset``, committing immediately.
+
+        Committed on its own (rather than flushed) so that a status set on the
+        ingestion failure path survives the request-level rollback that the raised
+        ``HTTPException`` triggers in ``get_db``. On the success path the extra commit
+        is a harmless no-op against the already-flushed row.
+        """
+        dataset.status = status
+        await self._db.commit()
+
     async def get_for_tenant(
         self, ctx: TenantContext, dataset_id: uuid.UUID
     ) -> Dataset:

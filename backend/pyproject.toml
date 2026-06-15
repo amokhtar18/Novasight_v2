@@ -11,6 +11,11 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "alembic>=1.13",
     "asyncpg>=0.29",
+    # Sync Postgres driver for the sql_database source connector. The app's own
+    # control-plane access is async (asyncpg), but SourceConnector.extract uses a
+    # blocking SQLAlchemy engine in a worker thread, so it needs a sync DBAPI to
+    # ingest from a Postgres/MySQL source (asyncpg cannot drive a sync engine).
+    "psycopg2-binary>=2.9",
     "redis>=5.0",
     "httpx>=0.27",
     "pyjwt[crypto]>=2.8",

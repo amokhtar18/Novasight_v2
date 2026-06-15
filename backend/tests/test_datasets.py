@@ -5,17 +5,25 @@ The object store is replaced with an in-memory fake so no MinIO/S3 is needed,
 while still asserting the raw object lands under the tenant's prefix.
 
 Coverage:
-  (a) upload returns a dataset id and the object lands under the tenant prefix.
+  (a) upload returns a dataset id, stores the object under the tenant prefix, and drives
+      the materialization chain (pipeline + ClickHouse register) scoped to the tenant;
+      a materialization failure marks the dataset ``failed`` and returns 502.
   (b) non-CSV files are rejected (415).
   (c) oversized files are rejected (413) using the settings-driven limit.
   (d) unauthenticated upload/list are rejected (401).
   (e) ISOLATION: tenant A cannot list tenant B's datasets, and keys never cross
       tenant prefixes.
+  (f) query fails closed: a not-yet-ingested dataset, or a missing ClickHouse
+      database/table, returns 409 rather than 500.
+
+The real Iceberg/ClickHouse materialization I/O is stubbed here (see
+``stub_materialization``); the full chain is exercised in ``test_slice_e2e.py``.
 """
 from __future__ import annotations
 
 import base64
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -109,6 +117,9 @@ class _FakeClickHouse:
     rows: list[tuple[Any, ...]] = field(default_factory=list)
     column_names: list[str] = field(default_factory=list)
     queries: list[dict[str, Any]] = field(default_factory=list)
+    # When set, ``query`` raises this instead of returning rows (used to assert the
+    # endpoint maps a ClickHouse failure to a clean HTTP status).
+    raise_on_query: Exception | None = None
 
     def command(self, sql: str, *, database: str | None = None) -> None:  # pragma: no cover
         raise AssertionError("the query endpoint must never issue DDL/writes")
@@ -121,6 +132,8 @@ class _FakeClickHouse:
         parameters: Any = None,
         read_only: bool = True,
     ) -> QueryResult:
+        if self.raise_on_query is not None:
+            raise self.raise_on_query
         self.queries.append(
             {
                 "sql": sql,
@@ -136,6 +149,37 @@ class _FakeClickHouse:
 def _patch_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key, value in _FAKE_ENV.items():
         monkeypatch.setenv(key, value)
+
+
+@pytest.fixture(autouse=True)
+def stub_materialization(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
+    """Stub the upload's CSV→Iceberg→ClickHouse materialization with spies.
+
+    The upload endpoint now drives the real ingestion chain (``CsvIcebergPipeline.run``
+    then ``register_dataset``). Unit tests must not perform live pyiceberg/catalog or
+    ClickHouse DDL I/O, so both steps are replaced with recorders. The full real chain is
+    covered by ``test_slice_e2e.py`` and the live end-to-end check. A test can re-patch
+    either step (e.g. to raise) to exercise the failure path.
+    """
+    calls: dict[str, list[Any]] = {"pipeline": [], "register": []}
+
+    async def _fake_run(self: Any, dataset: Any) -> str:
+        calls["pipeline"].append(dataset.id)
+        return f"{self._ctx.iceberg_namespace}.materialized"
+
+    def _fake_register(self: Any, ctx: Any, dataset: Any) -> str:
+        calls["register"].append((ctx.clickhouse_db, dataset.id))
+        return f"{ctx.clickhouse_db}.materialized"
+
+    monkeypatch.setattr(
+        "app.ingestion.csv_iceberg.CsvIcebergPipeline.run", _fake_run, raising=True
+    )
+    monkeypatch.setattr(
+        "app.services.clickhouse_datasets.ClickHouseDatasetService.register_dataset",
+        _fake_register,
+        raising=True,
+    )
+    return calls
 
 
 @pytest.fixture()
@@ -222,7 +266,8 @@ async def test_upload_returns_id_and_stores_under_tenant_prefix(
     body = resp.json()
     assert body["id"]
     assert body["original_filename"] == "sales.csv"
-    assert body["status"] == "uploaded"
+    # Upload now materializes the dataset, so it comes back queryable.
+    assert body["status"] == "ingested"
     assert body["size_bytes"] > 0
 
     # The raw object landed under the tenant's namespace prefix.
@@ -231,6 +276,58 @@ async def test_upload_returns_id_and_stores_under_tenant_prefix(
     assert len(keys) == 1
     assert keys[0].startswith(f"{namespace}/")
     assert body["id"] in keys[0]
+
+
+@pytest.mark.asyncio
+async def test_upload_runs_materialization_chain_scoped_to_tenant(
+    client_with_db: TestClient,
+    make_tenant: Any,
+    stub_materialization: dict[str, list[Any]],
+) -> None:
+    """Upload drives CsvIcebergPipeline.run then register_dataset for this dataset, and
+    the ClickHouse registration targets the tenant's own database."""
+    await make_tenant("acmecorp")
+    token = _make_token("acmecorp")
+
+    dataset_id = _upload(client_with_db, token, name="sales.csv").json()["id"]
+
+    assert stub_materialization["pipeline"] == [uuid.UUID(dataset_id)]
+    assert stub_materialization["register"] == [
+        (resources_for_slug("acmecorp").clickhouse_db, uuid.UUID(dataset_id))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_upload_materialization_failure_marks_failed_and_returns_502(
+    client_with_db: TestClient,
+    session: AsyncSession,
+    make_tenant: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If materialization fails, the upload returns 502 and the dataset row is persisted
+    as ``failed`` (committed despite the raised error) so the failure is visible."""
+    await make_tenant("acmecorp")
+    token = _make_token("acmecorp")
+
+    def _boom(self: Any, ctx: Any, dataset: Any) -> str:
+        raise RuntimeError("catalog unreachable")
+
+    monkeypatch.setattr(
+        "app.services.clickhouse_datasets.ClickHouseDatasetService.register_dataset",
+        _boom,
+        raising=True,
+    )
+
+    resp = _upload(client_with_db, token, name="sales.csv")
+    assert resp.status_code == 502, resp.text
+
+    from sqlalchemy import select
+
+    from app.models.dataset import Dataset
+
+    datasets = (await session.execute(select(Dataset))).scalars().all()
+    assert len(datasets) == 1
+    assert datasets[0].status == "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +543,66 @@ async def test_query_rejects_invalid_identifier(
 
     assert resp.status_code == 422, resp.text
     assert fake_clickhouse.queries == []
+
+
+@pytest.mark.asyncio
+async def test_query_not_ingested_returns_409(
+    client_with_db: TestClient,
+    session: AsyncSession,
+    make_tenant: Any,
+    fake_clickhouse: _FakeClickHouse,
+) -> None:
+    """A dataset that has not finished materializing (still ``uploaded``) cannot be
+    queried — it returns a clear 409, never an opaque 500, and never touches ClickHouse."""
+    tenant = await make_tenant("acmecorp")
+    token = _make_token("acmecorp")
+
+    from app.models.dataset import Dataset
+
+    pending = Dataset(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        name="pending.csv",
+        original_filename="pending.csv",
+        object_key="acmecorp/raw/pending.csv",
+        content_type="text/csv",
+        size_bytes=12,
+        status="uploaded",
+    )
+    session.add(pending)
+    await session.flush()
+
+    resp = _query(
+        client_with_db, token, str(pending.id), {"metrics": [{"function": "count"}]}
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert fake_clickhouse.queries == []
+
+
+@pytest.mark.asyncio
+async def test_query_unknown_database_maps_to_409(
+    client_with_db: TestClient,
+    make_tenant: Any,
+    fake_clickhouse: _FakeClickHouse,
+) -> None:
+    """Defence in depth: a ClickHouse UNKNOWN_DATABASE/TABLE error on an ingested dataset
+    is mapped to 409 rather than surfacing as a 500."""
+    from clickhouse_connect.driver.exceptions import DatabaseError
+
+    await make_tenant("acmecorp")
+    token = _make_token("acmecorp")
+    dataset_id = _upload(client_with_db, token).json()["id"]
+
+    fake_clickhouse.raise_on_query = DatabaseError(
+        "Code: 81. DB::Exception: Database tenant_acmecorp does not exist. (UNKNOWN_DATABASE)"
+    )
+
+    resp = _query(
+        client_with_db, token, dataset_id, {"metrics": [{"function": "count"}]}
+    )
+
+    assert resp.status_code == 409, resp.text
 
 
 # ---------------------------------------------------------------------------

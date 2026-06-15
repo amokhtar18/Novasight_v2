@@ -292,17 +292,32 @@ async def test_full_vertical_slice_single_tenant(
 
     # -----------------------------------------------------------------------
     # (2) Upload: POST /api/v1/datasets/upload
+    #
+    # Upload now drives the materialization chain itself. Stub the two steps here so the
+    # endpoint returns cleanly; steps (3) and (4) below then re-run the *real* pipeline
+    # and register against the fakes to assert each seam's internals in isolation.
     # -----------------------------------------------------------------------
-    resp = client_with_db.post(
-        "/api/v1/datasets/upload",
-        headers={"Authorization": f"Bearer {token}"},
-        files={"file": ("sales.csv", _CSV_BYTES, "text/csv")},
-    )
+    async def _stub_run(self: Any, dataset: Dataset) -> str:
+        return f"{self._ctx.iceberg_namespace}.{_table_name_for_dataset(dataset.id)}"
+
+    def _stub_register(self: Any, ctx: TenantContext, dataset: Dataset) -> str:
+        return f"{ctx.clickhouse_db}.{_table_name_for_dataset(dataset.id)}"
+
+    with (
+        patch.object(CsvIcebergPipeline, "run", _stub_run),
+        patch.object(ClickHouseDatasetService, "register_dataset", _stub_register),
+    ):
+        resp = client_with_db.post(
+            "/api/v1/datasets/upload",
+            headers={"Authorization": f"Bearer {token}"},
+            files={"file": ("sales.csv", _CSV_BYTES, "text/csv")},
+        )
     assert resp.status_code == 201, resp.text
     upload_body = resp.json()
     dataset_id = uuid.UUID(upload_body["id"])
     assert upload_body["original_filename"] == "sales.csv"
-    assert upload_body["status"] == "uploaded"
+    # Upload materializes the dataset, so it comes back queryable.
+    assert upload_body["status"] == "ingested"
 
     # The raw object key must be under the tenant's iceberg_namespace prefix.
     stored_keys = list(fake_store.objects)

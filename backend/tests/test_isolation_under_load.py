@@ -190,6 +190,9 @@ async def _seed_tenant(session: AsyncSession, slug: str) -> tuple[Tenant, Datase
         object_key=f"{slug}/orders-{uuid.uuid4().hex}.csv",
         content_type="text/csv",
         size_bytes=10,
+        # These fixtures stand in for already-materialized datasets, so they are
+        # queryable (the query path now rejects non-ingested datasets with 409).
+        status="ingested",
     )
     session.add(tenant)
     await session.flush()

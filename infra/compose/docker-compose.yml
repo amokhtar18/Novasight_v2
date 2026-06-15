@@ -31,6 +31,10 @@ x-backend-env: &backend-env
     REDIS__HOST: redis
     CLICKHOUSE__HOST: clickhouse
     OBJECT_STORE__ENDPOINT_URL: http://minio:9000
+    # Reach the Iceberg REST catalog by compose service name (the .env value is the
+    # host-tooling URL). Backend ingestion + ClickHouse registration resolve table
+    # locations through this catalog.
+    ICEBERG__CATALOG_URI: http://iceberg-rest:8181
     CUBE__BASE_URL: http://cube:4000
     # Semantic-model codegen output — a volume shared with the Cube container (only
     # the api service mounts it rw and runs codegen; other backend services ignore it).
@@ -111,6 +115,53 @@ services:
         mc mb --ignore-existing "local/${OBJECT_STORE__BUCKET:?set OBJECT_STORE__BUCKET in .env}" &&
         echo "bucket ready: ${OBJECT_STORE__BUCKET}"
     restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Iceberg REST catalog — the lake's source of truth for table locations.
+  #
+  # The backend (CsvIcebergPipeline + ClickHouseDatasetService.register_dataset) and
+  # ClickHouse both resolve a dataset's physical Iceberg table through this catalog;
+  # the catalog itself stores data files in the same MinIO warehouse the rest of the
+  # lake uses (s3://<bucket>/warehouse, matching ICEBERG__WAREHOUSE).
+  #
+  # Golden rule 1 — config-driven: every value below is interpolated from the
+  # repo-root .env (the same OBJECT_STORE__* vars MinIO and the backend read). No
+  # literal hosts, buckets, or credentials appear here.
+  #
+  # The CATALOG_* env contract: the fixture strips the CATALOG_ prefix, lowercases the
+  # rest, maps single underscore -> dot and double underscore -> dash. So
+  # CATALOG_S3_ENDPOINT -> s3.endpoint and CATALOG_S3_PATH__STYLE__ACCESS ->
+  # s3.path-style-access (MinIO needs path-style addressing).
+  #
+  # Persistence note: the catalog's table registry is the image default (in-memory
+  # JDBC), so it is rebuilt empty on restart — the Iceberg data + metadata files
+  # themselves persist in MinIO. Acceptable for the dev stack; a postgres-backed JDBC
+  # catalog (CATALOG_URI=jdbc:postgresql://...) is the production upgrade.
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture:1.9.1
+    restart: unless-stopped
+    environment:
+      CATALOG_WAREHOUSE: "s3://${OBJECT_STORE__BUCKET:?set OBJECT_STORE__BUCKET in .env}/warehouse"
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      AWS_ACCESS_KEY_ID: "${OBJECT_STORE__ACCESS_KEY:?set OBJECT_STORE__ACCESS_KEY in .env}"
+      AWS_SECRET_ACCESS_KEY: "${OBJECT_STORE__SECRET_KEY:?set OBJECT_STORE__SECRET_KEY in .env}"
+      AWS_REGION: "${OBJECT_STORE__REGION:-us-east-1}"
+    ports:
+      - "${ICEBERG__REST_PORT:-8181}:8181"
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      # The image ships curl; /v1/config is the catalog's unauthenticated config endpoint.
+      test: ["CMD-SHELL", "curl -sf http://localhost:8181/v1/config || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.3
@@ -378,6 +429,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      iceberg-rest:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/health').status==200 else 1)\""]

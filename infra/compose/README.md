@@ -2,7 +2,8 @@
 
 One unified compose file runs the **whole** product: infrastructure — **Postgres**
 (control-plane DB), **Redis** (cache + task queue), **MinIO** (S3-compatible object lake
-— the portability seam), **ClickHouse** (serving engine), **Cube** (semantic layer), and
+— the portability seam), **Iceberg REST catalog** (`iceberg-rest` — the lake's table
+registry), **ClickHouse** (serving engine), **Cube** (semantic layer), and
 **OpenMetadata** (catalog) — plus the application (`migrate` → `api`, `worker`,
 `scheduler`, `dagster`, `dagster-daemon`) and the **frontend** (which also reverse-proxies
 `/api`, so the whole app is one origin). There is no separate "local" mode or app overlay.
@@ -80,6 +81,7 @@ docker compose --env-file .env -f infra/compose/docker-compose.yml up -d
 | Redis          | `REDIS__PORT` (6379)        | 6379      | cache + queue                       |
 | MinIO API      | `MINIO__API_PORT` (9000)    | 9000      | S3 endpoint (`OBJECT_STORE__*`)     |
 | MinIO Console  | `MINIO__CONSOLE_PORT` (9001)| 9001      | web UI                              |
+| Iceberg REST   | `ICEBERG__REST_PORT` (8181) | 8181      | lake catalog (`/v1/config`)         |
 | ClickHouse     | `CLICKHOUSE__PORT` (8123)   | 8123      | HTTP interface (`/ping` lives here) |
 
 ## Common commands

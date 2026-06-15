@@ -19,7 +19,16 @@ no migration).
 
 Credentials are **never** stored or returned in plaintext: the service envelope-
 encrypts the `secret` dict into `source_connections.secret_ciphertext` via
-`app.core.crypto`, and decrypts it in-process only to test/preview/run.
+`app.core.crypto`, and decrypts it in-process only to test/preview/run. Storing a
+secret therefore requires `ENCRYPTION__*` to be configured (`docs/ENCRYPTION.md`);
+without it `POST /sources` with a `secret` returns 400.
+
+The `sql_database` connector talks to the source through a **blocking** SQLAlchemy
+engine (run in a worker thread), so it needs a *sync* DBAPI even though the app's own
+control-plane access is async (`asyncpg`). The backend image bundles `psycopg2-binary`
+for Postgres sources (`driver: postgresql`). A ready-made Postgres source to try the
+whole path against lives in `infra/compose/sample-source/` (a seeded e-commerce DB on
+the dev stack's Postgres container).
 
 ## Source-connection API (`/api/v1/sources`)
 
