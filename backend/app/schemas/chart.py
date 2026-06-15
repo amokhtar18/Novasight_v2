@@ -30,6 +30,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from app.schemas.query import QueryRequest
+from app.schemas.semantic import SemanticTimeDimension
 
 # The current contract version. Bump when the shape changes in a breaking way so
 # stored specs and AI-emitted specs can be migrated rather than silently misread.
@@ -68,6 +69,10 @@ class ChartQuery(BaseModel):
     dataset_id: uuid.UUID | None = None
     query: QueryRequest | None = None
     metric_refs: list[FieldName] = Field(default_factory=list)
+    # Optional time dimensions for a semantic chart (the ``metric_refs`` path). Carried
+    # on the spec so a saved/AI chart re-runs with the same granularity rollup; the
+    # resolved key (``<dimension>.<granularity>``) is what ``encoding.x`` reads.
+    time_dimensions: list[SemanticTimeDimension] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _require_a_source(self) -> ChartQuery:

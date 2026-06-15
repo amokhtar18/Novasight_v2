@@ -52,6 +52,12 @@ in-process chat loop) so a large result can't blow the client's context window;
 `truncated` is `true` when rows were dropped, while `row_count` keeps the backend's
 full count.
 
+> The in-process chat (`/api/v1/ai/chat`) also exposes a fourth tool, `nl_to_chart`,
+> which generates a saveable chart the user can pin to a dashboard (#12). The external
+> MCP server **intentionally does not** re-expose it: chart/dashboard persistence is an
+> in-app concern, and an external client has no NovaSight UI to pin into. The MCP
+> surface stays the three read-only, query-shaped tools above.
+
 ### Errors (fail closed, never leak internals)
 
 Backend failures are surfaced as MCP `ToolError`s with safe messages:

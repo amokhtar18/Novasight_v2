@@ -139,4 +139,38 @@ describe("Builder — semantic path (default)", () => {
     // No datasets exist in this test → the dataset path shows its guidance.
     expect(screen.getByText(/no datasets yet/i)).toBeInTheDocument();
   });
+
+  it("rolls a time dimension up by granularity via time_dimensions", () => {
+    const timeModel: SemanticModelRead = {
+      name: "sales",
+      title: "Sales",
+      measures: [{ name: "sales.total", title: "Total", type: "number" }],
+      dimensions: [{ name: "sales.created_at", title: "Created At", type: "time" }],
+    };
+    // @ts-expect-error partial mock
+    mockSemanticModels.mockReturnValue(idleQuery([timeModel]));
+    renderBuilder();
+
+    // A granularity control appears only for a time-typed dimension, defaulting to month.
+    const gran = screen.getByLabelText(/granularity/i) as HTMLSelectElement;
+    expect(gran.value).toBe("month");
+
+    // The query groups via Cube timeDimensions (not a plain dimension), so the rolled-up
+    // <dimension>.<granularity> column can be the chart's time axis.
+    expect(mockSemanticQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        measures: ["sales.total"],
+        dimensions: [],
+        time_dimensions: [{ dimension: "sales.created_at", granularity: "month" }],
+      })
+    );
+
+    // Changing the granularity re-issues the query at the new bucket.
+    fireEvent.change(gran, { target: { value: "quarter" } });
+    expect(mockSemanticQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        time_dimensions: [{ dimension: "sales.created_at", granularity: "quarter" }],
+      })
+    );
+  });
 });

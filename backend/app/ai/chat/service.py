@@ -35,8 +35,14 @@ from app.ai.gateway.provider import (
     ToolResultMsg,
     ToolSpec,
 )
+from app.ai.nl_chart import (
+    ChartValidationError,
+    NLToChartService,
+    get_nl_to_chart_service,
+)
 from app.ai.nl_sql import NLToSQLService, SQLValidationError, get_nl_to_sql_service
 from app.ai.semantic.client import CubeAuthError, CubeQueryError
+from app.schemas.chart import ChartSpec
 from app.schemas.semantic import SemanticQueryRequest
 from app.services.semantic import (
     SemanticService,
@@ -58,14 +64,18 @@ _MAX_TOOL_ROWS = 50
 LIST_MODELS = "list_semantic_models"
 QUERY_MODEL = "query_semantic_model"
 NL_TO_SQL = "nl_to_sql"
+NL_TO_CHART = "nl_to_chart"
 
 SYSTEM_PROMPT = (
     "You are NovaSight's analytics assistant. Answer questions about the tenant's "
     "data ONLY by calling the provided tools, which query a governed semantic layer. "
     "Never invent numbers, table names, or columns. First call list_semantic_models "
     "to discover the available measures and dimensions, then query_semantic_model "
-    "with fully-qualified names, or nl_to_sql for ad-hoc questions. If the tools "
-    "cannot answer, say so plainly. Base every figure you state on a tool result."
+    "with fully-qualified names, or nl_to_sql for ad-hoc questions. When the user "
+    "asks to chart, plot, graph, or visualize something, call nl_to_chart with a "
+    "clear description — the chart is attached to your reply for the user to pin to "
+    "a dashboard. If the tools cannot answer, say so plainly. Base every figure you "
+    "state on a tool result."
 )
 
 # The tool specs advertised to the model (stable; the handlers below execute them).
@@ -109,13 +119,36 @@ TOOL_SPECS: list[ToolSpec] = [
             "additionalProperties": False,
         },
     ),
+    ToolSpec(
+        name=NL_TO_CHART,
+        description=(
+            "Generate a chart from a natural-language description over the governed "
+            "semantic layer. Call this when the user asks to chart, plot, graph, or "
+            "visualize data (e.g. 'plot total amount by region'). Returns a short "
+            "summary of the generated chart; the chart itself is attached to the "
+            "reply so the user can pin it to a dashboard."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"request": {"type": "string"}},
+            "required": ["request"],
+            "additionalProperties": False,
+        },
+    ),
 ]
 
 
 def build_handlers(
-    semantic: SemanticService, nl_sql: NLToSQLService
+    semantic: SemanticService,
+    nl_sql: NLToSQLService,
+    nl_chart: NLToChartService,
+    chart_sink: list[ChartSpec],
 ) -> dict[str, ToolHandler]:
-    """Wire the grounded tool handlers from the existing services."""
+    """Wire the grounded tool handlers from the existing services.
+
+    ``chart_sink`` is a per-request list the ``nl_to_chart`` handler appends each
+    generated spec to, so ``ChatService.ask`` can attach the chart to its reply.
+    """
 
     async def list_models(ctx: TenantContext, _input: dict[str, Any]) -> str:
         models = await semantic.list_models(ctx)
@@ -155,14 +188,40 @@ def build_handlers(
             }
         )
 
-    return {LIST_MODELS: list_models, QUERY_MODEL: query_model, NL_TO_SQL: nl_to_sql}
+    async def nl_to_chart(ctx: TenantContext, inp: dict[str, Any]) -> str:
+        spec, data = await nl_chart.generate(ctx, request=str(inp.get("request", "")))
+        # Capture the validated spec for the reply (the user pins it to a dashboard);
+        # only the latest chart of a turn is surfaced.
+        chart_sink.append(spec)
+        return json.dumps(
+            {
+                "chart_generated": True,
+                "chart_type": spec.type,
+                "title": spec.options.title,
+                "columns": data.columns,
+                "row_count": data.row_count,
+            }
+        )
+
+    return {
+        LIST_MODELS: list_models,
+        QUERY_MODEL: query_model,
+        NL_TO_SQL: nl_to_sql,
+        NL_TO_CHART: nl_to_chart,
+    }
 
 
 class ChatResult(BaseModel):
-    """The chat outcome: the assistant's answer + which tools were called."""
+    """The chat outcome: the answer, which tools ran, and any generated chart.
+
+    ``chart`` is set when the assistant produced a chart via the ``nl_to_chart``
+    tool (the latest one of the turn). The frontend renders it and offers to pin it
+    to a dashboard (#12). ``None`` when no chart was generated.
+    """
 
     answer: str
     tools_used: list[str]
+    chart: ChartSpec | None = None
 
 
 class ChatService:
@@ -174,10 +233,14 @@ class ChatService:
         handlers: dict[str, ToolHandler],
         *,
         max_turns: int = _MAX_TURNS,
+        chart_sink: list[ChartSpec] | None = None,
     ) -> None:
         self._gateway = gateway
         self._handlers = handlers
         self._max_turns = max_turns
+        # The same list the ``nl_to_chart`` handler appends to (per request). Defaults
+        # to an empty list when no chart-producing handler is wired (e.g. unit tests).
+        self._chart_sink: list[ChartSpec] = chart_sink if chart_sink is not None else []
 
     async def ask(self, ctx: TenantContext, message: str) -> ChatResult:
         """Answer ``message`` for the tenant via grounded tool-calling."""
@@ -193,7 +256,7 @@ class ChatService:
             )
             if not response.tool_calls:
                 answer = response.text or "I couldn't find an answer for that."
-                return ChatResult(answer=answer, tools_used=tools_used)
+                return self._result(answer, tools_used)
 
             messages.append(
                 ChatTurn(
@@ -212,10 +275,14 @@ class ChatService:
         logger.info(
             "Chat hit max turns: tenant_id=%r tools_used=%r", ctx.tenant_id, tools_used
         )
-        return ChatResult(
-            answer="I couldn't complete that within the allowed number of steps.",
-            tools_used=tools_used,
+        return self._result(
+            "I couldn't complete that within the allowed number of steps.", tools_used
         )
+
+    def _result(self, answer: str, tools_used: list[str]) -> ChatResult:
+        """Assemble a ``ChatResult``, attaching the latest generated chart (if any)."""
+        chart = self._chart_sink[-1] if self._chart_sink else None
+        return ChatResult(answer=answer, tools_used=tools_used, chart=chart)
 
     async def _dispatch(self, ctx: TenantContext, call: ToolCall) -> tuple[str, bool]:
         """Execute one tool call, returning ``(result_text, is_error)`` (fail closed)."""
@@ -228,6 +295,8 @@ class ChatService:
             return (f"Error: {exc.reason}", True)
         except SQLValidationError as exc:
             return (f"Error: {exc.reason}", True)
+        except ChartValidationError as exc:
+            return (f"Error: could not build a valid chart ({exc}).", True)
         except (CubeAuthError, CubeQueryError):
             return ("The semantic layer is temporarily unavailable.", True)
         except ValueError as exc:
@@ -244,6 +313,13 @@ def get_chat_service(
     gateway: LLMGateway = Depends(get_llm_gateway),  # noqa: B008
     semantic: SemanticService = Depends(get_semantic_service),  # noqa: B008
     nl_sql: NLToSQLService = Depends(get_nl_to_sql_service),  # noqa: B008
+    nl_chart: NLToChartService = Depends(get_nl_to_chart_service),  # noqa: B008
 ) -> ChatService:
-    """FastAPI dependency: assemble a ``ChatService`` with grounded handlers."""
-    return ChatService(gateway=gateway, handlers=build_handlers(semantic, nl_sql))
+    """FastAPI dependency: assemble a ``ChatService`` with grounded handlers.
+
+    The per-request ``chart_sink`` is shared between the ``nl_to_chart`` handler and
+    the service so a generated chart rides back on the reply (#12).
+    """
+    chart_sink: list[ChartSpec] = []
+    handlers = build_handlers(semantic, nl_sql, nl_chart, chart_sink)
+    return ChatService(gateway=gateway, handlers=handlers, chart_sink=chart_sink)

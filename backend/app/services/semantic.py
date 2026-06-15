@@ -88,6 +88,12 @@ class SemanticService:
             {"member": f.member, "operator": f.operator, "values": list(f.values)}
             for f in req.filters
         ]
+        cube_time_dims = [
+            {"dimension": td.dimension}
+            if td.granularity is None
+            else {"dimension": td.dimension, "granularity": td.granularity}
+            for td in req.time_dimensions
+        ]
         cube_rows = await self._client.query(
             ctx,
             measures=req.measures,
@@ -95,11 +101,14 @@ class SemanticService:
             order=dict(req.order) or None,
             limit=limit,
             filters=cube_filters or None,
+            time_dimensions=cube_time_dims or None,
         )
 
-        # Columns: dimensions first, then measures — the order the builder maps onto
-        # encoding.x (dimension) + encoding.series[].field (measures).
-        columns: list[str] = [*req.dimensions, *req.measures]
+        # Columns: dimensions (incl. time dimensions, under their resolved
+        # ``<dimension>.<granularity>`` key) first, then measures — the order the
+        # builder maps onto encoding.x (group) + encoding.series[].field (measures).
+        time_dim_keys = [td.result_key for td in req.time_dimensions]
+        columns: list[str] = [*req.dimensions, *time_dim_keys, *req.measures]
         rows = [self._row_values(cube_row, columns) for cube_row in cube_rows]
 
         logger.info(
@@ -162,8 +171,22 @@ class SemanticService:
             raise SemanticValidationError(
                 f"Unknown dimension(s): {', '.join(sorted(bad_dimensions))}"
             )
-        # Order keys must be members actually selected in this query.
-        selected = set(req.measures) | set(req.dimensions)
+        # A time dimension's base member must be a governed dimension (a granularity
+        # rollup is never a way to reach an ungoverned field). Fail closed.
+        bad_time_dims = [
+            td.dimension for td in req.time_dimensions if td.dimension not in allowed_dimensions
+        ]
+        if bad_time_dims:
+            raise SemanticValidationError(
+                f"Unknown time dimension(s): {', '.join(sorted(set(bad_time_dims)))}"
+            )
+        # Order keys must be members actually selected in this query — a measure, a
+        # dimension, or a time dimension's resolved (granularity) key.
+        selected = (
+            set(req.measures)
+            | set(req.dimensions)
+            | {td.result_key for td in req.time_dimensions}
+        )
         bad_order = [k for k in req.order if k not in selected]
         if bad_order:
             raise SemanticValidationError(

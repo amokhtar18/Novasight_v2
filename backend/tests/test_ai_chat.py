@@ -13,6 +13,7 @@ import pytest
 
 from app.ai.chat.service import ChatService
 from app.ai.gateway.provider import ToolCall, ToolChatRequest, ToolChatResponse
+from app.schemas.chart import ChartSpec
 from app.tenancy.context import TenantContext
 
 _CTX = TenantContext(
@@ -99,6 +100,48 @@ async def test_raising_handler_fails_closed() -> None:
     err = gw.calls[1].messages[-1].tool_results[0]
     assert err.is_error is True
     assert "kaboom" not in err.content  # internal detail not leaked
+
+
+@pytest.mark.asyncio
+async def test_generated_chart_rides_back_on_the_result() -> None:
+    # The model calls nl_to_chart; the handler captures the spec into the shared sink,
+    # and the service attaches the latest chart to its reply for pinning (#12).
+    gw = _FakeGateway(
+        [
+            _tool_call("nl_to_chart"),
+            ToolChatResponse(text="Here's your chart.", stop_reason="end_turn"),
+        ]
+    )
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {"metric_refs": ["regional_sales.total_amount"]},
+            "encoding": {
+                "x": "regional_sales.region",
+                "series": [{"field": "regional_sales.total_amount"}],
+            },
+        }
+    )
+    sink: list[ChartSpec] = []
+
+    async def nl_to_chart(ctx: TenantContext, _inp: dict[str, Any]) -> str:
+        sink.append(spec)
+        return '{"chart_generated": true}'
+
+    svc = ChatService(gw, {"nl_to_chart": nl_to_chart}, chart_sink=sink)  # type: ignore[arg-type]
+    result = await svc.ask(_CTX, "plot total amount by region")
+
+    assert result.answer == "Here's your chart."
+    assert result.chart is not None
+    assert result.chart.encoding.x == "regional_sales.region"
+
+
+@pytest.mark.asyncio
+async def test_no_chart_when_none_generated() -> None:
+    gw = _FakeGateway([ToolChatResponse(text="hi", stop_reason="end_turn")])
+    svc = ChatService(gw, {})
+    result = await svc.ask(_CTX, "hello")
+    assert result.chart is None
 
 
 @pytest.mark.asyncio

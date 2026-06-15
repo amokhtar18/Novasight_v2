@@ -649,10 +649,16 @@ class ChatResponse(BaseModel):
     Attributes:
         answer: The assistant's grounded answer (figures trace to tool results).
         tools_used: The grounded tools the assistant called (for transparency).
+        chart: A validated ChartSpec when the assistant generated a chart (via the
+            nl_to_chart tool), for the client to render and pin to a dashboard (#12).
     """
 
     answer: str = Field(description="Grounded natural-language answer.")
     tools_used: list[str] = Field(description="Names of the tools the assistant called.")
+    chart: ChartSpec | None = Field(
+        default=None,
+        description="Validated chart spec when the assistant generated one; else null.",
+    )
 
 
 @router.post(
@@ -689,4 +695,6 @@ async def chat(
             status_code=503,
             detail="AI provider is temporarily unavailable. Please try again.",
         ) from exc
-    return ChatResponse(answer=result.answer, tools_used=result.tools_used)
+    return ChatResponse(
+        answer=result.answer, tools_used=result.tools_used, chart=result.chart
+    )

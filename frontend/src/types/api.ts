@@ -76,6 +76,12 @@ export interface ChartQuery {
   query?: QueryRequest | null;
   /** Governed metric names resolved by the semantic layer (AI path). */
   metric_refs?: string[];
+  /**
+   * Time dimensions for a semantic chart — carried on the spec so a saved/AI chart
+   * re-runs with the same granularity rollup. The resolved `<dimension>.<granularity>`
+   * key is what `encoding.x` reads.
+   */
+  time_dimensions?: SemanticTimeDimension[];
 }
 
 /** One plotted series: which result column to read, and how to label it. */
@@ -182,10 +188,33 @@ export interface SemanticFilter {
   values: string[];
 }
 
+/** Cube time-dimension granularities (mirrors schemas/semantic.py). */
+export type SemanticGranularity =
+  | "second"
+  | "minute"
+  | "hour"
+  | "day"
+  | "week"
+  | "month"
+  | "quarter"
+  | "year";
+
+/**
+ * A time dimension to group by, optionally rolled up to a `granularity`.
+ * With a granularity Cube returns the bucket under the `<dimension>.<granularity>`
+ * key — the column a time chart reads for its axis.
+ */
+export interface SemanticTimeDimension {
+  dimension: string;
+  granularity?: SemanticGranularity | null;
+}
+
 /** A structured, grounded query against the semantic layer. */
 export interface SemanticQueryRequest {
   measures: string[];
   dimensions: string[];
+  /** Time dimensions to group by (each optionally rolled up to a granularity). */
+  time_dimensions?: SemanticTimeDimension[];
   /** Ordering, e.g. { "regional_sales.total_amount": "desc" }. */
   order?: Record<string, "asc" | "desc">;
   /** Filters on governed members; each is re-validated server-side. */
@@ -641,6 +670,8 @@ export interface ChatResponse {
   answer: string;
   /** Names of the grounded tools the assistant called (for transparency). */
   tools_used: string[];
+  /** A validated chart when the assistant generated one (nl_to_chart), for pinning. */
+  chart?: ChartSpec | null;
 }
 
 // ---------------------------------------------------------------------------

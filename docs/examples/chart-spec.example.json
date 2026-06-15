@@ -12,7 +12,8 @@
       "filters": [],
       "limit": 50
     },
-    "metric_refs": []
+    "metric_refs": [],
+    "time_dimensions": []
   },
   "encoding": {
     "x": "month",

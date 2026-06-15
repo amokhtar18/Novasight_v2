@@ -45,6 +45,20 @@ FilterOperator = Literal[
 # Operators that are presence checks and so take no values.
 _VALUELESS_OPERATORS = frozenset({"set", "notSet"})
 
+# Cube time-dimension granularities (closed set, mapped 1:1 to Cube's). A query on a
+# ``time``-typed dimension can roll it up to one of these buckets — the defining feature
+# of a time dimension (e.g. "total_amount by month").
+SemanticGranularity = Literal[
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+]
+
 
 class SemanticFilter(BaseModel):
     """A filter on a governed member: ``member <operator> values``.
@@ -67,6 +81,28 @@ class SemanticFilter(BaseModel):
         elif not self.values:
             raise ValueError(f"operator '{self.operator}' requires at least one value")
         return self
+
+
+class SemanticTimeDimension(BaseModel):
+    """A time dimension to group by, optionally rolled up to a ``granularity``.
+
+    ``dimension`` is a governed dimension reference (re-checked against the allow-list
+    in the service, exactly like a regular dimension — it must be a ``time``-typed
+    member). With a ``granularity`` Cube buckets the values (e.g. by ``month``) and
+    returns them under the ``<dimension>.<granularity>`` key; without one the raw time
+    value is grouped (and returned under ``<dimension>``). That resolved key — see
+    :attr:`result_key` — is the column the chart reads for its time axis.
+    """
+
+    dimension: SemanticRef
+    granularity: SemanticGranularity | None = None
+
+    @property
+    def result_key(self) -> str:
+        """The column key Cube returns this time dimension under."""
+        if self.granularity is not None:
+            return f"{self.dimension}.{self.granularity}"
+        return self.dimension
 
 
 class SemanticField(BaseModel):
@@ -99,8 +135,13 @@ class SemanticQueryRequest(BaseModel):
 
     measures: list[SemanticRef] = Field(default_factory=list)
     dimensions: list[SemanticRef] = Field(default_factory=list)
+    # Optional time dimensions to group by, each optionally rolled up to a granularity
+    # (e.g. by month). Resolved through Cube's ``timeDimensions``; each ``dimension`` is
+    # re-checked against the governed allow-list in the service.
+    time_dimensions: list[SemanticTimeDimension] = Field(default_factory=list)
     # Optional ordering: ``{"sales.total_amount": "desc"}``. Keys must be queried
-    # members; the service rejects anything not in measures/dimensions.
+    # members (a measure, dimension, or a time dimension's resolved key); the service
+    # rejects anything else.
     order: dict[SemanticRef, OrderDir] = Field(default_factory=dict)
     # Optional filters on governed members. Each member is re-checked against the
     # governed allow-list in the service (a filter never reaches an ungoverned field).
@@ -111,6 +152,8 @@ class SemanticQueryRequest(BaseModel):
 
     @model_validator(mode="after")
     def _require_a_field(self) -> SemanticQueryRequest:
-        if not self.measures and not self.dimensions:
-            raise ValueError("a semantic query needs at least one measure or dimension")
+        if not self.measures and not self.dimensions and not self.time_dimensions:
+            raise ValueError(
+                "a semantic query needs at least one measure, dimension, or time dimension"
+            )
         return self

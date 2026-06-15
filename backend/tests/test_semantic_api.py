@@ -72,6 +72,7 @@ class _FakeCube:
     def __init__(self) -> None:
         self.seen_dbs: list[str] = []
         self.seen_filters: list[list[dict[str, Any]] | None] = []
+        self.seen_time_dims: list[list[dict[str, Any]] | None] = []
 
     async def meta(self, ctx: TenantContext) -> dict[str, Any]:
         self.seen_dbs.append(ctx.clickhouse_db)
@@ -86,9 +87,24 @@ class _FakeCube:
         order: dict[str, str] | None = None,
         limit: int | None = None,
         filters: list[dict[str, Any]] | None = None,
+        time_dimensions: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         self.seen_dbs.append(ctx.clickhouse_db)
         self.seen_filters.append(filters)
+        self.seen_time_dims.append(time_dimensions)
+        # When a time dimension is rolled up, Cube keys the bucket under
+        # ``<dimension>.<granularity>``; echo that shape back for the time-dim test.
+        if time_dimensions:
+            td = time_dimensions[0]
+            key = (
+                f"{td['dimension']}.{td['granularity']}"
+                if td.get("granularity")
+                else td["dimension"]
+            )
+            return [
+                {key: "2024-01-01T00:00:00.000", "regional_sales.total_amount": Decimal("100.5")},
+                {key: "2024-02-01T00:00:00.000", "regional_sales.total_amount": Decimal("200")},
+            ]
         return [
             {"regional_sales.region": "west", "regional_sales.total_amount": Decimal("100.5")},
             {"regional_sales.region": "east", "regional_sales.total_amount": Decimal("200")},
@@ -175,6 +191,52 @@ async def test_query_grounded_ok(client_with_db: TestClient, make_tenant: Any) -
     assert body["columns"] == ["regional_sales.region", "regional_sales.total_amount"]
     assert body["rows"] == [["west", 100.5], ["east", 200.0]]
     assert body["row_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_query_rolls_up_time_dimension_by_granularity(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
+) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "time_dimensions": [
+                {"dimension": "regional_sales.region", "granularity": "month"}
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # The time dimension is forwarded to Cube as a timeDimension (not a plain dimension)
+    # and its resolved <dimension>.<granularity> key leads the result columns.
+    assert fake_cube.seen_time_dims[-1] == [
+        {"dimension": "regional_sales.region", "granularity": "month"}
+    ]
+    assert body["columns"] == [
+        "regional_sales.region.month",
+        "regional_sales.total_amount",
+    ]
+    assert body["rows"][0] == ["2024-01-01T00:00:00.000", 100.5]
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_ungrounded_time_dimension(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "time_dimensions": [{"dimension": "regional_sales.secret", "granularity": "day"}],
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    assert "time dimension" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

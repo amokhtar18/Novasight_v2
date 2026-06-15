@@ -43,11 +43,14 @@ import type {
   ChartType,
   NLChartResponse,
   QueryRequest,
+  SemanticGranularity,
   SemanticQueryRequest,
 } from "@/types/api";
 
 const CHART_TYPES: ChartType[] = ["bar", "line", "area", "pie", "table", "number", "scatter"];
 const AGG_FUNCTIONS: AggFunction[] = ["count", "sum", "avg", "min", "max"];
+// Granularities offered for a time dimension (the common BI buckets).
+const GRANULARITIES: SemanticGranularity[] = ["day", "week", "month", "quarter", "year"];
 const METRIC_ALIAS = "value";
 const DEFAULT_LIMIT = 50;
 
@@ -140,6 +143,7 @@ function useSemanticBuilder(active: boolean) {
   const [modelName, setModelName] = useState("");
   const [dimension, setDimension] = useState("");
   const [measure, setMeasure] = useState("");
+  const [granularity, setGranularity] = useState<SemanticGranularity>("month");
   const [chartType, setChartType] = useState<ChartType>("bar");
 
   const model = models?.find((m) => m.name === modelName) ?? models?.[0];
@@ -147,9 +151,25 @@ function useSemanticBuilder(active: boolean) {
   const effMeasure = measure || model?.measures[0]?.name || "";
   const ready = !!model && !!effDimension && !!effMeasure;
 
+  // A `time`-typed dimension is grouped via Cube's timeDimensions with a granularity;
+  // the rolled-up column the chart plots is keyed `<dimension>.<granularity>`.
+  const isTimeDimension =
+    model?.dimensions.find((d) => d.name === effDimension)?.type === "time";
+  const timeDimensions = isTimeDimension
+    ? [{ dimension: effDimension, granularity }]
+    : [];
+  const xField = isTimeDimension ? `${effDimension}.${granularity}` : effDimension;
+
   const request: SemanticQueryRequest | null =
     active && ready
-      ? { measures: [effMeasure], dimensions: [effDimension], limit: DEFAULT_LIMIT }
+      ? isTimeDimension
+        ? {
+            measures: [effMeasure],
+            dimensions: [],
+            time_dimensions: timeDimensions,
+            limit: DEFAULT_LIMIT,
+          }
+        : { measures: [effMeasure], dimensions: [effDimension], limit: DEFAULT_LIMIT }
       : null;
   const result = useSemanticQuery(request);
 
@@ -161,12 +181,17 @@ function useSemanticBuilder(active: boolean) {
   const spec: ChartSpec = {
     version: "1",
     type: chartType,
-    query: { metric_refs: [effMeasure] },
+    query: {
+      metric_refs: [effMeasure],
+      ...(isTimeDimension ? { time_dimensions: timeDimensions } : {}),
+    },
     encoding: {
-      x: effDimension || null,
+      x: xField || null,
       series: [{ field: effMeasure, name: measureLabel }],
     },
-    options: { title: `${measureLabel} by ${dimLabel}` },
+    options: {
+      title: `${measureLabel} by ${dimLabel}${isTimeDimension ? ` (${granularity})` : ""}`,
+    },
   };
 
   return {
@@ -179,6 +204,9 @@ function useSemanticBuilder(active: boolean) {
     setDimension,
     measure: effMeasure,
     setMeasure,
+    isTimeDimension,
+    granularity,
+    setGranularity,
     chartType,
     setChartType,
     ready,
@@ -228,6 +256,23 @@ function SemanticControls({ s }: { s: SemanticBuilder }) {
           ))}
         </Select>
       </div>
+
+      {s.isTimeDimension && (
+        <div className="space-y-1.5">
+          <Label htmlFor="b-sem-gran">Granularity</Label>
+          <Select
+            id="b-sem-gran"
+            value={s.granularity}
+            onChange={(e) => s.setGranularity(e.target.value as SemanticGranularity)}
+          >
+            {GRANULARITIES.map((g) => (
+              <option key={g} value={g}>
+                {humanize(g)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="b-sem-measure">Measure</Label>

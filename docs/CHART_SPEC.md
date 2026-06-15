@@ -33,7 +33,8 @@ both reading the one canonical fixture so the two languages cannot drift.
   "query": {                     // WHERE the data comes from (≥1 source required)
     "dataset_id": "…uuid…",      //   dataset the inline query runs against
     "query": { /* QueryRequest */ }, //   structured aggregation (Phase 1 path)
-    "metric_refs": []            //   OR governed metric names (semantic / AI path)
+    "metric_refs": [],           //   OR governed metric names (semantic / AI path)
+    "time_dimensions": []        //   optional time-dimension rollups (semantic path)
   },
   "encoding": {                  // HOW columns map to visual channels
     "x": "month",                //   category axis (x / pie label); omit for table
@@ -72,6 +73,14 @@ one of two sources is required:
   path the AI layer will use (see the `nl-to-sql-grounding` skill).
 
 There is intentionally nowhere to put a raw SQL string.
+
+For the semantic path, `time_dimensions` (a list of
+[`SemanticTimeDimension`](../backend/app/schemas/semantic.py): `{ dimension, granularity }`)
+carries any time-dimension rollup on the spec, so a saved or AI-generated chart
+re-runs at the same granularity. The rolled-up column key is
+`<dimension>.<granularity>` and is the value `encoding.x` reads — re-run logic
+(`frontend/src/lib/useChartData.ts`) sends these as Cube `timeDimensions`, not as plain
+`dimensions`. See `docs/SEMANTIC_LAYER.md` for the query semantics.
 
 ### `encoding` — encodings
 

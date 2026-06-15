@@ -215,6 +215,7 @@ class SemanticLayerClient:
         order: dict[str, str] | None = None,
         limit: int | None = None,
         filters: list[dict[str, Any]] | None = None,
+        time_dimensions: list[dict[str, Any]] | None = None,
     ) -> list[CubeRow]:
         """Run a Cube query scoped to the given tenant and return typed rows.
 
@@ -234,6 +235,9 @@ class SemanticLayerClient:
                 The caller (the semantic service) is responsible for validating each
                 ``member`` against the governed allow-list; this client only forwards
                 them.
+            time_dimensions: Optional Cube time-dimension objects
+                (``{dimension, granularity?}``). The caller validates each ``dimension``
+                against the governed allow-list; this client only forwards them.
 
         Returns:
             A list of ``CubeRow`` dicts.  Numeric measure values are cast to
@@ -245,7 +249,12 @@ class SemanticLayerClient:
         """
         token = self._mint_jwt(ctx)
         body = self._build_body(
-            measures=measures, dimensions=dimensions, order=order, limit=limit, filters=filters
+            measures=measures,
+            dimensions=dimensions,
+            order=order,
+            limit=limit,
+            filters=filters,
+            time_dimensions=time_dimensions,
         )
 
         # Log the query intent with tenant tagging; NEVER log the token or secret.
@@ -326,12 +335,15 @@ class SemanticLayerClient:
         order: dict[str, str] | None,
         limit: int | None = None,
         filters: list[dict[str, Any]] | None = None,
+        time_dimensions: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Build the Cube JSON query body."""
         query: dict[str, Any] = {
             "measures": measures,
             "dimensions": dimensions,
         }
+        if time_dimensions:
+            query["timeDimensions"] = time_dimensions
         if order:
             query["order"] = order
         if limit is not None:

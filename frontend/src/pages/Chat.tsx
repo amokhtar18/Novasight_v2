@@ -10,16 +10,22 @@ import { useRef, useState } from "react";
 import { MessageSquare, Send, Sparkles, User } from "lucide-react";
 
 import { useChat } from "@/api/hooks";
+import { useChartData } from "@/lib/useChartData";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ChartRenderer } from "@/components/chart/ChartRenderer";
+import { SaveChartButton } from "@/components/chart/SaveChartButton";
+import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { ChartSpec } from "@/types/api";
 
 interface Turn {
   role: "user" | "assistant";
   text: string;
   tools?: string[];
+  chart?: ChartSpec | null;
 }
 
 const SUGGESTIONS = [
@@ -45,7 +51,12 @@ export function Chat() {
         onSuccess: (resp) => {
           setTurns((t) => [
             ...t,
-            { role: "assistant", text: resp.answer, tools: resp.tools_used },
+            {
+              role: "assistant",
+              text: resp.answer,
+              tools: resp.tools_used,
+              chart: resp.chart,
+            },
           ]);
           requestAnimationFrame(() =>
             listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -113,6 +124,7 @@ export function Chat() {
                   ))}
                 </div>
               )}
+              {turn.chart && <ChatChart spec={turn.chart} />}
             </div>
           </div>
         ))}
@@ -155,6 +167,38 @@ export function Chat() {
           Send
         </Button>
       </form>
+    </div>
+  );
+}
+
+/**
+ * ChatChart — render an AI-generated chart inline and let the user keep it.
+ *
+ * Re-runs the spec's grounded query (useChartData) like any saved chart, then offers
+ * to save it or pin it to a dashboard — the conversational analogue of the builder's
+ * AI path (#12). A separate component so the data hook isn't called conditionally.
+ */
+function ChatChart({ spec }: { spec: ChartSpec }) {
+  const { data, isLoading, isError } = useChartData(spec);
+  const title = spec.options?.title ?? "AI chart";
+
+  return (
+    <div className="mt-3 rounded-lg border bg-background/50 p-3">
+      {isLoading ? (
+        <div className="flex h-56 items-center justify-center">
+          <Spinner label="Loading chart" />
+        </div>
+      ) : isError || !data || data.row_count === 0 ? (
+        <p className="text-xs text-muted-foreground">This chart could not be rendered.</p>
+      ) : (
+        <>
+          <ChartRenderer spec={spec} data={data} title={title} className="h-56" />
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <SaveChartButton spec={spec} defaultName={title} sourceKind="semantic" />
+            <AddToDashboard spec={spec} title={title} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -396,9 +396,31 @@ the tenant is resolved from the JWT, never a body/path value.
   dashboard may filter on a dimension it doesn't display). This is the foundation the
   dashboard filter bar builds on.
 
+  **Time dimensions** (`time_dimensions`, schema `SemanticTimeDimension`) group a
+  `time`-typed dimension into buckets — the defining feature of a time dimension:
+
+  ```json
+  { "measures": ["regional_sales.total_amount"],
+    "time_dimensions": [
+      { "dimension": "regional_sales.order_date", "granularity": "month" }
+    ] }
+  ```
+
+  Each is forwarded to Cube's native `timeDimensions` (never the plain `dimensions`
+  array). `granularity` is a closed set (`second`…`year`; the builder offers
+  `day`/`week`/`month`/`quarter`/`year`). With a granularity Cube returns the bucket
+  under the **`<dimension>.<granularity>`** key (e.g. `regional_sales.order_date.month`);
+  that resolved key — `SemanticTimeDimension.result_key` — leads the result `columns`
+  (before measures) and is what a time chart reads for its axis. The base `dimension`
+  is re-checked against the governed dimension allow-list (422 otherwise), so a
+  granularity rollup is never a way to reach an ungoverned field. A query may carry
+  only time dimensions (no plain measure/dimension) and still be valid.
+
 Implementation: `backend/app/api/v1/semantic.py` → `services/semantic.py`
 (`SemanticService`, fail-closed `SemanticValidationError`) → `ai/semantic/client.py`
-(`SemanticLayerClient.query`, with optional `limit` and `filters`).
+(`SemanticLayerClient.query`, with optional `limit`, `filters`, and `time_dimensions`).
+A saved/AI chart persists its time dimensions on the spec (`ChartQuery.time_dimensions`)
+so re-runs reproduce the same rollup; see `docs/CHART_SPEC.md`.
 
 ## HTTP API: saved charts
 
