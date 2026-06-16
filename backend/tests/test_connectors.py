@@ -11,7 +11,12 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from app.ingestion.connectors import build_connector
-from app.ingestion.connectors.base import ConnectorError
+from app.ingestion.connectors.base import (
+    ColumnSelect,
+    ConnectorError,
+    ExtractSpec,
+    FilterSpec,
+)
 
 # ---------------------------------------------------------------------------
 # SQL database connector
@@ -81,6 +86,55 @@ async def test_sql_connector_introspect_rejects_bad_identifier(tmp_path: Path) -
     config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
     with pytest.raises(ConnectorError):
         await conn.introspect(config, None, schema="main; drop table orders")
+
+
+@pytest.mark.asyncio
+async def test_sql_connector_extract_full(tmp_path: Path) -> None:
+    conn = build_connector("sql_database", store=None)  # type: ignore[arg-type]
+    config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
+    table = await conn.extract(config, None, target="orders")
+    assert table.column_names == ["id", "region"]
+    assert table.num_rows == 2
+
+
+@pytest.mark.asyncio
+async def test_sql_connector_extract_selects_renames_and_filters(tmp_path: Path) -> None:
+    conn = build_connector("sql_database", store=None)  # type: ignore[arg-type]
+    config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
+    spec = ExtractSpec(
+        columns=[ColumnSelect(source_name="region", target_name="area")],
+        filters=[FilterSpec(column="region", operator="eq", value="west")],
+    )
+    table = await conn.extract(config, None, target="orders", spec=spec)
+    # Only the selected column, renamed, and only the matching row.
+    assert table.column_names == ["area"]
+    assert table.to_pydict() == {"area": ["west"]}
+
+
+@pytest.mark.asyncio
+async def test_sql_connector_extract_cdc_predicate(tmp_path: Path) -> None:
+    conn = build_connector("sql_database", store=None)  # type: ignore[arg-type]
+    config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
+    # id is the CDC column; only rows with id > 1 are returned (incremental run).
+    spec = ExtractSpec(cdc_column="id", cdc_since=1)
+    table = await conn.extract(config, None, target="orders", spec=spec)
+    assert table.num_rows == 1
+    assert table.to_pydict()["id"] == [2]
+
+
+@pytest.mark.asyncio
+async def test_sql_connector_extract_filter_value_is_bound_not_injected(tmp_path: Path) -> None:
+    conn = build_connector("sql_database", store=None)  # type: ignore[arg-type]
+    config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
+    # A SQL-injection attempt in the *value* is bound as a parameter → matches no row,
+    # and certainly does not drop the table.
+    spec = ExtractSpec(
+        filters=[FilterSpec(column="region", operator="eq", value="west'; DROP TABLE orders;--")]
+    )
+    table = await conn.extract(config, None, target="orders", spec=spec)
+    assert table.num_rows == 0
+    # The table still exists and still has its two rows.
+    assert (await conn.extract(config, None, target="orders")).num_rows == 2
 
 
 # ---------------------------------------------------------------------------

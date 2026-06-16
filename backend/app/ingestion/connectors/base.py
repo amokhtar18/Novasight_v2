@@ -54,6 +54,44 @@ class IntrospectResult:
     columns: list[ColumnInfo] = field(default_factory=list)
 
 
+@dataclass
+class ColumnSelect:
+    """One extracted column: read ``source_name``, emit it as ``target_name``."""
+
+    source_name: str
+    target_name: str
+
+
+@dataclass
+class FilterSpec:
+    """A source-side predicate pushed into the extract query (#6).
+
+    ``column`` is a source column, ``operator`` one of the closed set the pipeline
+    schema validates, and ``value`` is bound as a parameter by the connector (never
+    interpolated) — so a stored filter can never inject SQL.
+    """
+
+    column: str
+    operator: str
+    value: object = None
+
+
+@dataclass
+class ExtractSpec:
+    """How the extract query is shaped for one pipeline run (#5/#6/#7).
+
+    Empty ``columns`` means ``SELECT *`` with no rename (the original behaviour). The
+    CDC predicate (``cdc_column > cdc_since``) is added only when both are set, so an
+    incremental run pulls just the rows newer than the last high-water mark.
+    """
+
+    columns: list[ColumnSelect] = field(default_factory=list)
+    schema: str | None = None
+    filters: list[FilterSpec] = field(default_factory=list)
+    cdc_column: str | None = None
+    cdc_since: object = None
+
+
 class SourceConnector(ABC):
     """Base class for all source connectors. Subclasses set ``kind``."""
 
@@ -87,12 +125,15 @@ class SourceConnector(ABC):
         secret: dict[str, Any] | None,
         *,
         target: str,
+        spec: ExtractSpec | None = None,
     ) -> Any:  # noqa: ANN401 — a pyarrow.Table (no type stubs); kept loose on purpose
-        """Read the full selected ``target`` object/table into a pyarrow ``Table``.
+        """Read the selected ``target`` object/table into a pyarrow ``Table``.
 
         Unlike ``preview`` this is uncapped — it is the extract step of a pipeline
-        run, executed off the request path (worker). Raises ``ConnectorError`` on
-        failure. Blocking IO must run in a worker thread.
+        run, executed off the request path (worker). ``spec`` (relational connectors)
+        narrows the read to selected columns, renames them, and pushes down filters
+        and an optional CDC predicate; ``None`` reads everything. Raises
+        ``ConnectorError`` on failure. Blocking IO must run in a worker thread.
         """
 
     async def introspect(

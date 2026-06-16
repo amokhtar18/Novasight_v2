@@ -17,6 +17,7 @@ from typing import Any, ClassVar
 from app.core.object_store import ObjectStore
 from app.ingestion.connectors.base import (
     ConnectorError,
+    ExtractSpec,
     PreviewResult,
     SourceConnector,
 )
@@ -77,10 +78,12 @@ class FilesystemConnector(SourceConnector):
         secret: dict[str, Any] | None,
         *,
         target: str,
+        spec: ExtractSpec | None = None,
     ) -> Any:  # noqa: ANN401 — pyarrow.Table
         self.validate_config(config)
         # ``target`` is the object key to load (the pipeline's selected object);
-        # fall back to the connection's configured key when not specified.
+        # fall back to the connection's configured key when not specified. ``spec``
+        # (column/filter push-down) is relational-only — a file load reads the object.
         key = target or str(config["key"])
         try:
             raw = await self._store.get_object(key=key)

@@ -22,6 +22,7 @@ from sqlalchemy.engine import URL, Engine
 from app.ingestion.connectors.base import (
     ColumnInfo,
     ConnectorError,
+    ExtractSpec,
     IntrospectResult,
     PreviewResult,
     SourceConnector,
@@ -71,9 +72,10 @@ class SqlDatabaseConnector(SourceConnector):
         secret: dict[str, Any] | None,
         *,
         target: str,
+        spec: ExtractSpec | None = None,
     ) -> Any:  # noqa: ANN401 — pyarrow.Table
         self.validate_config(config)
-        return await asyncio.to_thread(self._sync_extract, config, secret, target)
+        return await asyncio.to_thread(self._sync_extract, config, secret, target, spec)
 
     async def introspect(
         self,
@@ -130,21 +132,29 @@ class SqlDatabaseConnector(SourceConnector):
             engine.dispose()
 
     def _sync_extract(
-        self, config: dict[str, Any], secret: dict[str, Any] | None, target: str
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        target: str,
+        spec: ExtractSpec | None,
     ) -> Any:  # noqa: ANN401 — pyarrow.Table
         import pyarrow as pa
 
+        if any(ch not in _SAFE_IDENT for ch in target):
+            raise ConnectorError("invalid table name")
         engine = self._engine(config, secret)
         try:
             with engine.connect() as conn:
-                if target not in set(inspect(conn).get_table_names()):
+                schema = spec.schema if spec else None
+                if target not in set(inspect(conn).get_table_names(schema=schema)):
                     raise ConnectorError(f"unknown table {target!r}")
-                if any(ch not in _SAFE_IDENT for ch in target):
-                    raise ConnectorError("invalid table name")
-                result = conn.execute(text(f"SELECT * FROM {target}"))  # noqa: S608
-                columns = list(result.keys())
+                sql, params = self._build_extract_query(engine, target, spec)
+                result = conn.execute(text(sql), params)
+                source_cols = list(result.keys())
                 rows = result.fetchall()
-                data = {col: [row[i] for row in rows] for i, col in enumerate(columns)}
+                # Rename to target names when a column map was given (else as-is).
+                out_cols = self._rename(source_cols, spec)
+                data = {out_cols[i]: [row[i] for row in rows] for i in range(len(source_cols))}
                 return pa.table(data)
         except ConnectorError:
             raise
@@ -152,6 +162,55 @@ class SqlDatabaseConnector(SourceConnector):
             raise ConnectorError(f"extract failed: {type(exc).__name__}") from exc
         finally:
             engine.dispose()
+
+    @staticmethod
+    def _rename(source_cols: list[str], spec: ExtractSpec | None) -> list[str]:
+        if not spec or not spec.columns:
+            return source_cols
+        mapping = {c.source_name: c.target_name for c in spec.columns}
+        return [mapping.get(c, c) for c in source_cols]
+
+    @staticmethod
+    def _build_extract_query(
+        engine: Engine, target: str, spec: ExtractSpec | None
+    ) -> tuple[str, dict[str, Any]]:
+        """Build the extract SELECT + bound params from an ``ExtractSpec``.
+
+        Identifiers (table, schema, columns) are quoted via the dialect's preparer;
+        filter/CDC values are **bound parameters**, never interpolated — so a stored
+        filter can't inject SQL. Empty ``columns`` → ``SELECT *``; no filters → no WHERE.
+        """
+        quote = engine.dialect.identifier_preparer.quote
+        params: dict[str, Any] = {}
+        if not spec:
+            return f"SELECT * FROM {quote(target)}", params  # noqa: S608 — identifier quoted
+
+        cols = ", ".join(quote(c.source_name) for c in spec.columns) if spec.columns else "*"
+        from_sql = f"{quote(spec.schema)}.{quote(target)}" if spec.schema else quote(target)
+        where: list[str] = []
+        ops = {"eq": "=", "ne": "<>", "gt": ">", "ge": ">=", "lt": "<", "le": "<=", "like": "LIKE"}
+        for i, f in enumerate(spec.filters):
+            col = quote(f.column)
+            if f.operator in ("is_null", "is_not_null"):
+                where.append(f"{col} IS {'NOT ' if f.operator == 'is_not_null' else ''}NULL")
+            elif f.operator == "in":
+                values = f.value if isinstance(f.value, list) else []
+                keys = []
+                for j, v in enumerate(values):
+                    k = f"f{i}_{j}"
+                    params[k] = v
+                    keys.append(f":{k}")
+                where.append(f"{col} IN ({', '.join(keys)})" if keys else "1 = 0")
+            elif f.operator in ops:
+                params[f"f{i}"] = f.value
+                where.append(f"{col} {ops[f.operator]} :f{i}")
+        if spec.cdc_column and spec.cdc_since is not None:
+            params["cdc_since"] = spec.cdc_since
+            where.append(f"{quote(spec.cdc_column)} > :cdc_since")
+        sql = f"SELECT {cols} FROM {from_sql}"  # noqa: S608 — identifiers quoted, values bound
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        return sql, params
 
     def _sync_introspect(
         self,

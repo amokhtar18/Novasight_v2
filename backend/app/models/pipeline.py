@@ -47,6 +47,10 @@ class Pipeline(TimestampMixin, Base):
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
+    # Incremental run state (#7), e.g. {"cdc": "<high-water mark>"}; NULL = no runs yet.
+    # The executor reads it to bound the next incremental extract and advances it on
+    # success. Opaque JSON so new cursor kinds need no migration.
+    cursor: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     runs: Mapped[list[PipelineRun]] = relationship(
         back_populates="pipeline", cascade="all, delete-orphan", passive_deletes=True

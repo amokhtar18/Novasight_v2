@@ -118,6 +118,31 @@ executor's **steps are injected**, so the orchestration + lifecycle are fully un
 tested (`tests/test_pipeline_executor.py`) with no infra; the concrete extract/load/
 register adapters are thin and verified against the running stack.
 
+### Field selection, filter push-down & load modes (#5/#6/#7)
+
+The wizard's config (`schemas/pipeline.PipelineConfig`) shapes both halves of the run:
+
+- **Extract** (`ExtractSpec` → `SqlDatabaseConnector._build_extract_query`): selects only
+  the **included** columns and renames them to their `target_name`; pushes the structured
+  `source_filters` and (for `incremental`) a `cdc_column > :watermark` predicate into the
+  source query. Identifiers are quoted via the dialect's preparer; **filter/CDC values are
+  bound parameters, never interpolated** — a stored filter cannot inject SQL (regression-
+  tested with an injection payload in `tests/test_connectors.py`).
+- **Load** (`LoadPlan` → `iceberg_writer.write_arrow_table`): `write_disposition` selects how
+  the batch lands into an existing table — `overwrite` (replace), `append` / `incremental`
+  (`Table.append`), or `merge` (`Table.upsert(join_cols=primary_key)`, i.e. SCD type 1). A
+  first load always seeds a new table.
+- **Incremental cursor**: the high-water mark is persisted on `pipelines.cursor` (JSON,
+  migration `0009`); the executor reads it into the next extract and advances it to the new
+  `max(cdc_column)` on success.
+- **Deferred**: `scd_type="scd2"` (history) is accepted/stored so the wizard can offer it,
+  but the executor **rejects it at run time** ("not yet supported"); `partition_by` is stored
+  but not yet materialised into the Iceberg partition spec.
+
+Caveat: the executor routing + extract push-down are unit-tested with fakes/SQLite; the
+`append`/`upsert` Iceberg operations themselves run against the live catalog and should be
+verified end-to-end on the stack (rebuild the api/worker image for the new drivers + cursor).
+
 ## Schedules (#4)
 
 A **schedule** binds a cron to a pipeline so it runs on a cadence — no Dagster needed
