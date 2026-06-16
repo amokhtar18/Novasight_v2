@@ -43,6 +43,7 @@ import {
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PipelineWizard } from "@/components/pipeline/PipelineWizard";
+import { CronBuilder } from "@/components/schedule/CronBuilder";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -719,21 +720,13 @@ function ScheduleDialog({
           </ul>
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="sch-cron">New schedule (cron)</Label>
-          <div className="flex gap-2">
-            <Input
-              id="sch-cron"
-              value={cron}
-              onChange={(e) => setCron(e.target.value)}
-              placeholder="0 2 * * *"
-              className="font-mono"
-            />
-            <Button onClick={handleAdd} disabled={createSchedule.isPending}>
-              <Plus className="h-4 w-4" aria-hidden />
-              Add
-            </Button>
-          </div>
+        <div className="space-y-2">
+          <Label>New schedule</Label>
+          <CronBuilder value={cron} onChange={setCron} />
+          <Button onClick={handleAdd} disabled={createSchedule.isPending} className="w-full">
+            <Plus className="h-4 w-4" aria-hidden />
+            Add schedule
+          </Button>
         </div>
       </div>
 

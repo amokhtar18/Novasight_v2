@@ -289,12 +289,14 @@ describe("Pipelines page", () => {
     );
   });
 
-  it("schedules a pipeline on a cron", () => {
+  it("schedules a pipeline via the cron builder (advanced mode)", () => {
     setup({ sources: [source], pipelines: [pipeline] });
     render(<Pipelines />);
     fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
+    // The raw cron input lives under the builder's Advanced tab.
+    fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
     fireEvent.change(document.querySelector("#sch-cron")!, { target: { value: "0 6 * * *" } });
-    fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add schedule/i }));
     expect(createScheduleMutate).toHaveBeenCalledWith(
       { name: "orders_daily schedule", target_id: "p1", cron: "0 6 * * *" },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })

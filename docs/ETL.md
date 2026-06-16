@@ -123,6 +123,11 @@ register adapters are thin and verified against the running stack.
 A **schedule** binds a cron to a pipeline so it runs on a cadence — no Dagster needed
 (consistent with run-now going through the worker). Schedules are tenant config.
 
+The UI builds the cron with `components/schedule/CronBuilder.tsx` (#9): a **Preset** mode
+turns a frequency (hourly/daily/weekly/monthly) + time into the 5-field expression and shows
+a plain-English summary (`describeCron`), while an **Advanced** mode exposes the raw cron for
+power users. The builder is pure convenience — the backend still validates the expression.
+
 - **API** (`backend/app/api/v1/schedules.py` → `services/schedules.py`):
   `GET/POST /api/v1/schedules`, `GET/PATCH/DELETE /api/v1/schedules/{id}`. Reads need a
   tenant context; mutations require the tenant superuser role. The cron is validated at
