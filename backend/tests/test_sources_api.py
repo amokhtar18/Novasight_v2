@@ -203,6 +203,21 @@ async def test_sql_test_and_preview(
     assert preview.status_code == 200, preview.text
     assert preview.json()["columns"] == ["id", "region"]
 
+    # Introspection: schema → tables → columns (with a suggested target type).
+    tables = client_with_db.post(
+        f"/api/v1/sources/{sid}/introspect?schema=main", headers=_auth(SU)
+    )
+    assert tables.status_code == 200, tables.text
+    assert "orders" in tables.json()["tables"]
+
+    cols = client_with_db.post(
+        f"/api/v1/sources/{sid}/introspect?schema=main&table=orders", headers=_auth(SU)
+    ).json()["columns"]
+    by_name = {c["name"]: c for c in cols}
+    assert set(by_name) == {"id", "region"}
+    assert by_name["id"]["suggested_target_type"] == "Int64"
+    assert by_name["region"]["suggested_target_type"] == "String"
+
 
 @pytest.mark.asyncio
 async def test_filesystem_preview(client_with_db: TestClient, make_tenant: Any) -> None:

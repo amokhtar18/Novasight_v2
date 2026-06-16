@@ -64,6 +64,7 @@ default-port resolution) so it is unit-testable without that engine's driver ins
 | DELETE | `/sources/{id}` | superuser | delete |
 | POST | `/sources/{id}/test` | superuser | connectivity check (422 on failure) |
 | POST | `/sources/{id}/preview` | superuser | objects + row sample |
+| POST | `/sources/{id}/introspect` | superuser | schema → table → columns drill-down (#5) |
 
 Reads need only a tenant context; mutations and probes require the tenant
 `superuser` role (they configure plumbing and reach external systems). The tenant

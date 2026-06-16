@@ -77,3 +77,24 @@ class SourcePreviewResponse(BaseModel):
     objects: list[str]
     columns: list[str]
     rows: list[list[Any]]
+
+
+class IntrospectColumn(BaseModel):
+    """One source column for the field-mapping step: its name, source SQL type,
+    and the wizard's suggested destination type (from ``ingestion.type_mapping``)."""
+
+    name: str
+    source_type: str
+    suggested_target_type: str
+
+
+class SourceIntrospectResponse(BaseModel):
+    """Staged schema introspection for the pipeline wizard (``/sources/{id}/introspect``).
+
+    Exactly one level is populated per call: ``schemas`` (no args), ``tables`` (a
+    schema given), or ``columns`` (schema + table given). See ``connectors.base``.
+    """
+
+    schemas: list[str] = Field(default_factory=list)
+    tables: list[str] = Field(default_factory=list)
+    columns: list[IntrospectColumn] = Field(default_factory=list)

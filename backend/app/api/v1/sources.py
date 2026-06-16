@@ -14,12 +14,15 @@ from fastapi import APIRouter, Depends, Response, status
 from app.core.security import Principal, require_tenant_superuser
 from app.ingestion.connectors import KINDS
 from app.ingestion.connectors.engines import ENGINES
+from app.ingestion.type_mapping import suggest_target_type
 from app.models.source_connection import SourceConnection
 from app.schemas.source import (
     EngineSpecRead,
+    IntrospectColumn,
     SourceConnectionCreate,
     SourceConnectionRead,
     SourceConnectionUpdate,
+    SourceIntrospectResponse,
     SourcePreviewRequest,
     SourcePreviewResponse,
     SourceTestResponse,
@@ -147,4 +150,34 @@ async def preview_source(
     result = await svc.preview(ctx, source_id, target=payload.target, limit=payload.limit)
     return SourcePreviewResponse(
         objects=result.objects, columns=result.columns, rows=result.rows
+    )
+
+
+@router.post("/{source_id}/introspect", response_model=SourceIntrospectResponse)
+async def introspect_source(
+    source_id: uuid.UUID,
+    schema: str | None = None,
+    table: str | None = None,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_superuser),  # noqa: B008
+    svc: SourceConnectionService = Depends(get_source_connection_service),  # noqa: B008
+) -> SourceIntrospectResponse:
+    """Drill schema → table → columns for the field-level pipeline wizard (#5).
+
+    One level per call (``schema``/``table`` are query params): none → schemas; a
+    ``schema`` → its tables; ``schema`` + ``table`` → its columns, each tagged with a
+    suggested destination type. Tenant superuser only (it reaches the source DB).
+    """
+    result = await svc.introspect(ctx, source_id, schema=schema, table=table)
+    return SourceIntrospectResponse(
+        schemas=result.schemas,
+        tables=result.tables,
+        columns=[
+            IntrospectColumn(
+                name=c.name,
+                source_type=c.source_type,
+                suggested_target_type=suggest_target_type(c.source_type),
+            )
+            for c in result.columns
+        ],
     )

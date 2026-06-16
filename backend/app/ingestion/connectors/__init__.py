@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from app.core.object_store import ObjectStore
 from app.ingestion.connectors.base import (
+    ColumnInfo,
     ConnectorError,
+    IntrospectResult,
     PreviewResult,
     SourceConnector,
 )
@@ -30,8 +32,10 @@ def build_connector(kind: str, *, store: ObjectStore) -> SourceConnector:
 
 __all__ = [
     "KINDS",
+    "ColumnInfo",
     "ConnectorError",
     "FilesystemConnector",
+    "IntrospectResult",
     "PreviewResult",
     "SourceConnector",
     "SqlDatabaseConnector",

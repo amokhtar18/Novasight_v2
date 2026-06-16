@@ -32,6 +32,28 @@ class PreviewResult:
     rows: list[list[Any]] = field(default_factory=list)
 
 
+@dataclass
+class ColumnInfo:
+    """One source column: its name and its source-side SQL type (as a string)."""
+
+    name: str
+    source_type: str
+
+
+@dataclass
+class IntrospectResult:
+    """Staged schema introspection for the pipeline wizard (#5).
+
+    Each call answers one level of the schema → table → column drill-down: with no
+    ``schema``/``table`` it lists ``schemas``; with a ``schema`` it lists that schema's
+    ``tables``; with a ``schema`` + ``table`` it lists that table's ``columns``.
+    """
+
+    schemas: list[str] = field(default_factory=list)
+    tables: list[str] = field(default_factory=list)
+    columns: list[ColumnInfo] = field(default_factory=list)
+
+
 class SourceConnector(ABC):
     """Base class for all source connectors. Subclasses set ``kind``."""
 
@@ -72,3 +94,18 @@ class SourceConnector(ABC):
         run, executed off the request path (worker). Raises ``ConnectorError`` on
         failure. Blocking IO must run in a worker thread.
         """
+
+    async def introspect(
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        *,
+        schema: str | None = None,
+        table: str | None = None,
+    ) -> IntrospectResult:
+        """Drill schema → table → columns for the field-level pipeline wizard (#5).
+
+        Default: not supported. Relational connectors override this; object-store
+        connectors (e.g. filesystem) have no schemas, so they raise here.
+        """
+        raise ConnectorError(f"{self.kind} does not support schema introspection")

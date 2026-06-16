@@ -21,6 +21,7 @@ from app.core.db import get_db
 from app.core.object_store import ObjectStore, get_object_store
 from app.ingestion.connectors import (
     ConnectorError,
+    IntrospectResult,
     PreviewResult,
     SourceConnector,
     build_connector,
@@ -121,6 +122,26 @@ class SourceConnectionService:
                 self._decrypt(source.secret_ciphertext),
                 target=target,
                 limit=limit,
+            )
+        except ConnectorError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    async def introspect(
+        self,
+        ctx: TenantContext,
+        source_id: uuid.UUID,
+        *,
+        schema: str | None,
+        table: str | None,
+    ) -> IntrospectResult:
+        source = await self.get_for_tenant(ctx, source_id)
+        connector = self._connector(source.kind)
+        try:
+            return await connector.introspect(
+                source.config,
+                self._decrypt(source.secret_ciphertext),
+                schema=schema,
+                table=table,
             )
         except ConnectorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc

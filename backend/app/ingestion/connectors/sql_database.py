@@ -20,7 +20,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import URL, Engine
 
 from app.ingestion.connectors.base import (
+    ColumnInfo,
     ConnectorError,
+    IntrospectResult,
     PreviewResult,
     SourceConnector,
 )
@@ -72,6 +74,17 @@ class SqlDatabaseConnector(SourceConnector):
     ) -> Any:  # noqa: ANN401 — pyarrow.Table
         self.validate_config(config)
         return await asyncio.to_thread(self._sync_extract, config, secret, target)
+
+    async def introspect(
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        *,
+        schema: str | None = None,
+        table: str | None = None,
+    ) -> IntrospectResult:
+        self.validate_config(config)
+        return await asyncio.to_thread(self._sync_introspect, config, secret, schema, table)
 
     # ------------------------------------------------------------------
     # Blocking implementations (run in a worker thread)
@@ -137,6 +150,42 @@ class SqlDatabaseConnector(SourceConnector):
             raise
         except Exception as exc:
             raise ConnectorError(f"extract failed: {type(exc).__name__}") from exc
+        finally:
+            engine.dispose()
+
+    def _sync_introspect(
+        self,
+        config: dict[str, Any],
+        secret: dict[str, Any] | None,
+        schema: str | None,
+        table: str | None,
+    ) -> IntrospectResult:
+        # Guard the optional schema/table identifiers before they reach the
+        # inspector (they are interpolated into reflection queries by the driver).
+        for ident in (schema, table):
+            if ident is not None and any(ch not in _SAFE_IDENT for ch in ident):
+                raise ConnectorError("invalid schema/table name")
+        engine = self._engine(config, secret)
+        try:
+            with engine.connect() as conn:
+                inspector = inspect(conn)
+                if table is not None:
+                    # Columns of one table (schema may be None → default schema).
+                    cols = inspector.get_columns(table, schema=schema)
+                    columns = [
+                        ColumnInfo(name=str(c["name"]), source_type=str(c["type"]))
+                        for c in cols
+                    ]
+                    return IntrospectResult(columns=columns)
+                if schema is not None:
+                    return IntrospectResult(
+                        tables=sorted(inspector.get_table_names(schema=schema))
+                    )
+                return IntrospectResult(schemas=sorted(inspector.get_schema_names()))
+        except ConnectorError:
+            raise
+        except Exception as exc:
+            raise ConnectorError(f"introspection failed: {type(exc).__name__}") from exc
         finally:
             engine.dispose()
 

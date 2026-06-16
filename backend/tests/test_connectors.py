@@ -59,6 +59,30 @@ async def test_sql_connector_unknown_table_is_error(tmp_path: Path) -> None:
         await conn.preview(config, None, target="ghost")
 
 
+@pytest.mark.asyncio
+async def test_sql_connector_introspect_drilldown(tmp_path: Path) -> None:
+    conn = build_connector("sql_database", store=None)  # type: ignore[arg-type]
+    config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
+
+    schemas = await conn.introspect(config, None)
+    assert "main" in schemas.schemas  # sqlite's default schema
+
+    tables = await conn.introspect(config, None, schema="main")
+    assert "orders" in tables.tables
+
+    cols = await conn.introspect(config, None, schema="main", table="orders")
+    assert [c.name for c in cols.columns] == ["id", "region"]
+    assert all(c.source_type for c in cols.columns)  # a type string was captured
+
+
+@pytest.mark.asyncio
+async def test_sql_connector_introspect_rejects_bad_identifier(tmp_path: Path) -> None:
+    conn = build_connector("sql_database", store=None)  # type: ignore[arg-type]
+    config = {"driver": "sqlite", "database": _sqlite_db(tmp_path)}
+    with pytest.raises(ConnectorError):
+        await conn.introspect(config, None, schema="main; drop table orders")
+
+
 # ---------------------------------------------------------------------------
 # Filesystem connector
 # ---------------------------------------------------------------------------
@@ -92,6 +116,14 @@ async def test_filesystem_connector_missing_object() -> None:
     conn = build_connector("filesystem", store=store)  # type: ignore[arg-type]
     with pytest.raises(ConnectorError):
         await conn.test_connection({"format": "csv", "key": "nope.csv"}, None)
+
+
+@pytest.mark.asyncio
+async def test_filesystem_connector_introspect_unsupported() -> None:
+    store = _FakeStore({})
+    conn = build_connector("filesystem", store=store)  # type: ignore[arg-type]
+    with pytest.raises(ConnectorError):
+        await conn.introspect({"format": "csv", "key": "x"}, None)
 
 
 def test_unknown_kind() -> None:
