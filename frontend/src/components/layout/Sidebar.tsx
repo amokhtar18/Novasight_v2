@@ -57,9 +57,33 @@ function NavList({
     </NavLink>
   );
 
+  // Render each item, inserting a section header (or a divider when collapsed)
+  // the first time a new group appears. Items are pre-sorted by group in nav.ts,
+  // so "first of group" == differs from the previous item's group. Ungrouped
+  // items render at the top with no header.
+  const rows = items.flatMap((item, i) => {
+    const out = [];
+    if (item.group && item.group !== items[i - 1]?.group) {
+      out.push(
+        collapsed ? (
+          <div key={`sep-${item.group}`} className="my-1.5 border-t border-border/50" />
+        ) : (
+          <p
+            key={`hdr-${item.group}`}
+            className="px-3 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground/70"
+          >
+            {item.group}
+          </p>
+        )
+      );
+    }
+    out.push(renderItem(item));
+    return out;
+  });
+
   return (
     <nav className="flex flex-1 flex-col gap-1" aria-label="Primary">
-      {items.map(renderItem)}
+      {rows}
       <div className="mt-auto flex flex-col gap-1 pt-2">
         {FOOTER_ITEMS.map(renderItem)}
       </div>

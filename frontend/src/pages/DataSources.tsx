@@ -9,6 +9,7 @@ import {
   Database,
   FileSpreadsheet,
   MessageSquareText,
+  Workflow,
 } from "lucide-react";
 
 import { useDatasets } from "@/api/hooks";
@@ -87,6 +88,19 @@ export function DataSources() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Connecting a database lives in the Pipelines tab (the Ingest area). */}
+      <p className="mt-4 text-sm text-muted-foreground">
+        Connecting a SQL database?{" "}
+        <Link
+          to="/pipelines"
+          className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+        >
+          <Workflow className="h-3.5 w-3.5" aria-hidden />
+          Set it up in Pipelines
+        </Link>
+        .
+      </p>
 
       {/* Dataset list */}
       <h3 className="mb-3 mt-8 text-sm font-medium text-muted-foreground">

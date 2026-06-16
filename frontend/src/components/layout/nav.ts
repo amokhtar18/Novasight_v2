@@ -20,30 +20,39 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+/**
+ * Sidebar sections, in display order. Items carry their group so the rail can
+ * render a header before each section (golden source of grouping; the Sidebar
+ * never hardcodes the order). ``undefined`` renders at the top with no header.
+ */
+export type NavGroup = "Ingest" | "Model" | "Analyze" | "Admin";
+
 export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Section this item belongs to; undefined renders ungrouped at the top. */
+  group?: NavGroup;
   /** Match the route exactly (used for the index "/" route). */
   end?: boolean;
   /** Only render when the caller is a platform admin. */
   adminOnly?: boolean;
 }
 
-/** Primary navigation, in display order. */
+/** Primary navigation, in display order (grouped by ``group``). */
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutGrid, end: true },
-  { to: "/data", label: "Data sources", icon: Database },
-  { to: "/pipelines", label: "Pipelines", icon: Workflow },
-  { to: "/operations", label: "Operations", icon: Activity },
-  { to: "/transforms", label: "Transforms", icon: Boxes },
-  { to: "/models", label: "Semantic models", icon: Layers },
-  { to: "/explore", label: "Ask AI", icon: Sparkles },
-  { to: "/chat", label: "Chat", icon: MessageSquare },
-  { to: "/build", label: "Chart builder", icon: BarChart3 },
-  { to: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
-  { to: "/insights", label: "Insights", icon: Lightbulb },
-  { to: "/admin", label: "Admin", icon: Shield, adminOnly: true },
+  { to: "/data", label: "Data sources", icon: Database, group: "Ingest" },
+  { to: "/pipelines", label: "Pipelines", icon: Workflow, group: "Ingest" },
+  { to: "/operations", label: "Operations", icon: Activity, group: "Ingest" },
+  { to: "/transforms", label: "Transforms", icon: Boxes, group: "Model" },
+  { to: "/models", label: "Semantic models", icon: Layers, group: "Model" },
+  { to: "/explore", label: "Ask AI", icon: Sparkles, group: "Analyze" },
+  { to: "/chat", label: "Chat", icon: MessageSquare, group: "Analyze" },
+  { to: "/build", label: "Chart builder", icon: BarChart3, group: "Analyze" },
+  { to: "/dashboards", label: "Dashboards", icon: LayoutDashboard, group: "Analyze" },
+  { to: "/insights", label: "Insights", icon: Lightbulb, group: "Analyze" },
+  { to: "/admin", label: "Admin", icon: Shield, group: "Admin", adminOnly: true },
 ];
 
 /** Secondary navigation pinned to the sidebar footer. */
