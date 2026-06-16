@@ -74,7 +74,7 @@ async def test_launch_run_success_returns_run_id() -> None:
     # Request carried the right selector + job name.
     params = captured["variables"]["params"]
     assert params["selector"]["jobName"] == "pipeline_job"
-    assert params["selector"]["repositoryLocationName"] == "novasight_orchestration"
+    assert params["selector"]["repositoryLocationName"] == "novasight_orchestration.definitions"
     assert "launchRun" in captured["query"]
 
 
@@ -142,7 +142,7 @@ async def test_start_schedule_ok_and_error() -> None:
     await _client(ok).start_schedule("sched_abc")  # no raise
     sel = captured["variables"]["selector"]
     assert sel["scheduleName"] == "sched_abc"
-    assert sel["repositoryLocationName"] == "novasight_orchestration"
+    assert sel["repositoryLocationName"] == "novasight_orchestration.definitions"
 
     def err(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(

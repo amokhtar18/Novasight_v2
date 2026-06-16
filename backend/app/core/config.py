@@ -234,11 +234,22 @@ class DagsterSettings(BaseSettings):
     sentinel disables the integration; the client returns a clear error if invoked),
     keeping golden rule 1. The location/repository names are environment-identical
     conventions matching the ``novasight_orchestration`` code location.
+
+    ``extra="ignore"`` so the sibling ``DAGSTER__PORT`` env var — a Compose host-port
+    knob for the Dagster webserver UI, shipped in ``.env.example`` — doesn't fail
+    backend startup when routed into this nested group by the ``__`` delimiter. The
+    backend reaches Dagster via ``graphql_url`` only (mirrors ``CubeSettings``).
     """
 
+    model_config = SettingsConfigDict(extra="ignore")
+
     graphql_url: str = ""  # e.g. http://dagster:3000/graphql — empty disables control
-    # Code location (the -m module name) and Definitions' repository name.
-    repository_location: str = "novasight_orchestration"
+    # Code-location name and Definitions' repository name, as Dagster exposes them.
+    # The webserver/daemon load the location with ``-m novasight_orchestration.definitions``,
+    # and Dagster names a module-loaded location after that module path — hence the
+    # ``.definitions`` suffix. Deterministic across environments (same load command);
+    # override via DAGSTER__REPOSITORY_LOCATION if a deployment pins a different name.
+    repository_location: str = "novasight_orchestration.definitions"
     repository_name: str = "__repository__"
     request_timeout_seconds: float = 30.0
 

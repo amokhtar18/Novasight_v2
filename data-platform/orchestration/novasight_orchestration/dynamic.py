@@ -100,7 +100,12 @@ def run_transform_op(context: OpExecutionContext) -> None:
         "transform run: id=%s tenant=%s select=%s", row.transform_job_id, row.tenant, row.selection
     )
     dbt = context.resources.dbt
-    list(dbt.cli(["build", *select], context=context).stream())
+    # Generic op (not @dbt_assets): run the selection to completion and raise on a real
+    # dbt failure. Use ``.wait()`` — NOT ``.stream()``: streaming maps each dbt node to a
+    # Dagster asset event via the manifest, which a plain op has no asset mapping for, so
+    # it raises ``KeyError: 'nodes'`` even when the build itself succeeds. Asset-graph
+    # builds go through the ``@dbt_assets`` path (``dbt_assets.py``) instead.
+    dbt.cli(["build", *select], context=context).wait()
 
 
 @job(name=PIPELINE_JOB)

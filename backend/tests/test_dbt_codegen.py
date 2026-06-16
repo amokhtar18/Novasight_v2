@@ -101,7 +101,7 @@ def test_render_relationships_test() -> None:
 def test_writer_prunes_stale_models(tmp_path: Path) -> None:
     root = str(tmp_path / "models")
     write_tenant_dbt_models(root, "tenant_acme", [_model()])
-    tdir = tmp_path / "models" / "tenant_tenant_acme"
+    tdir = tmp_path / "models" / "tenant_acme"
     assert (tdir / "mart_orders.sql").exists()
     assert (tdir / "schema.yml").exists()
 

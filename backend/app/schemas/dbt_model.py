@@ -112,3 +112,16 @@ class DbtModelRead(BaseModel):
     tests: list[DbtTestRead]
     created_at: datetime
     updated_at: datetime
+
+
+class DbtRunRead(BaseModel):
+    """Result of launching a dbt model build via Dagster (``POST /dbt-models/{id}/run``).
+
+    The build runs off the request path in the Dagster ``transform_job``; this returns
+    the launched Dagster run id so the caller can follow it in the Dagster UI. The
+    ``transform_job_id`` is the (find-or-created) registry row Dagster resolves.
+    """
+
+    transform_job_id: uuid.UUID
+    selection: str       # the dbt selector that was built (the model name)
+    dagster_run_id: str

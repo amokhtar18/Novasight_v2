@@ -12,18 +12,21 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.core.security import Principal, require_tenant_superuser
 from app.models.dbt_model import DbtModel
+from app.orchestration.dagster_client import DagsterError
 from app.schemas.dbt_model import (
     DbtModelCreate,
     DbtModelRead,
     DbtModelUpdate,
+    DbtRunRead,
     DbtTestRead,
     IncrementalConfig,
 )
 from app.services.dbt_models import DbtModelService, get_dbt_model_service
+from app.services.transforms import TransformService, get_transform_service
 from app.tenancy.context import TenantContext, get_tenant_context
 
 router = APIRouter(prefix="/dbt-models", tags=["dbt-models"])
@@ -103,3 +106,29 @@ async def delete_dbt_model(
     """Delete a dbt model (regenerates the tenant's dbt codegen)."""
     await svc.delete(ctx, model_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{model_id}/run", response_model=DbtRunRead, status_code=status.HTTP_202_ACCEPTED)
+async def run_dbt_model(
+    model_id: uuid.UUID,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    principal: Principal = Depends(require_tenant_superuser),  # noqa: B008
+    svc: TransformService = Depends(get_transform_service),  # noqa: B008
+) -> DbtRunRead:
+    """Build this dbt model now via Dagster and return the launched run.
+
+    Tenant **superuser** only — running a transform executes dbt against the data plane.
+    The tenant slug comes from the verified JWT (``principal``), never a body/path value.
+    An unconfigured/unreachable orchestrator surfaces as a 503, not a 500.
+    """
+    try:
+        launch = await svc.run_model(ctx, model_id, principal.tenant_key)
+    except DagsterError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Orchestrator unavailable"
+        ) from exc
+    return DbtRunRead(
+        transform_job_id=launch.transform_job_id,
+        selection=launch.selection,
+        dagster_run_id=launch.dagster_run_id,
+    )

@@ -8,8 +8,10 @@ cannot share code).
 """
 from __future__ import annotations
 
-from dagster import DefaultScheduleStatus
+import pytest
+from dagster import DefaultScheduleStatus, build_op_context
 
+import novasight_orchestration.dynamic as dyn
 from novasight_orchestration.dynamic import (
     PIPELINE_JOB,
     PIPELINE_OP,
@@ -18,10 +20,11 @@ from novasight_orchestration.dynamic import (
     build_schedules,
     pipeline_job,
     pipeline_run_config,
+    run_transform_op,
     transform_job,
     transform_run_config,
 )
-from novasight_orchestration.registry import ScheduleRow, schedule_name
+from novasight_orchestration.registry import ScheduleRow, TransformRow, schedule_name
 
 PID = "22222222-2222-2222-2222-222222222222"
 TID = "44444444-4444-4444-4444-444444444444"
@@ -122,3 +125,61 @@ def test_build_schedules_skips_unknown_target_kind() -> None:
 
 def test_build_schedules_empty_when_no_rows() -> None:
     assert build_schedules([]) == []
+
+
+# ---------------------------------------------------------------------------
+# run_transform_op — runs the selection via the dbt CLI (no asset-event streaming)
+# ---------------------------------------------------------------------------
+
+
+class _FakeInvocation:
+    def __init__(self) -> None:
+        self.waited = False
+
+    def wait(self) -> "_FakeInvocation":
+        self.waited = True
+        return self
+
+    def stream(self) -> object:
+        # A plain op has no asset mapping; streaming would KeyError on 'nodes'.
+        raise AssertionError("run_transform_op must use .wait(), not .stream()")
+
+
+class _FakeDbt:
+    def __init__(self) -> None:
+        self.invocation = _FakeInvocation()
+        self.args: list[str] | None = None
+
+    def cli(self, args: list[str], context: object = None) -> _FakeInvocation:
+        self.args = args
+        return self.invocation
+
+
+def _run_op(monkeypatch: pytest.MonkeyPatch, selection: str) -> _FakeDbt:
+    monkeypatch.setattr(
+        dyn,
+        "load_transform",
+        lambda jid: TransformRow(
+            transform_job_id=jid, tenant="acme", name="job", selection=selection
+        ),
+    )
+    dbt = _FakeDbt()
+    ctx = build_op_context(
+        op_config={"transform_job_id": TID, "tenant": "acme"}, resources={"dbt": dbt}
+    )
+    run_transform_op(ctx)
+    return dbt
+
+
+def test_run_transform_op_builds_selection_and_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    dbt = _run_op(monkeypatch, "category_sales")
+    assert dbt.args == ["build", "--select", "category_sales"]
+    assert dbt.invocation.waited  # .wait() (not .stream()) — generic op, no asset graph
+
+
+def test_run_transform_op_empty_selection_builds_whole_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dbt = _run_op(monkeypatch, "")
+    assert dbt.args == ["build"]  # no --select → whole tenant project
+    assert dbt.invocation.waited

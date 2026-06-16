@@ -204,6 +204,26 @@ class TestSettingsBuildsFromEnv:
         # Cube settings still load; the unconsumed sibling var is ignored.
         assert s.cube.base_url == "http://cube.example.internal:4000"
 
+    def test_sibling_dagster_port_does_not_break_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A DAGSTER__* var the backend doesn't consume must not fail startup.
+
+        Regression: DAGSTER__PORT is a Compose host-port knob for the Dagster
+        webserver UI, shipped in .env.example, that the nested ``__`` delimiter
+        routes into the DagsterSettings group. Without ``extra="ignore"`` there,
+        its presence raised a ValidationError and the backend could not start
+        (the api/migrate containers crashed on boot after a rebuild).
+        """
+        for key, value in COMPLETE_ENV.items():
+            monkeypatch.setenv(key, value)
+        monkeypatch.setenv("DAGSTER__PORT", "3000")
+
+        s = get_settings()
+
+        # Dagster settings still load; the unconsumed sibling host-port var is ignored.
+        assert s.dagster.repository_location == "novasight_orchestration.definitions"
+
     def test_mcp_path_not_clobbered_by_os_path_env(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

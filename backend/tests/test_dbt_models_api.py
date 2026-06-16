@@ -128,7 +128,7 @@ async def test_create_writes_codegen_and_round_trips(
     assert len(body["tests"]) == 2
 
     schema = resources_for_slug("local").dbt_schema
-    tdir = dbt_dir / f"tenant_{schema}"
+    tdir = dbt_dir / schema
     sql = (tdir / "mart_orders.sql").read_text(encoding="utf-8")
     assert "config(materialized='table')" in sql
     assert (tdir / "schema.yml").exists()
@@ -161,7 +161,7 @@ async def test_incremental_config_round_trips_and_renders(
 
     # The generated model carries the full incremental config header.
     schema = resources_for_slug("local").dbt_schema
-    sql = (dbt_dir / f"tenant_{schema}" / "mart_events.sql").read_text(encoding="utf-8")
+    sql = (dbt_dir / schema / "mart_events.sql").read_text(encoding="utf-8")
     assert "materialized='incremental'" in sql
     assert "unique_key=['event_id']" in sql
     assert "incremental_strategy='merge'" in sql
@@ -218,4 +218,4 @@ async def test_tenant_isolation(
 
     # Each tenant's codegen targets its own subdir.
     local_schema = resources_for_slug("local").dbt_schema
-    assert (dbt_dir / f"tenant_{local_schema}" / "mart_orders.sql").exists()
+    assert (dbt_dir / local_schema / "mart_orders.sql").exists()

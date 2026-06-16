@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from app.ai.gateway.gateway import close_llm_client
 from app.ai.semantic.client import close_http_client
 from app.api.v1 import v1_router
+from app.core.broker import configure_broker
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.observability import setup_fastapi_observability
@@ -25,6 +26,12 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Run startup/shutdown hooks around the application's lifetime."""
     settings = get_settings()
     configure_logging(level=settings.log_level)
+    # Register the settings-driven Redis broker as the process-wide global broker so
+    # request-path enqueues (e.g. pipeline run-now -> ``run_pipeline.send``) target the
+    # configured Redis. Without this, dramatiq lazily falls back to a default broker
+    # pointing at localhost:6379 and the enqueue 500s. Runs before any request, hence
+    # before actor modules are lazily imported and bind to the global broker.
+    configure_broker(settings)
     yield
     # Shutdown: release shared HTTP connection pools — semantic layer (Cube) and
     # LLM gateway (Anthropic).  Add further engine/pool disposal here as those

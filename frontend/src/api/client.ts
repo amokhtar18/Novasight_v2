@@ -20,6 +20,7 @@ import type {
   DashboardCreate,
   DbtModelDefCreate,
   DbtModelDefRead,
+  DbtRunRead,
   DashboardLayoutUpdate,
   DashboardRead,
   DashboardSummary,
@@ -222,6 +223,15 @@ export async function createDbtModel(request: DbtModelDefCreate): Promise<DbtMod
   return apiFetch<DbtModelDefRead>(
     "/dbt-models",
     { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** POST /dbt-models/{id}/run — build this model now via Dagster; returns the launched run. */
+export async function runDbtModel(id: string): Promise<DbtRunRead> {
+  return apiFetch<DbtRunRead>(
+    `/dbt-models/${id}/run`,
+    { method: "POST" },
     { "Content-Type": "application/json" }
   );
 }

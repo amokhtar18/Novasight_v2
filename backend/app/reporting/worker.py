@@ -16,7 +16,14 @@ hence the deliberate import order below.
 from __future__ import annotations
 
 from app.core.broker import configure_broker
+from app.core.db import use_null_pool
 from app.reporting.observability import setup_worker_observability
+
+# Each actor runs its async body in its own ``asyncio.run`` (a fresh event loop per
+# job). asyncpg connections are loop-bound, so the engine must not pool them across
+# jobs — disable pooling for this process before any session is opened. See
+# ``app.core.db.use_null_pool``.
+use_null_pool()
 
 configure_broker()
 

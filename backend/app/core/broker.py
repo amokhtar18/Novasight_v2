@@ -6,13 +6,17 @@ parameters come from ``RedisSettings`` (golden rule 1: no hardcoded
 infrastructure) — never a literal URL.
 
 The broker is process-wide: built once from settings and registered as the global
-Dramatiq broker so ``@dramatiq.actor`` decorators bind to it. The FastAPI request
-path never imports this module; only the worker entrypoint and code that *enqueues*
-a message (``actor.send(...)``) touches it.
+Dramatiq broker so ``@dramatiq.actor`` decorators bind to it. Both the worker
+entrypoint and the API call ``configure_broker`` at startup — the API enqueues from
+the request path (e.g. pipeline run-now via ``actor.send(...)``), and without a
+configured global broker dramatiq falls back to a default broker pointing at
+``localhost:6379``, which 500s the enqueue.
 
 ``configure_broker`` is idempotent and safe to call at import time in the worker
-entrypoint. Tests substitute an in-memory ``StubBroker`` by setting it as the
-global broker before importing the actors module.
+entrypoint / the API lifespan. It must run before any actor module is imported, since
+``@dramatiq.actor`` binds to whatever the global broker is at import time. Tests
+substitute an in-memory ``StubBroker`` by setting it as the global broker before
+importing the actors module.
 """
 from __future__ import annotations
 

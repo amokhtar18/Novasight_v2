@@ -8,10 +8,15 @@
  */
 
 import { useState } from "react";
-import { Boxes, Plus, Trash2 } from "lucide-react";
+import { Boxes, Loader2, Play, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useCreateDbtModel, useDbtModels, useDeleteDbtModel } from "@/api/hooks";
+import {
+  useCreateDbtModel,
+  useDbtModels,
+  useDeleteDbtModel,
+  useRunDbtModel,
+} from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +77,7 @@ export function DbtModels() {
   const { data: models, isLoading } = useDbtModels();
   const createModel = useCreateDbtModel();
   const deleteModel = useDeleteDbtModel();
+  const runModel = useRunDbtModel();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -148,6 +154,15 @@ export function DbtModels() {
     setPendingDelete(null);
   }
 
+  function handleRun(id: string, name: string) {
+    runModel.mutate(id, {
+      onSuccess: (run) =>
+        toast.success(`Build started for “${name}” (Dagster run ${run.dagster_run_id})`),
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : "Could not start the build"),
+    });
+  }
+
   return (
     <div className="animate-in-up">
       <PageHeader
@@ -197,6 +212,20 @@ export function DbtModels() {
                 </Badge>
                 {!m.enabled && <Badge variant="info">disabled</Badge>}
               </div>
+              <button
+                type="button"
+                onClick={() => handleRun(m.id, m.name)}
+                disabled={runModel.isPending && runModel.variables === m.id}
+                aria-label={`Run ${m.name}`}
+                title="Build now via Dagster"
+                className="absolute right-11 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-100 disabled:cursor-not-allowed"
+              >
+                {runModel.isPending && runModel.variables === m.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+              </button>
               <button
                 type="button"
                 onClick={() => setPendingDelete(m.id)}

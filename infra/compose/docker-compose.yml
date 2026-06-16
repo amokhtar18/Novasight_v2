@@ -39,6 +39,11 @@ x-backend-env: &backend-env
     # Semantic-model codegen output — a volume shared with the Cube container (only
     # the api service mounts it rw and runs codegen; other backend services ignore it).
     CUBE__MODEL_DIR: /cube-model
+    # dbt-model codegen output — a volume shared with the Dagster containers, mounted
+    # under their dbt project's model-paths so generated per-tenant models become part
+    # of the project ``dbt build`` runs. Only the api writes here (runs the wizard
+    # codegen); Dagster reads it. Mirrors CUBE__MODEL_DIR.
+    DBT__MODELS_DIR: /opt/novasight/data-platform/dbt/models/generated
     # Backend↔Dagster control plane (launch/reload over GraphQL).
     DAGSTER__GRAPHQL_URL: http://dagster:3000/graphql
     # In-cluster API URL the standalone MCP server proxies tool calls to (the `mcp`
@@ -51,6 +56,10 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    # Raise the connection cap (image default is 100). The dev stack fans out many
+    # short-lived connections (API pool + Dagster/dbt + ingestion + OpenMetadata),
+    # which otherwise saturates Postgres and forces a restart.
+    command: ["postgres", "-c", "max_connections=3000"]
     environment:
       POSTGRES_USER: ${POSTGRES__USER:?set POSTGRES__USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES__PASSWORD:?set POSTGRES__PASSWORD in .env}
@@ -413,6 +422,19 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # One-shot: make the shared codegen volumes writable by the backend's non-root user.
+  # Named-volume roots are created root-owned, but the api writes Cube + dbt codegen as
+  # the image's `app` user (uid 999); without this it gets EACCES and codegen silently
+  # no-ops. uid 999 == the `app` user created in backend/Dockerfile.
+  codegen-perms:
+    image: alpine:3.20
+    user: root
+    volumes:
+      - cube-model:/vols/cube-model
+      - dbt-generated:/vols/dbt-generated
+    command: ["sh", "-c", "chown 999:999 /vols/cube-model /vols/dbt-generated"]
+    restart: "no"
+
   api:
     build: *backend-build
     <<: *backend-env
@@ -422,12 +444,17 @@ services:
       # Semantic-model codegen writes per-tenant Cube files here; the cube service
       # mounts the same named volume read-only as its model-tenant root.
       - cube-model:/cube-model
+      # dbt-model codegen output — shared with the Dagster containers so generated
+      # per-tenant models land inside the dbt project they build (see DBT__MODELS_DIR).
+      - dbt-generated:/opt/novasight/data-platform/dbt/models/generated
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      codegen-perms:
         condition: service_completed_successfully
       iceberg-rest:
         condition: service_healthy
@@ -502,6 +529,9 @@ services:
     restart: unless-stopped
     volumes:
       - dagster-home:/opt/dagster/home
+      # Generated per-tenant dbt models (written by the api codegen) become part of
+      # this container's dbt project, so ``dbt build --select <model>`` finds them.
+      - dbt-generated:/opt/novasight/data-platform/dbt/models/generated
 
   # Dagster daemon — schedules, sensors, and the run queue.
   dagster-daemon:
@@ -527,6 +557,9 @@ services:
     restart: unless-stopped
     volumes:
       - dagster-home:/opt/dagster/home
+      # Same generated-models volume as the webserver, so a scheduled transform run
+      # (launched by the daemon's code location) sees the per-tenant models too.
+      - dbt-generated:/opt/novasight/data-platform/dbt/models/generated
 
   # Frontend — serves the SPA and reverse-proxies /api to the API (single origin).
   frontend:
@@ -550,6 +583,8 @@ volumes:
   clickhouse-data:
   cubestore-data:
   openmetadata-es-data:
+  # Generated per-tenant dbt models: api writes (codegen), Dagster reads (dbt build).
+  dbt-generated:
   # Generated per-tenant Cube model files: api writes (rw), cube reads (ro).
   cube-model:
   dagster-home:

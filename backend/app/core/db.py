@@ -22,23 +22,44 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
 
 # Module-level singletons; initialised on first call to get_engine().
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+# Whether the engine should disable connection pooling. Set once, before the engine
+# is created, by ``use_null_pool()`` (the worker entrypoint). See that function.
+_null_pool = False
+
+
+def use_null_pool() -> None:
+    """Disable connection pooling for the engine created in this process.
+
+    The worker bridges Dramatiq's sync model to async by wrapping each job in its own
+    ``asyncio.run`` — a fresh event loop per job. asyncpg connections are bound to the
+    loop that opened them, so a *pooled* connection reused by the next job's loop fails
+    at checkout (and leaks the orphaned connection). ``NullPool`` opens and closes a
+    connection per checkout, always on the current loop, sidestepping cross-loop reuse.
+
+    Must be called before the first ``get_engine`` (the worker entrypoint does so before
+    importing any actor). The API process never calls this and keeps the default pool —
+    it serves all requests on one long-lived event loop, where pooling is correct.
+    """
+    global _null_pool
+    _null_pool = True
 
 
 def get_engine(settings: Settings) -> AsyncEngine:
     """Return (or create) the shared async engine."""
     global _engine
     if _engine is None:
-        _engine = create_async_engine(
-            settings.postgres.url,
-            echo=False,
-            pool_pre_ping=True,
-        )
+        if _null_pool:
+            # NullPool opens a fresh connection per checkout; pool_pre_ping is moot.
+            _engine = create_async_engine(settings.postgres.url, echo=False, poolclass=NullPool)
+        else:
+            _engine = create_async_engine(settings.postgres.url, echo=False, pool_pre_ping=True)
     return _engine
 
 

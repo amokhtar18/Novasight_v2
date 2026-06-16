@@ -446,6 +446,13 @@ export interface DbtModelDefCreate {
   enabled?: boolean;
 }
 
+/** Result of launching a dbt model build via Dagster (POST /dbt-models/{id}/run). */
+export interface DbtRunRead {
+  transform_job_id: string;
+  selection: string;
+  dagster_run_id: string;
+}
+
 // ---------------------------------------------------------------------------
 // Saved charts — /api/v1/charts  (mirrors schemas/saved_chart.py)
 // ---------------------------------------------------------------------------

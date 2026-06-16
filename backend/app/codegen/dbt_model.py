@@ -51,8 +51,13 @@ class DbtModelInput:
 
 
 def tenant_dir_relpath(dbt_schema: str) -> str:
-    """A tenant's generated-models subdir, relative to the dbt models root."""
-    return f"tenant_{dbt_schema}"
+    """A tenant's generated-models subdir, relative to the dbt models root.
+
+    The dbt schema (e.g. ``tenant_local``) is already a per-tenant, collision-safe name
+    (see ``tenancy.resources``), so it is used directly as the subdir — prefixing it
+    again would double it to ``tenant_tenant_local``.
+    """
+    return dbt_schema
 
 
 def render_model_sql(model: DbtModelInput) -> str:

@@ -58,6 +58,7 @@ import {
   provisionTenant,
   queryDataset,
   querySemantic,
+  runDbtModel,
   runPipeline,
   setDashboardLayout,
   testSource,
@@ -509,6 +510,13 @@ export function useDeleteDbtModel() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.dbtModels() });
     },
+  });
+}
+
+/** Mutation: build a dbt model now via Dagster. No list change — returns the launched run. */
+export function useRunDbtModel() {
+  return useMutation({
+    mutationFn: (id: string) => runDbtModel(id),
   });
 }
 

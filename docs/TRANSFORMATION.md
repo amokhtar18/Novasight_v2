@@ -119,5 +119,46 @@ model `sql` (a SELECT), and optional column data tests.
 
 The pure render + writer are unit-tested (`tests/test_dbt_codegen.py`,
 `tests/test_dbt_models_api.py`). Materializing the generated models to ClickHouse runs
-via the dynamic Dagster dbt run (#7) and is verified on the running stack; tests become
-Dagster asset checks (the existing quality-gate pattern).
+via the dynamic Dagster dbt run (#7, below); tests become Dagster asset checks (the
+existing quality-gate pattern).
+
+## Run a model from the UI (#7)
+
+Each model on the Transforms page has a **Run** button that builds it now via Dagster —
+the app-facing half of the dynamic dbt run. dbt itself executes in the orchestration
+image (not the backend), so the run goes through Dagster rather than the Dramatiq worker
+that runs ETL pipelines.
+
+- **API** (`POST /api/v1/dbt-models/{id}/run` → `services/transforms.py`): tenant
+  **superuser** only (running a transform executes dbt against the data plane). It
+  resolves the model (tenant-scoped; cross-tenant or disabled → 404/409), **find-or-creates**
+  the tenant's `TransformJob` registry row for that model's selector (one row per
+  `(tenant, selection)`, so repeated runs reuse it), then calls
+  `DagsterClient.launch_run("transform_job", transform_run_config(job_id, slug))`. Returns
+  202 with `{ transform_job_id, selection, dagster_run_id }`. The tenant **slug** comes from
+  the verified JWT (`principal.tenant_key`), never the body (golden rule 2). An
+  unconfigured/unreachable orchestrator surfaces as **503**, not a 500.
+- **Dagster side** (`novasight_orchestration/dynamic.py`): the generic `transform_job` op
+  resolves the row via `registry.load_transform` (a tenant-joined read of the shared
+  control-plane DB) and shells out to `dbt build --select <selection>` through the shared
+  `DbtCliResource` with `.wait()`. An empty selection builds the whole tenant project. The
+  run-config contract is mirrored on both sides (`backend/app/orchestration/run_config.py` ↔
+  `dynamic.py`), guarded against drift by `tests/test_dagster_client.py` /
+  `orchestration/tests/test_dynamic.py`.
+  - It must use `.wait()`, **not** `.stream()`: this is a plain `@op`, not `@dbt_assets`,
+    so it has no manifest→asset mapping; `.stream()` raises `KeyError: 'nodes'` even when
+    the build succeeds. Asset-graph builds use the `@dbt_assets` path (`dbt_assets.py`).
+- **Codegen → dbt-project bridge** (deployment): the wizard codegen writes to
+  `DBT__MODELS_DIR`, which must land **inside the dbt project Dagster builds** so the model
+  exists as a node. In compose this is the `dbt-generated` named volume mounted at
+  `…/dbt/models/generated` in the api (writer) and the `dagster`/`dagster-daemon` containers
+  (reader) — mirroring the Cube `cube-model` volume. Because the backend runs as a non-root
+  user, the one-shot `codegen-perms` service chowns these volumes to it (a root-owned volume
+  root makes codegen silently no-op on `EACCES`). Without this bridge, `dbt build --select
+  <model>` matches no node and the run "succeeds" having materialized nothing.
+- **UI** (`frontend/src/pages/DbtModels.tsx`): the Run button calls `useRunDbtModel` and
+  toasts the launched Dagster run id; follow the run's progress in the Dagster UI.
+
+Tested by `tests/test_dbt_run_api.py` (launch + run-config contract, transform-job reuse,
+superuser gating, disabled/unknown/cross-tenant, and the DagsterError→503 mapping) and
+`frontend/src/test/dbtModels.test.tsx` (the Run button fires the mutation).

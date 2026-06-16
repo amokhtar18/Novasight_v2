@@ -13,26 +13,37 @@ vi.mock("@/api/hooks", () => ({
   useDbtModels: vi.fn(),
   useCreateDbtModel: vi.fn(),
   useDeleteDbtModel: vi.fn(),
+  useRunDbtModel: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { DbtModels } from "@/pages/DbtModels";
-import { useCreateDbtModel, useDeleteDbtModel, useDbtModels } from "@/api/hooks";
+import {
+  useCreateDbtModel,
+  useDeleteDbtModel,
+  useDbtModels,
+  useRunDbtModel,
+} from "@/api/hooks";
 
 const mockModels = vi.mocked(useDbtModels);
 const mockCreate = vi.mocked(useCreateDbtModel);
 const mockDelete = vi.mocked(useDeleteDbtModel);
+const mockRun = vi.mocked(useRunDbtModel);
 
 let createMutateAsync: ReturnType<typeof vi.fn>;
+let runMutate: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   createMutateAsync = vi.fn().mockResolvedValue({ id: "m1", name: "mart_orders" });
+  runMutate = vi.fn();
   // @ts-expect-error partial mock
   mockModels.mockReturnValue({ data: [], isLoading: false });
   // @ts-expect-error partial mock
   mockCreate.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
   // @ts-expect-error partial mock
   mockDelete.mockReturnValue({ mutate: vi.fn() });
+  // @ts-expect-error partial mock
+  mockRun.mockReturnValue({ mutate: runMutate, isPending: false, variables: undefined });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -97,6 +108,19 @@ describe("DbtModels wizard", () => {
         ],
       })
     );
+  });
+
+  it("runs a model when its Run button is clicked", () => {
+    const model = {
+      id: "m1", name: "mart_orders", layer: "marts", materialization: "table",
+      sql: "select 1", config: {}, enabled: true, tests: [],
+      created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    };
+    // @ts-expect-error partial mock
+    mockModels.mockReturnValue({ data: [model], isLoading: false });
+    render(<DbtModels />);
+    fireEvent.click(screen.getByRole("button", { name: /run mart_orders/i }));
+    expect(runMutate).toHaveBeenCalledWith("m1", expect.any(Object));
   });
 
   it("includes incremental settings when materialization is incremental", async () => {
