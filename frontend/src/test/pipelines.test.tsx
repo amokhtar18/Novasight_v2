@@ -17,15 +17,18 @@ vi.mock("@/api/hooks", () => ({
   useSourceEngines: vi.fn(),
   useIntrospectSource: vi.fn(),
   useCreateSource: vi.fn(),
+  useUpdateSource: vi.fn(),
   useTestSource: vi.fn(),
   useDeleteSource: vi.fn(),
   usePipelines: vi.fn(),
   usePipelineRuns: vi.fn(),
   useCreatePipeline: vi.fn(),
+  useUpdatePipeline: vi.fn(),
   useDeletePipeline: vi.fn(),
   useRunPipeline: vi.fn(),
   useSchedules: vi.fn(),
   useCreateSchedule: vi.fn(),
+  useUpdateSchedule: vi.fn(),
   useDeleteSchedule: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -60,6 +63,7 @@ const engines: EngineSpec[] = [
 
 let createPipelineMutate: ReturnType<typeof vi.fn>;
 let createSourceMutate: ReturnType<typeof vi.fn>;
+let updateSourceMutate: ReturnType<typeof vi.fn>;
 let runPipelineMutate: ReturnType<typeof vi.fn>;
 let createScheduleMutate: ReturnType<typeof vi.fn>;
 let introspectMutateAsync: ReturnType<typeof vi.fn>;
@@ -74,6 +78,7 @@ function mutation(spy: ReturnType<typeof vi.fn>) {
 function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRead[] }) {
   createPipelineMutate = vi.fn();
   createSourceMutate = vi.fn();
+  updateSourceMutate = vi.fn();
   runPipelineMutate = vi.fn();
   createScheduleMutate = vi.fn();
   introspectMutateAsync = vi.fn().mockResolvedValue({ schemas: [], tables: [], columns: [] });
@@ -93,6 +98,12 @@ function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRea
   vi.mocked(hooks.usePipelineRuns).mockReturnValue(query([]));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useCreateSource).mockReturnValue(mutation(createSourceMutate));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useUpdateSource).mockReturnValue(mutation(updateSourceMutate));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useUpdatePipeline).mockReturnValue(mutation(vi.fn()));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useUpdateSchedule).mockReturnValue(mutation(vi.fn()));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useTestSource).mockReturnValue(mutation(vi.fn()));
   // @ts-expect-error partial mock
@@ -147,6 +158,36 @@ describe("Pipelines page", () => {
       }),
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
     );
+  });
+
+  it("edits a source, keeping the secret when the password is left blank", () => {
+    const dbSource: SourceConnectionRead = {
+      id: "s9",
+      name: "warehouse",
+      kind: "sql_database",
+      config: { engine: "postgres", host: "db", port: 5432, database: "sales", username: "ro" },
+      status: "active",
+      has_secret: true,
+    };
+    setup({ sources: [dbSource] });
+    render(<Pipelines />);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit warehouse/i }));
+    fireEvent.change(document.querySelector("#src-database")!, { target: { value: "analytics" } });
+    fireEvent.click(screen.getByRole("button", { name: /save source/i }));
+
+    expect(updateSourceMutate).toHaveBeenCalledWith(
+      {
+        id: "s9",
+        patch: expect.objectContaining({
+          name: "warehouse",
+          config: expect.objectContaining({ engine: "postgres", database: "analytics" }),
+        }),
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
+    // No secret sent when the password field was left blank.
+    expect(updateSourceMutate.mock.calls[0][0].patch.secret).toBeUndefined();
   });
 
   it("creates a pipeline from a file source (Details → Review)", () => {

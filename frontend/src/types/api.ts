@@ -243,6 +243,14 @@ export interface SourceConnectionCreate {
   secret?: Record<string, unknown> | null;
 }
 
+/** PATCH /sources/{id} — partial; omit `secret` to keep the stored one. */
+export interface SourceConnectionUpdate {
+  name?: string;
+  config?: Record<string, unknown>;
+  secret?: Record<string, unknown> | null;
+  status?: string;
+}
+
 export interface SourceTestResponse {
   ok: boolean;
   detail?: string | null;
@@ -347,6 +355,14 @@ export interface PipelineCreate {
   source_connection_id: string;
   config: PipelineConfig;
   target_table: string;
+  enabled?: boolean;
+}
+
+/** PATCH /pipelines/{id} — partial update. */
+export interface PipelineUpdate {
+  name?: string;
+  config?: PipelineConfig;
+  target_table?: string;
   enabled?: boolean;
 }
 

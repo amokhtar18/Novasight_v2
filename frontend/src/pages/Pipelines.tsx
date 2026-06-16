@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Database,
+  Pencil,
   Play,
   Plus,
   Trash2,
@@ -36,6 +37,9 @@ import {
   useSourceKinds,
   useSources,
   useTestSource,
+  useUpdatePipeline,
+  useUpdateSchedule,
+  useUpdateSource,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PipelineWizard } from "@/components/pipeline/PipelineWizard";
@@ -58,7 +62,6 @@ import { formatRelativeTime } from "@/lib/format";
 import type {
   PipelineRunRead,
   ScheduleRead,
-  SourceConnectionCreate,
   SourceConnectionRead,
 } from "@/types/api";
 
@@ -90,7 +93,8 @@ function SourcesSection() {
   const { data: sources, isLoading } = useSources();
   const deleteSource = useDeleteSource();
   const testSource = useTestSource();
-  const [open, setOpen] = useState(false);
+  // null = closed; { source: null } = create; { source } = edit.
+  const [dialog, setDialog] = useState<{ source: SourceConnectionRead | null } | null>(null);
 
   function handleTest(s: SourceConnectionRead) {
     testSource.mutate(s.id, {
@@ -110,7 +114,7 @@ function SourcesSection() {
           </CardTitle>
           <CardDescription>Databases and files NovaSight can read from.</CardDescription>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size="sm" onClick={() => setDialog({ source: null })}>
           <Plus className="h-4 w-4" aria-hidden />
           New source
         </Button>
@@ -145,6 +149,14 @@ function SourcesSection() {
                   </Button>
                   <button
                     type="button"
+                    onClick={() => setDialog({ source: s })}
+                    aria-label={`Edit ${s.name}`}
+                    className="rounded p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() =>
                       deleteSource.mutate(s.id, {
                         onError: (err) =>
@@ -162,7 +174,12 @@ function SourcesSection() {
           </ul>
         )}
       </CardContent>
-      <NewSourceDialog open={open} onOpenChange={setOpen} />
+      <NewSourceDialog
+        key={dialog?.source?.id ?? "new"}
+        open={dialog !== null}
+        editing={dialog?.source ?? null}
+        onOpenChange={(o) => setDialog(o ? dialog : null)}
+      />
     </Card>
   );
 }
@@ -170,28 +187,34 @@ function SourcesSection() {
 function NewSourceDialog({
   open,
   onOpenChange,
+  editing,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  editing?: SourceConnectionRead | null;
 }) {
+  const isEdit = !!editing;
+  const cfg = (editing?.config ?? {}) as Record<string, unknown>;
   const { data: kinds } = useSourceKinds();
   const { data: engines } = useSourceEngines();
   const createSource = useCreateSource();
+  const updateSource = useUpdateSource();
 
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState("sql_database");
+  const [name, setName] = useState(editing?.name ?? "");
+  const [kind, setKind] = useState(editing?.kind ?? "sql_database");
   // sql_database fields
-  const [engine, setEngine] = useState("postgres");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("");
-  const [database, setDatabase] = useState("");
-  const [username, setUsername] = useState("");
+  const [engine, setEngine] = useState(String(cfg.engine ?? "postgres"));
+  const [host, setHost] = useState(String(cfg.host ?? ""));
+  const [port, setPort] = useState(cfg.port != null ? String(cfg.port) : "");
+  const [database, setDatabase] = useState(String(cfg.database ?? ""));
+  const [username, setUsername] = useState(String(cfg.username ?? ""));
   const [password, setPassword] = useState("");
   // filesystem fields
-  const [format, setFormat] = useState("csv");
-  const [key, setKey] = useState("");
+  const [format, setFormat] = useState(String(cfg.format ?? "csv"));
+  const [key, setKey] = useState(String(cfg.key ?? ""));
 
   const selectedEngine = engines?.find((e) => e.key === engine);
+  const pending = createSource.isPending || updateSource.isPending;
 
   // Picking an engine prefills its standard port (the user can still override).
   function handleEngineChange(key: string) {
@@ -200,16 +223,15 @@ function NewSourceDialog({
     if (spec) setPort(String(spec.default_port));
   }
 
-  function buildPayload(): SourceConnectionCreate {
+  function buildConfig(): Record<string, unknown> {
     if (kind === "filesystem") {
-      return { name: name.trim(), kind, config: { format, key: key.trim() } };
+      return { format, key: key.trim() };
     }
     const config: Record<string, unknown> = { engine, database: database.trim() };
     if (host.trim()) config.host = host.trim();
     if (port.trim()) config.port = Number(port);
     if (username.trim()) config.username = username.trim();
-    const secret = password ? { password } : undefined;
-    return { name: name.trim(), kind, config, secret };
+    return config;
   }
 
   function handleSave() {
@@ -217,20 +239,39 @@ function NewSourceDialog({
       toast.error("A source name is required");
       return;
     }
-    createSource.mutate(buildPayload(), {
-      onSuccess: (s) => {
-        onOpenChange(false);
-        toast.success(`Created source “${s.name}”`);
-      },
-      onError: (err) =>
-        toast.error(err instanceof Error ? err.message : "Could not create the source"),
-    });
+    // Secret is write-only: only send it when the user (re)entered one.
+    const secret = password ? { password } : undefined;
+    if (isEdit && editing) {
+      updateSource.mutate(
+        { id: editing.id, patch: { name: name.trim(), config: buildConfig(), ...(secret ? { secret } : {}) } },
+        {
+          onSuccess: (s) => {
+            onOpenChange(false);
+            toast.success(`Updated source “${s.name}”`);
+          },
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : "Could not update the source"),
+        }
+      );
+      return;
+    }
+    createSource.mutate(
+      { name: name.trim(), kind, config: buildConfig(), secret },
+      {
+        onSuccess: (s) => {
+          onOpenChange(false);
+          toast.success(`Created source “${s.name}”`);
+        },
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : "Could not create the source"),
+      }
+    );
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="New source">
       <DialogHeader>
-        <DialogTitle>New source</DialogTitle>
+        <DialogTitle>{isEdit ? "Edit source" : "New source"}</DialogTitle>
         <DialogDescription>Connect a database or a file in object storage.</DialogDescription>
       </DialogHeader>
 
@@ -242,7 +283,7 @@ function NewSourceDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="src-kind">Kind</Label>
-            <Select id="src-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+            <Select id="src-kind" value={kind} onChange={(e) => setKind(e.target.value)} disabled={isEdit}>
               {(kinds ?? ["sql_database", "filesystem"]).map((k) => (
                 <option key={k} value={k}>
                   {k}
@@ -308,7 +349,13 @@ function NewSourceDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="src-password">Password</Label>
-              <Input id="src-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Input
+                id="src-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isEdit ? "leave blank to keep current" : undefined}
+              />
             </div>
           </div>
         )}
@@ -318,8 +365,14 @@ function NewSourceDialog({
         <Button variant="ghost" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button onClick={handleSave} disabled={createSource.isPending}>
-          {createSource.isPending ? "Creating…" : "Create source"}
+        <Button onClick={handleSave} disabled={pending}>
+          {pending
+            ? isEdit
+              ? "Saving…"
+              : "Creating…"
+            : isEdit
+              ? "Save source"
+              : "Create source"}
         </Button>
       </DialogFooter>
     </Dialog>
@@ -403,6 +456,7 @@ function PipelineRow({
   const deletePipeline = useDeletePipeline();
   const [expanded, setExpanded] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const { data: runs, isLoading: runsLoading } = usePipelineRuns(expanded ? id : null);
 
   function handleRun() {
@@ -447,6 +501,14 @@ function PipelineRow({
           </Button>
           <button
             type="button"
+            onClick={() => setEditOpen(true)}
+            aria-label={`Edit ${name}`}
+            className="rounded p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={() =>
               deletePipeline.mutate(id, {
                 onError: (err) => toast.error(err instanceof Error ? err.message : "Delete failed"),
@@ -483,7 +545,93 @@ function PipelineRow({
         pipelineName={name}
         schedules={schedules}
       />
+      <EditPipelineDialog
+        key={`${name}-${target}-${enabled}`}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        id={id}
+        name={name}
+        target={target}
+        enabled={enabled}
+      />
     </li>
+  );
+}
+
+function EditPipelineDialog({
+  open,
+  onOpenChange,
+  id,
+  name: initialName,
+  target: initialTarget,
+  enabled: initialEnabled,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  id: string;
+  name: string;
+  target: string;
+  enabled: boolean;
+}) {
+  const updatePipeline = useUpdatePipeline();
+  const [name, setName] = useState(initialName);
+  const [target, setTarget] = useState(initialTarget);
+  const [enabled, setEnabled] = useState(initialEnabled);
+
+  function handleSave() {
+    if (!name.trim() || !target.trim()) {
+      toast.error("Name and target table are required");
+      return;
+    }
+    updatePipeline.mutate(
+      { id, patch: { name: name.trim(), target_table: target.trim(), enabled } },
+      {
+        onSuccess: (p) => {
+          onOpenChange(false);
+          toast.success(`Updated pipeline “${p.name}”`);
+        },
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : "Could not update the pipeline"),
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Edit pipeline">
+      <DialogHeader>
+        <DialogTitle>Edit pipeline</DialogTitle>
+        <DialogDescription>Rename it, change the target table, or pause it.</DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="ep-name">Name</Label>
+          <Input id="ep-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ep-target">Target table</Label>
+          <Input id="ep-target" value={target} onChange={(e) => setTarget(e.target.value)} />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            aria-label="Enabled"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          Enabled (uncheck to pause)
+        </label>
+      </div>
+
+      <DialogFooter>
+        <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={updatePipeline.isPending}>
+          {updatePipeline.isPending ? "Saving…" : "Save pipeline"}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }
 
@@ -502,6 +650,7 @@ function ScheduleDialog({
 }) {
   const createSchedule = useCreateSchedule();
   const deleteSchedule = useDeleteSchedule();
+  const updateSchedule = useUpdateSchedule();
   const [cron, setCron] = useState("0 2 * * *");
 
   function handleAdd() {
@@ -536,6 +685,21 @@ function ScheduleDialog({
                 <span className="font-mono">{s.cron}</span>
                 <span className="flex items-center gap-2">
                   {!s.enabled && <Badge variant="secondary">disabled</Badge>}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      updateSchedule.mutate(
+                        { id: s.id, patch: { enabled: !s.enabled } },
+                        {
+                          onError: (err) =>
+                            toast.error(err instanceof Error ? err.message : "Update failed"),
+                        }
+                      )
+                    }
+                  >
+                    {s.enabled ? "Pause" : "Resume"}
+                  </Button>
                   <button
                     type="button"
                     onClick={() =>

@@ -70,6 +70,12 @@ Reads need only a tenant context; mutations and probes require the tenant
 `superuser` role (they configure plumbing and reach external systems). The tenant
 is resolved from the JWT — never a body/path value (tenancy-isolation).
 
+**Editing (#8).** Sources, pipelines, and schedules are all editable in place from the
+Pipelines tab via the existing `PATCH` routes (the create dialogs double as edit dialogs).
+Secrets stay **write-only**: the source edit form omits the secret unless a new one is
+typed, so a `PATCH /sources/{id}` without `secret` keeps the stored credential. Schedules
+can be paused/resumed (a `PATCH` toggling `enabled`) without deleting them.
+
 ## Pipelines (#3)
 
 A **pipeline** binds a saved source connection to a selection (which table/object to

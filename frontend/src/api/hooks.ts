@@ -66,7 +66,9 @@ import {
   testSource,
   updateDashboard,
   updateDashboardTile,
+  updatePipeline,
   updateSchedule,
+  updateSource,
   updateUser,
   uploadDataset,
 } from "./client";
@@ -84,12 +86,14 @@ import type {
   NLChartRequest,
   NLQueryRequest,
   PipelineCreate,
+  PipelineUpdate,
   QueryRequest,
   ScheduleCreate,
   ScheduleUpdate,
   SemanticModelDefCreate,
   SemanticQueryRequest,
   SourceConnectionCreate,
+  SourceConnectionUpdate,
   TenantProvisionRequest,
   UserCreate,
   UserUpdate,
@@ -375,6 +379,18 @@ export function useCreateSource() {
   });
 }
 
+/** Mutation: update a source connection (partial). Invalidates the sources list. */
+export function useUpdateSource() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: SourceConnectionUpdate }) =>
+      updateSource(id, patch),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.sources() });
+    },
+  });
+}
+
 /** Mutation: test a source connection's connectivity. */
 export function useTestSource() {
   return useMutation({ mutationFn: (id: string) => testSource(id) });
@@ -430,6 +446,18 @@ export function useCreatePipeline() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: PipelineCreate) => createPipeline(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.pipelines() });
+    },
+  });
+}
+
+/** Mutation: update a pipeline (partial). Invalidates the pipelines list. */
+export function useUpdatePipeline() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: PipelineUpdate }) =>
+      updatePipeline(id, patch),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.pipelines() });
     },

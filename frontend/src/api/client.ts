@@ -40,6 +40,7 @@ import type {
   NLQueryResponse,
   PipelineCreate,
   PipelineRead,
+  PipelineUpdate,
   PipelineRunRead,
   PipelineRunSummary,
   QueryRequest,
@@ -50,6 +51,7 @@ import type {
   ScheduleUpdate,
   SourceConnectionCreate,
   SourceConnectionRead,
+  SourceConnectionUpdate,
   SourceIntrospectResponse,
   SourceTestResponse,
   SemanticModelDefCreate,
@@ -292,6 +294,18 @@ export async function createSource(
   );
 }
 
+/** PATCH /sources/{id} — partial update (omit `secret` to keep the stored one). */
+export async function updateSource(
+  id: string,
+  request: SourceConnectionUpdate
+): Promise<SourceConnectionRead> {
+  return apiFetch<SourceConnectionRead>(
+    `/sources/${id}`,
+    { method: "PATCH", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
 /** POST /sources/{id}/test — connectivity check (raises on failure). */
 export async function testSource(id: string): Promise<SourceTestResponse> {
   return apiFetch<SourceTestResponse>(
@@ -323,6 +337,18 @@ export async function createPipeline(request: PipelineCreate): Promise<PipelineR
   return apiFetch<PipelineRead>(
     "/pipelines",
     { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** PATCH /pipelines/{id} — partial update (rename, retarget, enable/disable). */
+export async function updatePipeline(
+  id: string,
+  request: PipelineUpdate
+): Promise<PipelineRead> {
+  return apiFetch<PipelineRead>(
+    `/pipelines/${id}`,
+    { method: "PATCH", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
 }
