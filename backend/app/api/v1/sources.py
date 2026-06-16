@@ -13,8 +13,10 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.core.security import Principal, require_tenant_superuser
 from app.ingestion.connectors import KINDS
+from app.ingestion.connectors.engines import ENGINES
 from app.models.source_connection import SourceConnection
 from app.schemas.source import (
+    EngineSpecRead,
     SourceConnectionCreate,
     SourceConnectionRead,
     SourceConnectionUpdate,
@@ -48,6 +50,23 @@ async def list_kinds(
 ) -> list[str]:
     """Connector kinds the wizard offers."""
     return list(KINDS)
+
+
+@router.get("/engines", response_model=list[EngineSpecRead])
+async def list_engines(
+    _: TenantContext = Depends(get_tenant_context),  # noqa: B008
+) -> list[EngineSpecRead]:
+    """SQL engines the connection wizard offers, with per-engine defaults."""
+    return [
+        EngineSpecRead(
+            key=spec.key,
+            label=spec.label,
+            default_port=spec.default_port,
+            supports_schemas=spec.supports_schemas,
+            database_label=spec.database_label,
+        )
+        for spec in ENGINES.values()
+    ]
 
 
 @router.get("", response_model=list[SourceConnectionRead])

@@ -1,8 +1,10 @@
-"""SQL database connector — pull from Postgres/MySQL/etc. via SQLAlchemy.
+"""SQL database connector — pull from Postgres/MySQL/SQL Server/Oracle via SQLAlchemy.
 
-Config (non-secret): ``driver`` (a SQLAlchemy dialect, e.g. ``postgresql`` /
-``mysql+pymysql`` / ``sqlite``), ``host``, ``port``, ``database``, ``username``,
-and optional ``query`` (URL query params). Secret: ``password``.
+Config (non-secret): ``engine`` (a key in the engine registry, e.g. ``postgres`` /
+``mysql`` / ``sqlserver`` / ``oracle``) which resolves the SQLAlchemy ``drivername``,
+or a raw ``driver`` override for engines not in the registry (e.g. ``sqlite``); plus
+``host``, ``port``, ``database``, ``username``, and optional ``query`` (URL query
+params). Secret: ``password``. See ``engines.py`` for the registry.
 
 Test connects and runs ``SELECT 1``; preview lists tables (via the inspector) and,
 for a chosen table, returns a capped row sample. The blocking SQLAlchemy work runs
@@ -22,6 +24,7 @@ from app.ingestion.connectors.base import (
     PreviewResult,
     SourceConnector,
 )
+from app.ingestion.connectors.engines import ENGINES, query_for, resolve_drivername
 
 # Hard cap so a preview can never pull an unbounded result set.
 _MAX_PREVIEW_ROWS = 200
@@ -36,12 +39,12 @@ class SqlDatabaseConnector(SourceConnector):
     kind: ClassVar[str] = "sql_database"
 
     def validate_config(self, config: dict[str, Any]) -> None:
-        driver = str(config.get("driver", "")).strip()
-        if not driver:
-            raise ConnectorError("driver is required (a SQLAlchemy dialect)")
+        drivername = resolve_drivername(config)
+        if not drivername:
+            raise ConnectorError("engine (or a driver override) is required")
         # sqlite needs only a database/path; networked engines need a host.
-        if not driver.startswith("sqlite") and not str(config.get("host", "")).strip():
-            raise ConnectorError("host is required for this driver")
+        if not drivername.startswith("sqlite") and not str(config.get("host", "")).strip():
+            raise ConnectorError("host is required for this engine")
 
     async def test_connection(
         self, config: dict[str, Any], secret: dict[str, Any] | None
@@ -138,14 +141,33 @@ class SqlDatabaseConnector(SourceConnector):
             engine.dispose()
 
     @staticmethod
-    def _engine(config: dict[str, Any], secret: dict[str, Any] | None) -> Engine:
-        url = URL.create(
-            drivername=str(config["driver"]),
+    def _build_url(config: dict[str, Any], secret: dict[str, Any] | None) -> URL:
+        """Build the SQLAlchemy URL from a connection config (pure; no DBAPI import).
+
+        Split out from ``_engine`` so URL construction (drivername resolution, the
+        registry's default port, query params) is unit-testable without the driver
+        for that engine being installed — ``create_engine`` imports the DBAPI eagerly.
+        """
+        drivername = resolve_drivername(config)
+        if not drivername:
+            raise ConnectorError("engine (or a driver override) is required")
+        # Port: explicit wins, else the registry's standard port for the engine.
+        spec = ENGINES.get(str(config.get("engine", "")).strip())
+        port = config.get("port") or (spec.default_port if spec else None)
+        # Registry query params first, then any caller-supplied overrides.
+        query = {**query_for(config), **(config.get("query") or {})}
+        return URL.create(
+            drivername=drivername,
             username=config.get("username") or None,
             password=(secret or {}).get("password"),
             host=config.get("host") or None,
-            port=int(config["port"]) if config.get("port") else None,
+            port=int(port) if port else None,
             database=config.get("database") or None,
-            query=config.get("query") or {},
+            query=query,
         )
-        return create_engine(url, pool_pre_ping=True)
+
+    @staticmethod
+    def _engine(config: dict[str, Any], secret: dict[str, Any] | None) -> Engine:
+        return create_engine(
+            SqlDatabaseConnector._build_url(config, secret), pool_pre_ping=True
+        )

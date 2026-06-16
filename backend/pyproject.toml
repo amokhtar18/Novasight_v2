@@ -16,6 +16,13 @@ dependencies = [
     # blocking SQLAlchemy engine in a worker thread, so it needs a sync DBAPI to
     # ingest from a Postgres/MySQL source (asyncpg cannot drive a sync engine).
     "psycopg2-binary>=2.9",
+    # Sync DBAPI drivers for the other SQL source engines (see connectors/engines.py).
+    # All pure-Python / thin so the backend image needs no system packages:
+    # pymysql (MySQL), pymssql (SQL Server — no ODBC), oracledb thin mode (Oracle —
+    # no Instant Client). Used only by the blocking SqlDatabaseConnector engine.
+    "pymysql>=1.1",
+    "pymssql>=2.3",
+    "oracledb>=2.2",
     "redis>=5.0",
     "httpx>=0.27",
     "pyjwt[crypto]>=2.8",

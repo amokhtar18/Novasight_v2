@@ -14,7 +14,7 @@ no migration).
 
 | kind | config (non-secret) | secret | preview |
 |------|---------------------|--------|---------|
-| `sql_database` | `driver` (SQLAlchemy dialect), `host`, `port`, `database`, `username`, `query` | `password` | lists tables; samples a chosen table |
+| `sql_database` | `engine` (a registry key, see below), `host`, `port`, `database`, `username`, `query` | `password` | lists tables; samples a chosen table |
 | `filesystem` | `format` (csv/parquet/json/excel), `key` (object key) | — | parses the file head |
 
 Credentials are **never** stored or returned in plaintext: the service envelope-
@@ -25,16 +25,39 @@ without it `POST /sources` with a `secret` returns 400.
 
 The `sql_database` connector talks to the source through a **blocking** SQLAlchemy
 engine (run in a worker thread), so it needs a *sync* DBAPI even though the app's own
-control-plane access is async (`asyncpg`). The backend image bundles `psycopg2-binary`
-for Postgres sources (`driver: postgresql`). A ready-made Postgres source to try the
+control-plane access is async (`asyncpg`). A ready-made Postgres source to try the
 whole path against lives in `infra/compose/sample-source/` (a seeded e-commerce DB on
 the dev stack's Postgres container).
+
+### SQL engine registry (`connectors/engines.py`, #3/#4)
+
+The wizard no longer asks for a raw SQLAlchemy `driver`; it offers an **engine** from a
+registry that knows each engine's drivername, standard port, and how its "database"
+field reads. `config["engine"]` resolves the drivername (a raw `config["driver"]` still
+works as an override, e.g. `sqlite` for tests). These are protocol constants — not
+environment/tenant config (golden rule 1 is about the latter); a *connection* supplies
+its own host/port/creds.
+
+| engine | label | drivername | port | notes |
+|--------|-------|-----------|------|-------|
+| `postgres` | PostgreSQL | `postgresql+psycopg2` | 5432 | |
+| `mysql` | MySQL | `mysql+pymysql` | 3306 | a "schema" is a database |
+| `sqlserver` | SQL Server | `mssql+pymssql` | 1433 | no system ODBC needed |
+| `oracle` | Oracle | `oracle+oracledb` | 1521 | thin mode (no Instant Client); "database" = service name |
+
+All four DBAPIs are pure-Python / thin, so the backend image needs no system packages.
+`GET /sources/engines` returns the registry (key, label, `default_port`,
+`supports_schemas`, `database_label`) so the wizard can render the dropdown and prefill
+per-engine defaults. URL construction is split into a pure `_build_url` (drivername +
+default-port resolution) so it is unit-testable without that engine's driver installed —
+`create_engine` imports the DBAPI eagerly.
 
 ## Source-connection API (`/api/v1/sources`)
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/sources/kinds` | tenant | connector kinds the wizard offers |
+| GET | `/sources/engines` | tenant | SQL engines + per-engine defaults |
 | GET | `/sources` / `/sources/{id}` | tenant | list / fetch (tenant-scoped) |
 | POST | `/sources` | superuser | create (secret encrypted at rest) |
 | PATCH | `/sources/{id}` | superuser | update (omit `secret` to keep it) |

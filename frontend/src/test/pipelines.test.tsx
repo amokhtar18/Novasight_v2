@@ -9,11 +9,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
-import type { PipelineRead, SourceConnectionRead } from "@/types/api";
+import type { EngineSpec, PipelineRead, SourceConnectionRead } from "@/types/api";
 
 vi.mock("@/api/hooks", () => ({
   useSources: vi.fn(),
   useSourceKinds: vi.fn(),
+  useSourceEngines: vi.fn(),
   useCreateSource: vi.fn(),
   useTestSource: vi.fn(),
   useDeleteSource: vi.fn(),
@@ -51,7 +52,13 @@ const pipeline: PipelineRead = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
+const engines: EngineSpec[] = [
+  { key: "postgres", label: "PostgreSQL", default_port: 5432, supports_schemas: true, database_label: "Database" },
+  { key: "oracle", label: "Oracle", default_port: 1521, supports_schemas: true, database_label: "Service name" },
+];
+
 let createPipelineMutate: ReturnType<typeof vi.fn>;
+let createSourceMutate: ReturnType<typeof vi.fn>;
 let runPipelineMutate: ReturnType<typeof vi.fn>;
 let createScheduleMutate: ReturnType<typeof vi.fn>;
 
@@ -64,6 +71,7 @@ function mutation(spy: ReturnType<typeof vi.fn>) {
 
 function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRead[] }) {
   createPipelineMutate = vi.fn();
+  createSourceMutate = vi.fn();
   runPipelineMutate = vi.fn();
   createScheduleMutate = vi.fn();
   // @ts-expect-error partial mock
@@ -71,11 +79,13 @@ function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRea
   // @ts-expect-error partial mock
   vi.mocked(hooks.useSourceKinds).mockReturnValue(query(["sql_database", "filesystem"]));
   // @ts-expect-error partial mock
+  vi.mocked(hooks.useSourceEngines).mockReturnValue(query(engines));
+  // @ts-expect-error partial mock
   vi.mocked(hooks.usePipelines).mockReturnValue(query(opts.pipelines ?? []));
   // @ts-expect-error partial mock
   vi.mocked(hooks.usePipelineRuns).mockReturnValue(query([]));
   // @ts-expect-error partial mock
-  vi.mocked(hooks.useCreateSource).mockReturnValue(mutation(vi.fn()));
+  vi.mocked(hooks.useCreateSource).mockReturnValue(mutation(createSourceMutate));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useTestSource).mockReturnValue(mutation(vi.fn()));
   // @ts-expect-error partial mock
@@ -102,6 +112,34 @@ describe("Pipelines page", () => {
     render(<Pipelines />);
     expect(screen.getByText(/no sources yet/i)).toBeInTheDocument();
     expect(screen.getByText(/no pipelines yet/i)).toBeInTheDocument();
+  });
+
+  it("creates a source with the selected engine and its default port", () => {
+    setup({});
+    render(<Pipelines />);
+
+    fireEvent.click(screen.getByRole("button", { name: /new source/i }));
+    fireEvent.change(document.querySelector("#src-name")!, { target: { value: "wh" } });
+    // Switching engine prefills the engine's standard port (1521 for Oracle).
+    fireEvent.change(document.querySelector("#src-engine")!, { target: { value: "oracle" } });
+    fireEvent.change(document.querySelector("#src-host")!, { target: { value: "db" } });
+    fireEvent.change(document.querySelector("#src-database")!, { target: { value: "orcl" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /create source/i }));
+
+    expect(createSourceMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "wh",
+        kind: "sql_database",
+        config: expect.objectContaining({
+          engine: "oracle",
+          database: "orcl",
+          host: "db",
+          port: 1521,
+        }),
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
   });
 
   it("creates a pipeline with the full payload", () => {

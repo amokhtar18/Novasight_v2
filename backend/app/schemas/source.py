@@ -10,6 +10,23 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class EngineSpecRead(BaseModel):
+    """A SQL engine the connection wizard offers (mirrors ``connectors.engines``).
+
+    Drives the wizard's engine dropdown and its per-engine defaults: the standard
+    ``default_port`` to prefill, whether the engine ``supports_schemas`` (so the
+    pipeline wizard can offer a schema step), and how the "database" field reads
+    (``database_label`` — a service name on Oracle). The SQLAlchemy drivername is
+    intentionally *not* exposed; the backend resolves it from ``key``.
+    """
+
+    key: str
+    label: str
+    default_port: int
+    supports_schemas: bool
+    database_label: str
+
+
 class SourceConnectionCreate(BaseModel):
     """Body for ``POST /sources``."""
 

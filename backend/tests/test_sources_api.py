@@ -148,6 +148,19 @@ async def test_kinds_and_create_requires_superuser(
 
 
 @pytest.mark.asyncio
+async def test_engines_lists_per_engine_defaults(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
+    await make_tenant("local")
+    engines = client_with_db.get("/api/v1/sources/engines", headers=_auth()).json()
+    by_key = {e["key"]: e for e in engines}
+    assert {"postgres", "mysql", "sqlserver", "oracle"} <= set(by_key)
+    assert by_key["postgres"]["default_port"] == 5432
+    assert by_key["oracle"]["database_label"] == "Service name"
+    assert by_key["mysql"]["supports_schemas"] is False
+
+
+@pytest.mark.asyncio
 async def test_create_encrypts_secret_and_hides_it(
     client_with_db: TestClient, make_tenant: Any
 ) -> None:

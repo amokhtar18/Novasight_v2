@@ -33,6 +33,7 @@ import {
   usePipelines,
   useRunPipeline,
   useSchedules,
+  useSourceEngines,
   useSourceKinds,
   useSources,
   useTestSource,
@@ -174,12 +175,13 @@ function NewSourceDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { data: kinds } = useSourceKinds();
+  const { data: engines } = useSourceEngines();
   const createSource = useCreateSource();
 
   const [name, setName] = useState("");
   const [kind, setKind] = useState("sql_database");
   // sql_database fields
-  const [driver, setDriver] = useState("postgresql");
+  const [engine, setEngine] = useState("postgres");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("");
   const [database, setDatabase] = useState("");
@@ -189,11 +191,20 @@ function NewSourceDialog({
   const [format, setFormat] = useState("csv");
   const [key, setKey] = useState("");
 
+  const selectedEngine = engines?.find((e) => e.key === engine);
+
+  // Picking an engine prefills its standard port (the user can still override).
+  function handleEngineChange(key: string) {
+    setEngine(key);
+    const spec = engines?.find((e) => e.key === key);
+    if (spec) setPort(String(spec.default_port));
+  }
+
   function buildPayload(): SourceConnectionCreate {
     if (kind === "filesystem") {
       return { name: name.trim(), kind, config: { format, key: key.trim() } };
     }
-    const config: Record<string, unknown> = { driver: driver.trim(), database: database.trim() };
+    const config: Record<string, unknown> = { engine, database: database.trim() };
     if (host.trim()) config.host = host.trim();
     if (port.trim()) config.port = Number(port);
     if (username.trim()) config.username = username.trim();
@@ -261,11 +272,21 @@ function NewSourceDialog({
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="src-driver">Driver</Label>
-              <Input id="src-driver" value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="postgresql" />
+              <Label htmlFor="src-engine">Engine</Label>
+              <Select
+                id="src-engine"
+                value={engine}
+                onChange={(e) => handleEngineChange(e.target.value)}
+              >
+                {(engines ?? []).map((eng) => (
+                  <option key={eng.key} value={eng.key}>
+                    {eng.label}
+                  </option>
+                ))}
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="src-database">Database</Label>
+              <Label htmlFor="src-database">{selectedEngine?.database_label ?? "Database"}</Label>
               <Input id="src-database" value={database} onChange={(e) => setDatabase(e.target.value)} placeholder="sales" />
             </div>
             <div className="space-y-1.5">
@@ -274,7 +295,12 @@ function NewSourceDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="src-port">Port</Label>
-              <Input id="src-port" value={port} onChange={(e) => setPort(e.target.value)} placeholder="5432" />
+              <Input
+                id="src-port"
+                value={port}
+                onChange={(e) => setPort(e.target.value)}
+                placeholder={String(selectedEngine?.default_port ?? "")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="src-username">Username</Label>

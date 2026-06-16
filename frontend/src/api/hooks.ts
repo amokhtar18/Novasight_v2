@@ -45,6 +45,7 @@ import {
   listSchedules,
   listSemanticModelDefs,
   listSemanticModels,
+  listSourceEngines,
   listSourceKinds,
   listSources,
   listTenants,
@@ -336,6 +337,15 @@ export function useSourceKinds() {
   return useQuery({
     queryKey: ["sources", "kinds"] as const,
     queryFn: listSourceKinds,
+    staleTime: 60 * 60_000,
+  });
+}
+
+/** Query: SQL engines + per-engine defaults for the connection wizard. */
+export function useSourceEngines() {
+  return useQuery({
+    queryKey: ["sources", "engines"] as const,
+    queryFn: listSourceEngines,
     staleTime: 60 * 60_000,
   });
 }

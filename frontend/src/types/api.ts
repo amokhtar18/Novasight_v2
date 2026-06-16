@@ -248,6 +248,15 @@ export interface SourceTestResponse {
   detail?: string | null;
 }
 
+/** A SQL engine the connection wizard offers (GET /sources/engines). */
+export interface EngineSpec {
+  key: string;
+  label: string;
+  default_port: number;
+  supports_schemas: boolean;
+  database_label: string;
+}
+
 // ---------------------------------------------------------------------------
 // ETL: pipelines — /api/v1/pipelines  (mirrors schemas/pipeline.py)
 // ---------------------------------------------------------------------------

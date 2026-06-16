@@ -28,6 +28,7 @@ import type {
   DashboardTileRead,
   DashboardUpdate,
   DatasetRead,
+  EngineSpec,
   HealthRead,
   InsightRequest,
   InsightResponse,
@@ -251,6 +252,11 @@ export async function deleteDbtModel(id: string): Promise<void> {
 /** GET /sources/kinds — connector kinds the wizard offers. */
 export async function listSourceKinds(): Promise<string[]> {
   return apiFetch<string[]>("/sources/kinds", {}, { Accept: "application/json" });
+}
+
+/** GET /sources/engines — SQL engines + per-engine defaults for the wizard. */
+export async function listSourceEngines(): Promise<EngineSpec[]> {
+  return apiFetch<EngineSpec[]>("/sources/engines", {}, { Accept: "application/json" });
 }
 
 /** GET /sources — the tenant's source connections. */
