@@ -15,6 +15,7 @@ vi.mock("@/api/hooks", () => ({
   useSources: vi.fn(),
   useSourceKinds: vi.fn(),
   useSourceEngines: vi.fn(),
+  useIntrospectSource: vi.fn(),
   useCreateSource: vi.fn(),
   useTestSource: vi.fn(),
   useDeleteSource: vi.fn(),
@@ -61,6 +62,7 @@ let createPipelineMutate: ReturnType<typeof vi.fn>;
 let createSourceMutate: ReturnType<typeof vi.fn>;
 let runPipelineMutate: ReturnType<typeof vi.fn>;
 let createScheduleMutate: ReturnType<typeof vi.fn>;
+let introspectMutateAsync: ReturnType<typeof vi.fn>;
 
 function query<T>(data: T) {
   return { data, isLoading: false, isError: false };
@@ -74,12 +76,17 @@ function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRea
   createSourceMutate = vi.fn();
   runPipelineMutate = vi.fn();
   createScheduleMutate = vi.fn();
+  introspectMutateAsync = vi.fn().mockResolvedValue({ schemas: [], tables: [], columns: [] });
   // @ts-expect-error partial mock
   vi.mocked(hooks.useSources).mockReturnValue(query(opts.sources ?? []));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useSourceKinds).mockReturnValue(query(["sql_database", "filesystem"]));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useSourceEngines).mockReturnValue(query(engines));
+  vi.mocked(hooks.useIntrospectSource).mockReturnValue({
+    mutateAsync: introspectMutateAsync,
+    isPending: false,
+  } as unknown as ReturnType<typeof hooks.useIntrospectSource>);
   // @ts-expect-error partial mock
   vi.mocked(hooks.usePipelines).mockReturnValue(query(opts.pipelines ?? []));
   // @ts-expect-error partial mock
@@ -142,27 +149,93 @@ describe("Pipelines page", () => {
     );
   });
 
-  it("creates a pipeline with the full payload", () => {
-    setup({ sources: [source] });
+  it("creates a pipeline from a file source (Details → Review)", () => {
+    const fileSource: SourceConnectionRead = { ...source, id: "f1", name: "lake", kind: "filesystem" };
+    setup({ sources: [fileSource] });
     render(<Pipelines />);
 
     fireEvent.click(screen.getByRole("button", { name: /new pipeline/i }));
-    (document.querySelector("#pl-name") as HTMLInputElement).value = "";
     fireEvent.change(document.querySelector("#pl-name")!, { target: { value: "orders_daily" } });
-    fireEvent.change(document.querySelector("#pl-object")!, { target: { value: "orders" } });
+    fireEvent.change(document.querySelector("#pl-object")!, { target: { value: "raw/orders.csv" } });
     fireEvent.change(document.querySelector("#pl-target")!, { target: { value: "orders" } });
-
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i })); // → Review
     fireEvent.click(screen.getByRole("button", { name: /create pipeline/i }));
 
     expect(createPipelineMutate).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         name: "orders_daily",
-        source_connection_id: "s1",
-        config: { object: "orders", write_disposition: "overwrite" },
+        source_connection_id: "f1",
         target_table: "orders",
-      },
+        config: expect.objectContaining({
+          object: "raw/orders.csv",
+          write_disposition: "overwrite",
+        }),
+      }),
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
     );
+  });
+
+  it("designs a SQL pipeline with a field map and merge-by-primary-key", async () => {
+    setup({ sources: [source] }); // sql_database
+    // Configure the drill-down after setup() has (re)created the spy.
+    introspectMutateAsync.mockImplementation(
+      async (vars: { schema?: string; table?: string }) => {
+        if (vars.table)
+          return {
+            schemas: [],
+            tables: [],
+            columns: [
+              { name: "id", source_type: "INTEGER", suggested_target_type: "Int64" },
+              { name: "region", source_type: "TEXT", suggested_target_type: "String" },
+            ],
+          };
+        if (vars.schema) return { schemas: [], tables: ["orders"], columns: [] };
+        return { schemas: ["public"], tables: [], columns: [] };
+      }
+    );
+    render(<Pipelines />);
+
+    fireEvent.click(screen.getByRole("button", { name: /new pipeline/i }));
+    fireEvent.change(document.querySelector("#pl-name")!, { target: { value: "orders_sync" } });
+    fireEvent.change(document.querySelector("#pl-target")!, { target: { value: "orders" } });
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i })); // → Schema & table (loads schemas)
+
+    // Wait for each async-loaded option before selecting it.
+    await screen.findByRole("option", { name: "public" });
+    fireEvent.change(screen.getByRole("combobox", { name: /schema/i }), {
+      target: { value: "public" },
+    });
+    await screen.findByRole("option", { name: "orders" });
+    fireEvent.change(screen.getByRole("combobox", { name: /^table$/i }), {
+      target: { value: "orders" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i })); // → Fields (loads columns)
+
+    // Both columns introspected and included by default.
+    await screen.findByLabelText("Include id");
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i })); // → Load mode
+
+    fireEvent.change(screen.getByLabelText(/load mode/i), { target: { value: "merge" } });
+    fireEvent.click(screen.getByLabelText("Primary key id"));
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i })); // → Review
+    fireEvent.click(screen.getByRole("button", { name: /create pipeline/i }));
+
+    expect(createPipelineMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "orders_sync",
+        source_connection_id: "s1",
+        target_table: "orders",
+        config: expect.objectContaining({
+          object: "orders",
+          source_schema: "public",
+          write_disposition: "merge",
+          primary_key: ["id"],
+        }),
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
+    const cfg = createPipelineMutate.mock.calls[0][0].config;
+    expect(cfg.columns).toHaveLength(2);
   });
 
   it("runs a pipeline now", () => {

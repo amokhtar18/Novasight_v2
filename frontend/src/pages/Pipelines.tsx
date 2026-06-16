@@ -23,7 +23,6 @@ import {
 import { toast } from "sonner";
 
 import {
-  useCreatePipeline,
   useCreateSchedule,
   useCreateSource,
   useDeletePipeline,
@@ -39,6 +38,7 @@ import {
   useTestSource,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PipelineWizard } from "@/components/pipeline/PipelineWizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -381,7 +381,7 @@ function PipelinesSection() {
           </ul>
         )}
       </CardContent>
-      <NewPipelineDialog open={open} onOpenChange={setOpen} sources={sources ?? []} />
+      <PipelineWizard open={open} onOpenChange={setOpen} sources={sources ?? []} />
     </Card>
   );
 }
@@ -596,88 +596,3 @@ function RunRow({ run }: { run: PipelineRunRead }) {
   );
 }
 
-function NewPipelineDialog({
-  open,
-  onOpenChange,
-  sources,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  sources: SourceConnectionRead[];
-}) {
-  const createPipeline = useCreatePipeline();
-  const [name, setName] = useState("");
-  const [sourceId, setSourceId] = useState("");
-  const [object, setObject] = useState("");
-  const [targetTable, setTargetTable] = useState("");
-
-  const effectiveSourceId = sourceId || sources[0]?.id || "";
-
-  function handleSave() {
-    if (!name.trim() || !effectiveSourceId || !object.trim() || !targetTable.trim()) {
-      toast.error("Name, source, object, and target table are required");
-      return;
-    }
-    createPipeline.mutate(
-      {
-        name: name.trim(),
-        source_connection_id: effectiveSourceId,
-        config: { object: object.trim(), write_disposition: "overwrite" },
-        target_table: targetTable.trim(),
-      },
-      {
-        onSuccess: (p) => {
-          onOpenChange(false);
-          toast.success(`Created pipeline “${p.name}”`);
-        },
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : "Could not create the pipeline"),
-      }
-    );
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="New pipeline">
-      <DialogHeader>
-        <DialogTitle>New pipeline</DialogTitle>
-        <DialogDescription>Pick a source, the object to load, and a target table.</DialogDescription>
-      </DialogHeader>
-
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="pl-name">Name</Label>
-          <Input id="pl-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. orders_daily" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="pl-source">Source</Label>
-          <Select id="pl-source" value={effectiveSourceId} onChange={(e) => setSourceId(e.target.value)}>
-            {sources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.kind})
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="pl-object">Object</Label>
-            <Input id="pl-object" value={object} onChange={(e) => setObject(e.target.value)} placeholder="orders (table) or raw/orders.csv" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pl-target">Target table</Label>
-            <Input id="pl-target" value={targetTable} onChange={(e) => setTargetTable(e.target.value)} placeholder="orders" />
-          </div>
-        </div>
-      </div>
-
-      <DialogFooter>
-        <Button variant="ghost" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave} disabled={createPipeline.isPending}>
-          {createPipeline.isPending ? "Creating…" : "Create pipeline"}
-        </Button>
-      </DialogFooter>
-    </Dialog>
-  );
-}

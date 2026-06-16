@@ -50,6 +50,7 @@ import type {
   ScheduleUpdate,
   SourceConnectionCreate,
   SourceConnectionRead,
+  SourceIntrospectResponse,
   SourceTestResponse,
   SemanticModelDefCreate,
   SemanticModelDefRead,
@@ -257,6 +258,22 @@ export async function listSourceKinds(): Promise<string[]> {
 /** GET /sources/engines — SQL engines + per-engine defaults for the wizard. */
 export async function listSourceEngines(): Promise<EngineSpec[]> {
   return apiFetch<EngineSpec[]>("/sources/engines", {}, { Accept: "application/json" });
+}
+
+/** POST /sources/{id}/introspect — drill schema → table → columns for the wizard. */
+export async function introspectSource(
+  id: string,
+  params: { schema?: string; table?: string } = {}
+): Promise<SourceIntrospectResponse> {
+  const q = new URLSearchParams();
+  if (params.schema) q.set("schema", params.schema);
+  if (params.table) q.set("table", params.table);
+  const qs = q.toString();
+  return apiFetch<SourceIntrospectResponse>(
+    `/sources/${id}/introspect${qs ? `?${qs}` : ""}`,
+    { method: "POST" },
+    { "Content-Type": "application/json" }
+  );
 }
 
 /** GET /sources — the tenant's source connections. */

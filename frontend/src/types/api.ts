@@ -261,12 +261,74 @@ export interface EngineSpec {
 // ETL: pipelines — /api/v1/pipelines  (mirrors schemas/pipeline.py)
 // ---------------------------------------------------------------------------
 
-export type WriteDisposition = "overwrite";
+export type WriteDisposition = "overwrite" | "append" | "merge" | "incremental";
+
+export type TargetType =
+  | "String"
+  | "Int64"
+  | "Float64"
+  | "Decimal"
+  | "Boolean"
+  | "Date"
+  | "DateTime"
+  | "JSON"
+  | "UUID";
+
+export type ScdType = "none" | "scd1" | "scd2";
+
+export type FilterOperator =
+  | "eq"
+  | "ne"
+  | "gt"
+  | "ge"
+  | "lt"
+  | "le"
+  | "like"
+  | "in"
+  | "is_null"
+  | "is_not_null";
+
+/** One source column mapped to a destination column (mirrors schemas/pipeline.ColumnMap). */
+export interface ColumnMap {
+  source_name: string;
+  source_type?: string;
+  target_name: string;
+  target_type?: TargetType;
+  included?: boolean;
+}
+
+/** A structured source-side predicate (mirrors schemas/pipeline.FilterClause). */
+export interface FilterClause {
+  column: string;
+  operator: FilterOperator;
+  value?: string | number | boolean | Array<string | number> | null;
+}
 
 export interface PipelineConfig {
   /** Source object to extract: a DB table name, or a file key for filesystem. */
   object: string;
   write_disposition?: WriteDisposition;
+  source_schema?: string | null;
+  columns?: ColumnMap[];
+  primary_key?: string[];
+  partition_by?: string[];
+  source_filters?: FilterClause[];
+  scd_type?: ScdType;
+  cdc_column?: string | null;
+}
+
+/** One column from POST /sources/{id}/introspect (schema+table given). */
+export interface IntrospectColumn {
+  name: string;
+  source_type: string;
+  suggested_target_type: TargetType;
+}
+
+/** Response from POST /sources/{id}/introspect (one level populated per call). */
+export interface SourceIntrospectResponse {
+  schemas: string[];
+  tables: string[];
+  columns: IntrospectColumn[];
 }
 
 export interface PipelineRead {

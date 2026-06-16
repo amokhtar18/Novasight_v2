@@ -35,6 +35,7 @@ import {
   getHealth,
   getMe,
   getSuggestions,
+  introspectSource,
   listCharts,
   listDashboards,
   listDatasets,
@@ -347,6 +348,14 @@ export function useSourceEngines() {
     queryKey: ["sources", "engines"] as const,
     queryFn: listSourceEngines,
     staleTime: 60 * 60_000,
+  });
+}
+
+/** Mutation: drill schema → table → columns on a source for the pipeline wizard. */
+export function useIntrospectSource() {
+  return useMutation({
+    mutationFn: (vars: { id: string; schema?: string; table?: string }) =>
+      introspectSource(vars.id, { schema: vars.schema, table: vars.table }),
   });
 }
 
