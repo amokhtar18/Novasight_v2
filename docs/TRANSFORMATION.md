@@ -94,6 +94,13 @@ Beyond the static models above, users define **dbt models from the UI** (the
 Transforms page, `/transforms`). A definition is a `layer`, a `materialization`, the
 model `sql` (a SELECT), and optional column data tests.
 
+Models are **editable** (#10): each card shows its last-updated time
+(`formatRelativeTime(updated_at)`) and a pencil opens the create form prefilled, posting a
+`PATCH` (the create dialog doubles as the edit dialog). The latest *build* lives in the
+Dagster UI (the Run button launches it); the card's timestamp is the definition's update
+time. The same edit + timestamp affordance applies to semantic models
+(`docs/SEMANTIC_LAYER.md`).
+
 - **API** (`backend/app/api/v1/dbt_models.py` → `services/dbt_models.py`):
   `GET/POST /api/v1/dbt-models`, `GET/PATCH/DELETE /api/v1/dbt-models/{id}`. Reads need
   a tenant context; mutations require the tenant superuser role. Names are unique per

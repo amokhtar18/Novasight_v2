@@ -12,6 +12,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 vi.mock("@/api/hooks", () => ({
   useSemanticModelDefs: vi.fn(),
   useCreateSemanticModelDef: vi.fn(),
+  useUpdateSemanticModelDef: vi.fn(),
   useDeleteSemanticModelDef: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -21,20 +22,27 @@ import {
   useCreateSemanticModelDef,
   useDeleteSemanticModelDef,
   useSemanticModelDefs,
+  useUpdateSemanticModelDef,
 } from "@/api/hooks";
+import type { SemanticModelDefRead } from "@/types/api";
 
 const mockDefs = vi.mocked(useSemanticModelDefs);
 const mockCreate = vi.mocked(useCreateSemanticModelDef);
+const mockUpdate = vi.mocked(useUpdateSemanticModelDef);
 const mockDelete = vi.mocked(useDeleteSemanticModelDef);
 
 let createMutateAsync: ReturnType<typeof vi.fn>;
+let updateMutateAsync: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   createMutateAsync = vi.fn().mockResolvedValue({ id: "m1", name: "sales" });
+  updateMutateAsync = vi.fn().mockResolvedValue({ id: "m1", name: "sales" });
   // @ts-expect-error partial mock
   mockDefs.mockReturnValue({ data: [], isLoading: false });
   // @ts-expect-error partial mock
   mockCreate.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
+  // @ts-expect-error partial mock
+  mockUpdate.mockReturnValue({ mutateAsync: updateMutateAsync, isPending: false });
   // @ts-expect-error partial mock
   mockDelete.mockReturnValue({ mutate: vi.fn() });
 });
@@ -46,10 +54,39 @@ function setValue(id: string, value: string) {
   fireEvent.change(el, { target: { value } });
 }
 
+const existingDef: SemanticModelDefRead = {
+  id: "m1",
+  name: "sales",
+  base_table: "mart_sales",
+  config: {
+    measures: [{ name: "revenue", type: "sum", sql: "amount" }],
+    dimensions: [{ name: "region", type: "string", sql: "region" }],
+  },
+  enabled: true,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-06-01T00:00:00Z",
+};
+
 describe("SemanticModels", () => {
   it("shows the empty state when there are no models", () => {
     render(<SemanticModels />);
     expect(screen.getByText(/no semantic models yet/i)).toBeInTheDocument();
+  });
+
+  it("edits an existing model, posting the patch", async () => {
+    // @ts-expect-error partial mock
+    mockDefs.mockReturnValue({ data: [existingDef], isLoading: false });
+    render(<SemanticModels />);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit sales/i }));
+    setValue("sm-table", "mart_sales_v2");
+    fireEvent.click(screen.getByRole("button", { name: /save model/i }));
+
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith({
+      id: "m1",
+      patch: expect.objectContaining({ name: "sales", base_table: "mart_sales_v2" }),
+    });
   });
 
   it("posts the full definition from the wizard", async () => {

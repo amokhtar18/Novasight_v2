@@ -469,6 +469,14 @@ export interface SemanticModelDefCreate {
   enabled?: boolean;
 }
 
+/** PATCH /semantic-models/{id} — partial update. */
+export interface SemanticModelDefUpdate {
+  name?: string;
+  base_table?: string;
+  config?: SemanticModelConfig;
+  enabled?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // dbt model + test registry (wizard) — /api/v1/dbt-models
 // (mirrors schemas/dbt_model.py)
@@ -527,6 +535,18 @@ export interface DbtModelDefCreate {
   layer?: DbtLayer;
   materialization?: DbtMaterialization;
   sql: string;
+  config?: Record<string, unknown>;
+  incremental?: DbtIncrementalConfig | null;
+  tests?: DbtTestDef[];
+  enabled?: boolean;
+}
+
+/** PATCH /dbt-models/{id} — partial update (`tests`, if given, replaces all). */
+export interface DbtModelDefUpdate {
+  name?: string;
+  layer?: DbtLayer;
+  materialization?: DbtMaterialization;
+  sql?: string;
   config?: Record<string, unknown>;
   incremental?: DbtIncrementalConfig | null;
   tests?: DbtTestDef[];

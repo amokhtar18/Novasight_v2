@@ -20,6 +20,7 @@ import type {
   DashboardCreate,
   DbtModelDefCreate,
   DbtModelDefRead,
+  DbtModelDefUpdate,
   DbtRunRead,
   DashboardLayoutUpdate,
   DashboardRead,
@@ -56,6 +57,7 @@ import type {
   SourceTestResponse,
   SemanticModelDefCreate,
   SemanticModelDefRead,
+  SemanticModelDefUpdate,
   SemanticModelRead,
   SemanticQueryRequest,
   SuggestionsResponse,
@@ -227,6 +229,18 @@ export async function createDbtModel(request: DbtModelDefCreate): Promise<DbtMod
   return apiFetch<DbtModelDefRead>(
     "/dbt-models",
     { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** PATCH /dbt-models/{id} — partial update (tests, if given, replace all). */
+export async function updateDbtModel(
+  id: string,
+  request: DbtModelDefUpdate
+): Promise<DbtModelDefRead> {
+  return apiFetch<DbtModelDefRead>(
+    `/dbt-models/${id}`,
+    { method: "PATCH", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
 }
@@ -458,6 +472,18 @@ export async function createSemanticModelDef(
   return apiFetch<SemanticModelDefRead>(
     "/semantic-models",
     { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** PATCH /semantic-models/{id} — partial update (regenerates the Cube codegen). */
+export async function updateSemanticModelDef(
+  id: string,
+  request: SemanticModelDefUpdate
+): Promise<SemanticModelDefRead> {
+  return apiFetch<SemanticModelDefRead>(
+    `/semantic-models/${id}`,
+    { method: "PATCH", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
 }

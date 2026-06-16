@@ -12,6 +12,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 vi.mock("@/api/hooks", () => ({
   useDbtModels: vi.fn(),
   useCreateDbtModel: vi.fn(),
+  useUpdateDbtModel: vi.fn(),
   useDeleteDbtModel: vi.fn(),
   useRunDbtModel: vi.fn(),
 }));
@@ -23,23 +24,30 @@ import {
   useDeleteDbtModel,
   useDbtModels,
   useRunDbtModel,
+  useUpdateDbtModel,
 } from "@/api/hooks";
+import type { DbtModelDefRead } from "@/types/api";
 
 const mockModels = vi.mocked(useDbtModels);
 const mockCreate = vi.mocked(useCreateDbtModel);
+const mockUpdate = vi.mocked(useUpdateDbtModel);
 const mockDelete = vi.mocked(useDeleteDbtModel);
 const mockRun = vi.mocked(useRunDbtModel);
 
 let createMutateAsync: ReturnType<typeof vi.fn>;
+let updateMutateAsync: ReturnType<typeof vi.fn>;
 let runMutate: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   createMutateAsync = vi.fn().mockResolvedValue({ id: "m1", name: "mart_orders" });
+  updateMutateAsync = vi.fn().mockResolvedValue({ id: "m1", name: "mart_orders" });
   runMutate = vi.fn();
   // @ts-expect-error partial mock
   mockModels.mockReturnValue({ data: [], isLoading: false });
   // @ts-expect-error partial mock
   mockCreate.mockReturnValue({ mutateAsync: createMutateAsync, isPending: false });
+  // @ts-expect-error partial mock
+  mockUpdate.mockReturnValue({ mutateAsync: updateMutateAsync, isPending: false });
   // @ts-expect-error partial mock
   mockDelete.mockReturnValue({ mutate: vi.fn() });
   // @ts-expect-error partial mock
@@ -52,10 +60,40 @@ function setValue(id: string, value: string) {
   fireEvent.change(document.querySelector(`#${id}`)!, { target: { value } });
 }
 
+const existingModel: DbtModelDefRead = {
+  id: "m1",
+  name: "mart_orders",
+  layer: "marts",
+  materialization: "table",
+  sql: "select 1",
+  config: {},
+  incremental: null,
+  enabled: true,
+  tests: [],
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-06-01T00:00:00Z",
+};
+
 describe("DbtModels wizard", () => {
   it("shows the empty state with no models", () => {
     render(<DbtModels />);
     expect(screen.getByText(/no dbt models yet/i)).toBeInTheDocument();
+  });
+
+  it("edits an existing model, posting the patch", async () => {
+    // @ts-expect-error partial mock
+    mockModels.mockReturnValue({ data: [existingModel], isLoading: false });
+    render(<DbtModels />);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit mart_orders/i }));
+    setValue("dm-sql", "select 2");
+    fireEvent.click(screen.getByRole("button", { name: /save model/i }));
+
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith({
+      id: "m1",
+      patch: expect.objectContaining({ name: "mart_orders", sql: "select 2" }),
+    });
   });
 
   it("posts the full model definition with a column test", async () => {

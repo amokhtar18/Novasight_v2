@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { Boxes, Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { Boxes, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -16,6 +16,7 @@ import {
   useDbtModels,
   useDeleteDbtModel,
   useRunDbtModel,
+  useUpdateDbtModel,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -32,11 +33,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatRelativeTime } from "@/lib/format";
 import type {
   DbtIncrementalStrategy,
   DbtLayer,
   DbtMaterialization,
   DbtModelDefCreate,
+  DbtModelDefRead,
+  DbtModelDefUpdate,
   DbtOnSchemaChange,
   DbtTestDef,
   DbtTestType,
@@ -76,10 +80,12 @@ const emptyTest = (): TestRow => ({ column: "", type: "not_null", values: "", to
 export function DbtModels() {
   const { data: models, isLoading } = useDbtModels();
   const createModel = useCreateDbtModel();
+  const updateModel = useUpdateDbtModel();
   const deleteModel = useDeleteDbtModel();
   const runModel = useRunDbtModel();
 
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [layer, setLayer] = useState<DbtLayer>("marts");
   const [materialization, setMaterialization] = useState<DbtMaterialization>("table");
@@ -89,6 +95,9 @@ export function DbtModels() {
   const [strategy, setStrategy] = useState<DbtIncrementalStrategy>("merge");
   const [onSchemaChange, setOnSchemaChange] = useState<DbtOnSchemaChange>("ignore");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  const isEdit = editingId !== null;
+  const saving = createModel.isPending || updateModel.isPending;
 
   function reset() {
     setName("");
@@ -101,7 +110,36 @@ export function DbtModels() {
     setOnSchemaChange("ignore");
   }
 
-  async function handleCreate() {
+  function openCreate() {
+    setEditingId(null);
+    reset();
+    setOpen(true);
+  }
+
+  function openEdit(m: DbtModelDefRead) {
+    setEditingId(m.id);
+    setName(m.name);
+    setLayer(m.layer as DbtLayer);
+    setMaterialization(m.materialization as DbtMaterialization);
+    setSql(m.sql ?? "");
+    setTests(
+      m.tests.length
+        ? m.tests.map((t) => ({
+            column: t.column_name ?? "",
+            type: t.test_type as DbtTestType,
+            values: Array.isArray(t.config.values) ? (t.config.values as string[]).join(", ") : "",
+            to: typeof t.config.to === "string" ? t.config.to : "",
+            field: typeof t.config.field === "string" ? t.config.field : "",
+          }))
+        : [emptyTest()]
+    );
+    setUniqueKey((m.incremental?.unique_key ?? []).join(", "));
+    setStrategy(m.incremental?.incremental_strategy ?? "merge");
+    setOnSchemaChange(m.incremental?.on_schema_change ?? "ignore");
+    setOpen(true);
+  }
+
+  async function handleSubmit() {
     if (!name.trim() || !sql.trim()) {
       toast.error("Name and SQL are required");
       return;
@@ -119,7 +157,7 @@ export function DbtModels() {
               : {},
       }));
 
-    const payload: DbtModelDefCreate = {
+    const payload: DbtModelDefCreate & DbtModelDefUpdate = {
       name: name.trim(),
       layer,
       materialization,
@@ -128,21 +166,25 @@ export function DbtModels() {
     };
     if (materialization === "incremental") {
       payload.incremental = {
-        unique_key: uniqueKey
-          .split(",")
-          .map((k) => k.trim())
-          .filter(Boolean),
+        unique_key: uniqueKey.split(",").map((k) => k.trim()).filter(Boolean),
         incremental_strategy: strategy,
         on_schema_change: onSchemaChange,
       };
     }
+
     try {
-      const created = await createModel.mutateAsync(payload);
+      if (isEdit && editingId) {
+        const updated = await updateModel.mutateAsync({ id: editingId, patch: payload });
+        toast.success(`Updated model “${updated.name}”`);
+      } else {
+        const created = await createModel.mutateAsync(payload);
+        toast.success(`Created model “${created.name}”`);
+      }
       setOpen(false);
+      setEditingId(null);
       reset();
-      toast.success(`Created model “${created.name}”`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create the model");
+      toast.error(err instanceof Error ? err.message : "Could not save the model");
     }
   }
 
@@ -169,7 +211,7 @@ export function DbtModels() {
         title="Transforms"
         description="dbt models that shape raw data into marts. Define one here; tests become quality gates and it materializes to ClickHouse."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus className="h-4 w-4" aria-hidden />
             New model
           </Button>
@@ -186,7 +228,7 @@ export function DbtModels() {
           title="No dbt models yet"
           description="Define a transformation (SQL + tests) to build a mart from your raw data."
           action={
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus className="h-4 w-4" aria-hidden />
               New model
             </Button>
@@ -212,19 +254,30 @@ export function DbtModels() {
                 </Badge>
                 {!m.enabled && <Badge variant="info">disabled</Badge>}
               </div>
+              <p className="mt-3 text-[0.7rem] text-muted-foreground">
+                Updated {formatRelativeTime(m.updated_at)}
+              </p>
               <button
                 type="button"
                 onClick={() => handleRun(m.id, m.name)}
                 disabled={runModel.isPending && runModel.variables === m.id}
                 aria-label={`Run ${m.name}`}
                 title="Build now via Dagster"
-                className="absolute right-11 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-100 disabled:cursor-not-allowed"
+                className="absolute right-[4.75rem] top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-100 disabled:cursor-not-allowed"
               >
                 {runModel.isPending && runModel.variables === m.id ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={() => openEdit(m)}
+                aria-label={`Edit ${m.name}`}
+                className="absolute right-11 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <Pencil className="h-4 w-4" />
               </button>
               <button
                 type="button"
@@ -239,10 +292,17 @@ export function DbtModels() {
         </div>
       )}
 
-      {/* Create wizard */}
-      <Dialog open={open} onOpenChange={setOpen} title="New dbt model">
+      {/* Create / edit wizard */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setEditingId(null);
+        }}
+        title={isEdit ? "Edit dbt model" : "New dbt model"}
+      >
         <DialogHeader>
-          <DialogTitle>New dbt model</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit dbt model" : "New dbt model"}</DialogTitle>
           <DialogDescription>
             Write the transformation SQL and optional column tests.
           </DialogDescription>
@@ -455,8 +515,14 @@ export function DbtModels() {
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={createModel.isPending}>
-            {createModel.isPending ? "Creating…" : "Create model"}
+          <Button onClick={handleSubmit} disabled={saving}>
+            {saving
+              ? isEdit
+                ? "Saving…"
+                : "Creating…"
+              : isEdit
+                ? "Save model"
+                : "Create model"}
           </Button>
         </DialogFooter>
       </Dialog>

@@ -66,8 +66,10 @@ import {
   testSource,
   updateDashboard,
   updateDashboardTile,
+  updateDbtModel,
   updatePipeline,
   updateSchedule,
+  updateSemanticModelDef,
   updateSource,
   updateUser,
   uploadDataset,
@@ -81,6 +83,7 @@ import type {
   DashboardTileCreate,
   DashboardUpdate,
   DbtModelDefCreate,
+  DbtModelDefUpdate,
   InsightRequest,
   LoginRequest,
   NLChartRequest,
@@ -91,6 +94,7 @@ import type {
   ScheduleCreate,
   ScheduleUpdate,
   SemanticModelDefCreate,
+  SemanticModelDefUpdate,
   SemanticQueryRequest,
   SourceConnectionCreate,
   SourceConnectionUpdate,
@@ -321,6 +325,19 @@ export function useCreateSemanticModelDef() {
   });
 }
 
+/** Mutation: update a semantic-model definition. Invalidates defs + governed models. */
+export function useUpdateSemanticModelDef() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: SemanticModelDefUpdate }) =>
+      updateSemanticModelDef(id, patch),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.semanticModelDefs() });
+      void client.invalidateQueries({ queryKey: queryKeys.semanticModels() });
+    },
+  });
+}
+
 /** Mutation: delete a semantic-model definition. Invalidates defs + governed models. */
 export function useDeleteSemanticModelDef() {
   const client = useQueryClient();
@@ -543,6 +560,18 @@ export function useCreateDbtModel() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: DbtModelDefCreate) => createDbtModel(request),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.dbtModels() });
+    },
+  });
+}
+
+/** Mutation: update a dbt model (partial). Invalidates the list. */
+export function useUpdateDbtModel() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: DbtModelDefUpdate }) =>
+      updateDbtModel(id, patch),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.dbtModels() });
     },

@@ -8,13 +8,14 @@
  */
 
 import { useState } from "react";
-import { Layers, Plus, Trash2 } from "lucide-react";
+import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   useCreateSemanticModelDef,
   useDeleteSemanticModelDef,
   useSemanticModelDefs,
+  useUpdateSemanticModelDef,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -31,11 +32,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatRelativeTime } from "@/lib/format";
 import type {
   DimensionType,
   MeasureType,
   SemanticJoinRelationship,
   SemanticModelDefCreate,
+  SemanticModelDefRead,
+  SemanticModelDefUpdate,
 } from "@/types/api";
 
 const MEASURE_TYPES: MeasureType[] = ["count", "sum", "avg", "min", "max", "count_distinct"];
@@ -75,15 +79,20 @@ const emptyJoin = (): JoinRow => ({
 export function SemanticModels() {
   const { data: models, isLoading } = useSemanticModelDefs();
   const createModel = useCreateSemanticModelDef();
+  const updateModel = useUpdateSemanticModelDef();
   const deleteModel = useDeleteSemanticModelDef();
 
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [baseTable, setBaseTable] = useState("");
   const [measures, setMeasures] = useState<MeasureRow[]>([emptyMeasure()]);
   const [dimensions, setDimensions] = useState<DimensionRow[]>([emptyDimension()]);
   const [joins, setJoins] = useState<JoinRow[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  const isEdit = editingId !== null;
+  const saving = createModel.isPending || updateModel.isPending;
 
   function reset() {
     setName("");
@@ -93,7 +102,38 @@ export function SemanticModels() {
     setJoins([]);
   }
 
-  async function handleCreate() {
+  function openCreate() {
+    setEditingId(null);
+    reset();
+    setOpen(true);
+  }
+
+  function openEdit(m: SemanticModelDefRead) {
+    setEditingId(m.id);
+    setName(m.name);
+    setBaseTable(m.base_table);
+    setMeasures(
+      m.config.measures.length
+        ? m.config.measures.map((x) => ({ name: x.name, type: x.type, sql: x.sql ?? "" }))
+        : [emptyMeasure()]
+    );
+    setDimensions(
+      m.config.dimensions.length
+        ? m.config.dimensions.map((x) => ({ name: x.name, type: x.type, sql: x.sql ?? "" }))
+        : [emptyDimension()]
+    );
+    setJoins(
+      (m.config.joins ?? []).map((j) => ({
+        name: j.name,
+        relationship: j.relationship,
+        localKey: j.local_key,
+        foreignKey: j.foreign_key,
+      }))
+    );
+    setOpen(true);
+  }
+
+  async function handleSubmit() {
     const cleanMeasures = measures
       .filter((m) => m.name.trim())
       .map((m) => ({
@@ -122,7 +162,7 @@ export function SemanticModels() {
       return;
     }
 
-    const payload: SemanticModelDefCreate = {
+    const payload: SemanticModelDefCreate & SemanticModelDefUpdate = {
       name: name.trim(),
       base_table: baseTable.trim(),
       config: {
@@ -132,12 +172,18 @@ export function SemanticModels() {
       },
     };
     try {
-      const created = await createModel.mutateAsync(payload);
+      if (isEdit && editingId) {
+        const updated = await updateModel.mutateAsync({ id: editingId, patch: payload });
+        toast.success(`Updated model “${updated.name}”`);
+      } else {
+        const created = await createModel.mutateAsync(payload);
+        toast.success(`Created model “${created.name}”`);
+      }
       setOpen(false);
+      setEditingId(null);
       reset();
-      toast.success(`Created model “${created.name}”`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create the model");
+      toast.error(err instanceof Error ? err.message : "Could not save the model");
     }
   }
 
@@ -155,7 +201,7 @@ export function SemanticModels() {
         title="Semantic models"
         description="Governed metrics and dimensions over your data marts. Build a model here, then chart it or ask AI about it."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus className="h-4 w-4" aria-hidden />
             New model
           </Button>
@@ -172,7 +218,7 @@ export function SemanticModels() {
           title="No semantic models yet"
           description="Define one over a data mart to expose governed measures and dimensions."
           action={
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus className="h-4 w-4" aria-hidden />
               New model
             </Button>
@@ -205,6 +251,17 @@ export function SemanticModels() {
                 )}
                 {!m.enabled && <Badge variant="info">disabled</Badge>}
               </div>
+              <p className="mt-3 text-[0.7rem] text-muted-foreground">
+                Updated {formatRelativeTime(m.updated_at)}
+              </p>
+              <button
+                type="button"
+                onClick={() => openEdit(m)}
+                aria-label={`Edit ${m.name}`}
+                className="absolute right-11 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 onClick={() => setPendingDelete(m.id)}
@@ -219,9 +276,16 @@ export function SemanticModels() {
       )}
 
       {/* Create wizard */}
-      <Dialog open={open} onOpenChange={setOpen} title="New semantic model">
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setEditingId(null);
+        }}
+        title={isEdit ? "Edit semantic model" : "New semantic model"}
+      >
         <DialogHeader>
-          <DialogTitle>New semantic model</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit semantic model" : "New semantic model"}</DialogTitle>
           <DialogDescription>
             Define governed measures and dimensions over a serving table (a dbt mart).
           </DialogDescription>
@@ -410,8 +474,14 @@ export function SemanticModels() {
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={createModel.isPending}>
-            {createModel.isPending ? "Creating…" : "Create model"}
+          <Button onClick={handleSubmit} disabled={saving}>
+            {saving
+              ? isEdit
+                ? "Saving…"
+                : "Creating…"
+              : isEdit
+                ? "Save model"
+                : "Create model"}
           </Button>
         </DialogFooter>
       </Dialog>
