@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   Lightbulb,
   MessageSquare,
+  Network,
   Settings,
   Shield,
   Sparkles,
@@ -59,6 +60,23 @@ export const NAV_ITEMS: NavItem[] = [
 export const FOOTER_ITEMS: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
+
+/** An external link (opens in a new tab) rather than an in-app route. */
+export interface ExternalNavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+/**
+ * External links resolved from runtime config. The OpenMetadata catalog is a
+ * separate app, so it links out to its own UI; the item only appears when a catalog
+ * URL is configured (golden source: ``window.__APP_CONFIG__.catalogUrl``).
+ */
+export function externalNavItems(catalogUrl?: string): ExternalNavItem[] {
+  if (!catalogUrl) return [];
+  return [{ href: catalogUrl, label: "Data Catalog", icon: Network }];
+}
 
 /** Resolve a human page title from the current pathname (for the topbar). */
 export function titleForPath(pathname: string): string {

@@ -28,20 +28,43 @@ class ClickHouseSettings(BaseSettings):
     password: SecretStr
 
 
+class IcebergSettings(BaseSettings):
+    """Iceberg REST catalog — identical ``ICEBERG__*`` env the backend uses.
+
+    Lets the catalog asset register the tenant's lake (landing) tables so lineage can
+    start at Iceberg, one hop before ClickHouse.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="ICEBERG__", extra="ignore")
+
+    catalog_uri: str                          # REST catalog (Polaris/Nessie)
+    warehouse: str                            # warehouse location / prefix
+    catalog_token: SecretStr | None = None    # optional bearer token for REST auth
+
+
 class CatalogSettings(BaseSettings):
     """OpenMetadata connection for catalog + lineage ingestion (Phase 5.3).
 
     Uses ``OPENMETADATA__*`` env, mirroring the ``CLICKHOUSE__*`` convention. The two
     fields that point at deployment infrastructure (the server URL and the ingestion
-    bot's JWT) have no defaults; the OM *service* name under which our ClickHouse is
-    registered is an environment-identical convention, so it carries a safe default.
+    bot's JWT) have no defaults; the OM *service* names under which our surfaces are
+    registered are an environment-identical convention, so they carry safe defaults.
     """
 
     model_config = SettingsConfigDict(env_prefix="OPENMETADATA__", extra="ignore")
 
     host_port: str            # OM REST API base, e.g. http://openmetadata:8585/api
     jwt_token: SecretStr      # ingestion-bot JWT used to authenticate to the OM server
-    service_name: str = "novasight_clickhouse"  # OM service entity name for ClickHouse
+    service_name: str = "novasight_clickhouse"  # OM service for ClickHouse (serving + raw)
+    iceberg_service_name: str = "novasight_iceberg"   # OM service for the Iceberg lake
+    source_service_name: str = "novasight_sources"    # OM service for upstream sources
+    semantic_service_name: str = "novasight_semantic"  # OM dashboard service for Cube
+    # Cron for the per-tenant catalog refresh schedules (golden rule 1 — configurable,
+    # safe default: nightly at 02:00, after the daily pipeline/transform runs settle).
+    refresh_cron: str = "0 2 * * *"
+    # Python of the isolated OM-SDK venv the catalog code shells out to (the SDK can't
+    # share the dagster/dbt venv). Image-internal default; overridable (golden rule 1).
+    runner_python: str = "/opt/om-venv/bin/python"
 
 
 class OrchestrationSettings(BaseSettings):
@@ -66,6 +89,10 @@ class OrchestrationSettings(BaseSettings):
     @property
     def clickhouse(self) -> ClickHouseSettings:
         return ClickHouseSettings()  # type: ignore[call-arg]  # values come from env
+
+    @property
+    def iceberg(self) -> IcebergSettings:
+        return IcebergSettings()  # type: ignore[call-arg]  # values come from env
 
     @property
     def catalog(self) -> CatalogSettings:

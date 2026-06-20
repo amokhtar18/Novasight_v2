@@ -28,11 +28,14 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
-# Catalog/lineage ingestion (Phase 5.3). Optional: only the worker that runs the
-# catalog_metadata asset needs the OpenMetadata ingestion SDK. The config builders
-# and the asset's logic are unit-tested without it (the workflow run is injected).
+# Catalog/lineage ingestion (Phase 5.3). The OpenMetadata ingestion SDK CANNOT share a
+# venv with the dagster/dbt stack (it collides with dbt-clickhouse on dbt-adapters), so
+# in the image it is installed into a dedicated venv (/opt/om-venv) that the catalog
+# code shells out to via ``catalog_om_runner.py`` — never imported in-process. This
+# extra documents that dependency set and installs it standalone (a clean venv) for
+# local runs. The config/edge builders are unit-tested without it (emission injected).
 catalog = [
-    "openmetadata-ingestion[clickhouse]>=1.5,<1.7",
+    "openmetadata-ingestion[clickhouse,iceberg]>=1.5,<1.7",
 ]
 
 [tool.pytest.ini_options]

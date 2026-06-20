@@ -6,7 +6,7 @@
  * identity are mocked; rendering is wrapped in a router for NavLink.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
@@ -67,5 +67,28 @@ describe("Sidebar grouping", () => {
     vi.mocked(useIdentity).mockReturnValue({ isAdmin: true } as ReturnType<typeof useIdentity>);
     renderSidebar();
     expect(screen.getAllByRole("link", { name: /Admin/ }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Sidebar data catalog link", () => {
+  afterEach(() => {
+    delete window.__APP_CONFIG__;
+  });
+
+  it("hides the Data Catalog link when no catalog URL is configured", () => {
+    delete window.__APP_CONFIG__;
+    renderSidebar();
+    expect(screen.queryByRole("link", { name: /Data Catalog/ })).toBeNull();
+  });
+
+  it("renders an external Data Catalog link when a catalog URL is configured", () => {
+    window.__APP_CONFIG__ = { apiBaseUrl: "/api/v1", catalogUrl: "http://om.example:8585" };
+    renderSidebar();
+
+    const links = screen.getAllByRole("link", { name: /Data Catalog/ });
+    expect(links.length).toBeGreaterThan(0);
+    // Opens the OM UI in a new tab.
+    expect(links[0]).toHaveAttribute("href", "http://om.example:8585");
+    expect(links[0]).toHaveAttribute("target", "_blank");
   });
 });

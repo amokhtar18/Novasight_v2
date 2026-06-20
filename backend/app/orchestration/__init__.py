@@ -14,21 +14,27 @@ from app.orchestration.dagster_client import (
     get_dagster_client,
 )
 from app.orchestration.run_config import (
+    CATALOG_JOB,
+    CATALOG_OP,
     PIPELINE_JOB,
     PIPELINE_OP,
     TRANSFORM_JOB,
     TRANSFORM_OP,
+    catalog_run_config,
     pipeline_run_config,
     transform_run_config,
 )
 
 __all__ = [
+    "CATALOG_JOB",
+    "CATALOG_OP",
     "PIPELINE_JOB",
     "PIPELINE_OP",
     "TRANSFORM_JOB",
     "TRANSFORM_OP",
     "DagsterClient",
     "DagsterError",
+    "catalog_run_config",
     "get_dagster_client",
     "pipeline_run_config",
     "transform_run_config",

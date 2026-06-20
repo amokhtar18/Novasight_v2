@@ -19,6 +19,8 @@ PIPELINE_JOB = "pipeline_job"
 PIPELINE_OP = "run_pipeline"
 TRANSFORM_JOB = "transform_job"
 TRANSFORM_OP = "run_transform"
+CATALOG_JOB = "catalog_job"
+CATALOG_OP = "run_catalog"
 
 
 def pipeline_run_config(pipeline_id: uuid.UUID | str, tenant: str) -> dict[str, Any]:
@@ -39,3 +41,12 @@ def transform_run_config(transform_job_id: uuid.UUID | str, tenant: str) -> dict
             }
         }
     }
+
+
+def catalog_run_config(tenant: str) -> dict[str, Any]:
+    """Dagster ``runConfigData`` to catalog one tenant into OpenMetadata.
+
+    Parametrised only by the tenant slug; the code location resolves that tenant's
+    ClickHouse DB / Iceberg namespace from the registry (golden rule 2).
+    """
+    return {"ops": {CATALOG_OP: {"config": {"tenant": tenant}}}}

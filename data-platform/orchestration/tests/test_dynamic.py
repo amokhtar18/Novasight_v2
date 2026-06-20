@@ -13,18 +13,30 @@ from dagster import DefaultScheduleStatus, build_op_context
 
 import novasight_orchestration.dynamic as dyn
 from novasight_orchestration.dynamic import (
+    CATALOG_JOB,
+    CATALOG_OP,
     PIPELINE_JOB,
     PIPELINE_OP,
     TRANSFORM_JOB,
     TRANSFORM_OP,
+    build_catalog_schedules,
     build_schedules,
+    catalog_job,
+    catalog_run_config,
+    catalog_schedule_name,
     pipeline_job,
     pipeline_run_config,
+    run_catalog_op,
     run_transform_op,
     transform_job,
     transform_run_config,
 )
-from novasight_orchestration.registry import ScheduleRow, TransformRow, schedule_name
+from novasight_orchestration.registry import (
+    ScheduleRow,
+    TenantRow,
+    TransformRow,
+    schedule_name,
+)
 
 PID = "22222222-2222-2222-2222-222222222222"
 TID = "44444444-4444-4444-4444-444444444444"
@@ -183,3 +195,76 @@ def test_run_transform_op_empty_selection_builds_whole_project(
     dbt = _run_op(monkeypatch, "")
     assert dbt.args == ["build"]  # no --select → whole tenant project
     assert dbt.invocation.waited
+
+
+# ---------------------------------------------------------------------------
+# catalog_job — generic per-tenant catalog ingestion + refresh schedules
+# ---------------------------------------------------------------------------
+
+
+def test_catalog_run_config_contract() -> None:
+    # Mirrors backend/app/orchestration/run_config.catalog_run_config exactly.
+    assert catalog_run_config("acme") == {
+        "ops": {CATALOG_OP: {"config": {"tenant": "acme"}}}
+    }
+
+
+def test_catalog_job_has_contract_name_and_op() -> None:
+    assert catalog_job.name == CATALOG_JOB
+    assert [n.name for n in catalog_job.graph.node_defs] == [CATALOG_OP]
+
+
+def test_catalog_op_config_schema() -> None:
+    c_op = next(n for n in catalog_job.graph.node_defs if n.name == CATALOG_OP)
+    assert set(c_op.config_schema.config_type.fields) == {"tenant"}
+
+
+def test_run_catalog_op_resolves_scope_and_ingests(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The op resolves the tenant's data surfaces from the registry and hands the
+    # resulting scope to the (injected) ingestion — never widening past the tenant.
+    monkeypatch.setattr(
+        dyn,
+        "load_tenant",
+        lambda slug: TenantRow(
+            tenant=slug, clickhouse_db=f"{slug}_db", iceberg_namespace=f"{slug}_ns"
+        ),
+    )
+    captured: list[object] = []
+    monkeypatch.setattr(dyn, "run_catalog_for_scope", captured.append)
+
+    ctx = build_op_context(op_config={"tenant": "acme"})
+    run_catalog_op(ctx)
+
+    assert len(captured) == 1
+    scope = captured[0]
+    assert scope.clickhouse_db == "acme_db"
+    assert scope.iceberg_namespace == "acme_ns"
+    assert scope.tenant == "acme"  # slug flows through → enables the lineage stage
+
+
+def test_catalog_schedule_name_sanitizes_and_is_valid() -> None:
+    name = catalog_schedule_name("acme-eu-1")
+    assert name == "catalog_acme_eu_1"  # hyphens → underscores (Dagster name rules)
+    assert name.replace("_", "").isalnum()
+    assert name == catalog_schedule_name("acme-eu-1")  # deterministic
+
+
+def _tenant(slug: str) -> TenantRow:
+    return TenantRow(tenant=slug, clickhouse_db=f"{slug}_db", iceberg_namespace=f"{slug}_ns")
+
+
+def test_build_catalog_schedules_one_per_tenant() -> None:
+    scheds = {
+        s.name: s
+        for s in build_catalog_schedules([_tenant("acme"), _tenant("globex")], "0 2 * * *")
+    }
+    assert set(scheds) == {catalog_schedule_name("acme"), catalog_schedule_name("globex")}
+
+    acme = scheds[catalog_schedule_name("acme")]
+    assert acme.cron_schedule == "0 2 * * *"
+    assert acme.job_name == CATALOG_JOB
+    assert acme.default_status == DefaultScheduleStatus.RUNNING  # auto-refresh by default
+
+
+def test_build_catalog_schedules_empty_when_no_tenants() -> None:
+    assert build_catalog_schedules([], "0 2 * * *") == []

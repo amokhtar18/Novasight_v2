@@ -17,6 +17,7 @@ Note: this module deliberately does *not* use ``from __future__ import annotatio
 — Dagster introspects the live ``OpExecutionContext`` annotation, which a stringized
 annotation would break.
 """
+import re
 from collections.abc import Iterable
 
 from dagster import (
@@ -27,13 +28,23 @@ from dagster import (
     op,
 )
 
-from .registry import ScheduleRow, load_pipeline, load_transform, schedule_name
+from .catalog import CatalogScope, run_catalog_for_scope
+from .registry import (
+    ScheduleRow,
+    TenantRow,
+    load_pipeline,
+    load_tenant,
+    load_transform,
+    schedule_name,
+)
 
 # --- run-config contract (keep in lock-step with the backend) ----------------
 PIPELINE_JOB = "pipeline_job"
 PIPELINE_OP = "run_pipeline"
 TRANSFORM_JOB = "transform_job"
 TRANSFORM_OP = "run_transform"
+CATALOG_JOB = "catalog_job"
+CATALOG_OP = "run_catalog"
 
 TARGET_PIPELINE = "pipeline"
 TARGET_TRANSFORM = "transform_job"
@@ -53,12 +64,22 @@ def transform_run_config(transform_job_id: str, tenant: str) -> dict[str, object
     }
 
 
+def catalog_run_config(tenant: str) -> dict[str, object]:
+    """Run config for ``catalog_job`` — mirrors the backend contract.
+
+    A catalog run is parametrised only by the tenant slug; the op resolves that
+    tenant's ClickHouse DB / Iceberg namespace from the registry (golden rule 2).
+    """
+    return {"ops": {CATALOG_OP: {"config": {"tenant": tenant}}}}
+
+
 # --- generic ops + jobs ------------------------------------------------------
 # Classic ``config_schema`` (not pythonic ``Config``) so the op config maps the
 # run-config contract directly and survives ``from __future__ import annotations``.
 
 _PIPELINE_SCHEMA = {"pipeline_id": str, "tenant": str}
 _TRANSFORM_SCHEMA = {"transform_job_id": str, "tenant": str}
+_CATALOG_SCHEMA = {"tenant": str}
 
 
 @op(name=PIPELINE_OP, config_schema=_PIPELINE_SCHEMA)
@@ -108,6 +129,32 @@ def run_transform_op(context: OpExecutionContext) -> None:
     dbt.cli(["build", *select], context=context).wait()
 
 
+@op(name=CATALOG_OP, config_schema=_CATALOG_SCHEMA)
+def run_catalog_op(context: OpExecutionContext) -> None:
+    """Catalog one tenant's data + lineage into OpenMetadata, scoped to that tenant.
+
+    Resolves the tenant's ClickHouse DB / Iceberg namespace from the registry and runs
+    the ingestion stages restricted to those surfaces (golden rule 2) — the same
+    builders the static ``catalog_metadata`` asset uses, so run-now, the static asset,
+    and the per-tenant schedule all share one implementation.
+    """
+    cfg = context.op_config
+    row = load_tenant(cfg["tenant"])
+    context.log.info(
+        "catalog run: tenant=%s db=%s namespace=%s",
+        row.tenant,
+        row.clickhouse_db,
+        row.iceberg_namespace,
+    )
+    run_catalog_for_scope(
+        CatalogScope(
+            clickhouse_db=row.clickhouse_db,
+            iceberg_namespace=row.iceberg_namespace,
+            tenant=row.tenant,
+        )
+    )
+
+
 @job(name=PIPELINE_JOB)
 def pipeline_job() -> None:
     run_pipeline_op()
@@ -116,6 +163,11 @@ def pipeline_job() -> None:
 @job(name=TRANSFORM_JOB)
 def transform_job() -> None:
     run_transform_op()
+
+
+@job(name=CATALOG_JOB)
+def catalog_job() -> None:
+    run_catalog_op()
 
 
 # --- dynamic schedules from the registry -------------------------------------
@@ -159,3 +211,41 @@ def build_schedules(rows: Iterable[ScheduleRow]) -> list[ScheduleDefinition]:
             )
         )
     return schedules
+
+
+# --- per-tenant catalog refresh schedules ------------------------------------
+
+
+def catalog_schedule_name(tenant: str) -> str:
+    """Deterministic, Dagster-valid schedule name for a tenant's catalog refresh.
+
+    Slugs may contain hyphens, which Dagster names disallow ([A-Za-z0-9_]+), so any
+    disallowed character is collapsed to ``_``.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_]", "_", tenant)
+    return f"catalog_{safe}"
+
+
+def build_catalog_schedules(
+    tenants: Iterable[TenantRow],
+    cron: str,
+    *,
+    default_status: DefaultScheduleStatus = DefaultScheduleStatus.RUNNING,
+) -> list[ScheduleDefinition]:
+    """Build one catalog-refresh ``ScheduleDefinition`` per provisioned tenant.
+
+    Pure (no I/O): the tenant rows are loaded elsewhere so this is unit-testable. Every
+    tenant gets the same configurable ``cron`` (golden rule 1) and its own run config
+    carrying only the tenant slug; the op resolves the rest from the registry. Catalog
+    schedules default to RUNNING so the catalog stays fresh without manual enabling.
+    """
+    return [
+        ScheduleDefinition(
+            name=catalog_schedule_name(t.tenant),
+            cron_schedule=cron,
+            job=catalog_job,
+            run_config=catalog_run_config(t.tenant),
+            default_status=default_status,
+        )
+        for t in tenants
+    ]

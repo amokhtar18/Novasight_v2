@@ -19,6 +19,12 @@ export interface AppConfig {
    * longer required and is ignored once the user signs in.
    */
   authToken?: string;
+  /**
+   * Optional public base URL of the OpenMetadata catalog UI, e.g.
+   * "http://localhost:8585". When set, a "Data Catalog" link appears in the nav and
+   * opens OM in a new tab. Absent → the link is hidden (catalog not deployed).
+   */
+  catalogUrl?: string;
 }
 
 declare global {
@@ -46,7 +52,7 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  const { apiBaseUrl, authToken } = raw;
+  const { apiBaseUrl, authToken, catalogUrl } = raw;
 
   if (!apiBaseUrl) {
     throw new Error("[config] apiBaseUrl is missing from window.__APP_CONFIG__");
@@ -57,8 +63,19 @@ export function loadConfig(): AppConfig {
   const token =
     authToken && authToken !== "REPLACE_WITH_DEV_TOKEN" ? authToken : undefined;
 
-  _config = { apiBaseUrl, authToken: token };
+  _config = { apiBaseUrl, authToken: token, catalogUrl: catalogUrl || undefined };
   return _config;
+}
+
+/**
+ * The OpenMetadata catalog UI base URL, or undefined when not deployed.
+ *
+ * Reads ``window.__APP_CONFIG__`` directly (not ``loadConfig``) so callers — e.g. the
+ * sidebar — can ask for it without forcing full config validation: a missing catalog
+ * URL just hides the link, it is never a fatal misconfiguration.
+ */
+export function getCatalogUrl(): string | undefined {
+  return window.__APP_CONFIG__?.catalogUrl || undefined;
 }
 
 /**

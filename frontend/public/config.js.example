@@ -7,4 +7,8 @@
  */
 window.__APP_CONFIG__ = {
   apiBaseUrl: "/api/v1",
+
+  // Optional: public URL of the OpenMetadata catalog UI. When set, a "Data Catalog"
+  // link appears in the sidebar and opens OM in a new tab. Leave unset if not deployed.
+  // catalogUrl: "http://localhost:8585",
 };

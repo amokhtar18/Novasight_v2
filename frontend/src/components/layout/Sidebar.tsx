@@ -7,13 +7,20 @@
  */
 
 import { NavLink } from "react-router-dom";
-import { X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { getCatalogUrl } from "@/lib/config";
 import { useUiStore } from "@/store/uiStore";
 import { useIdentity } from "@/lib/identity";
 import { BrandMark } from "@/components/BrandMark";
-import { FOOTER_ITEMS, NAV_ITEMS, type NavItem } from "./nav";
+import {
+  externalNavItems,
+  FOOTER_ITEMS,
+  NAV_ITEMS,
+  type ExternalNavItem,
+  type NavItem,
+} from "./nav";
 
 function NavList({
   collapsed,
@@ -24,6 +31,35 @@ function NavList({
 }) {
   const { isAdmin } = useIdentity();
   const items = NAV_ITEMS.filter((i) => !i.adminOnly || isAdmin);
+  const externals = externalNavItems(getCatalogUrl());
+
+  // Same chrome as an internal link, but an <a> opening the external app in a new tab.
+  const renderExternal = (item: ExternalNavItem) => (
+    <a
+      key={item.href}
+      href={item.href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
+      className={cn(
+        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        collapsed && "justify-center px-0",
+        "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+      )}
+    >
+      <item.icon
+        className="h-[18px] w-[18px] shrink-0 text-muted-foreground group-hover:text-foreground"
+        aria-hidden
+      />
+      {!collapsed && (
+        <span className="flex flex-1 items-center justify-between truncate">
+          {item.label}
+          <ExternalLink className="h-3.5 w-3.5 opacity-60" aria-hidden />
+        </span>
+      )}
+    </a>
+  );
 
   const renderItem = (item: NavItem) => (
     <NavLink
@@ -84,6 +120,18 @@ function NavList({
   return (
     <nav className="flex flex-1 flex-col gap-1" aria-label="Primary">
       {rows}
+      {externals.length > 0 && (
+        <>
+          {collapsed ? (
+            <div className="my-1.5 border-t border-border/50" />
+          ) : (
+            <p className="px-3 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              Catalog
+            </p>
+          )}
+          {externals.map(renderExternal)}
+        </>
+      )}
       <div className="mt-auto flex flex-col gap-1 pt-2">
         {FOOTER_ITEMS.map(renderItem)}
       </div>

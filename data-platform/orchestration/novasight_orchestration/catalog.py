@@ -31,6 +31,12 @@ seam — so the whole unit is testable with a fake ingestor and no live OM serve
 """
 from __future__ import annotations
 
+import json
+import logging
+import os
+import subprocess
+import tempfile
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -41,10 +47,16 @@ from .dbt_resource import dbt_project
 from .serving import SERVING_ASSET_KEY
 from .settings import OrchestrationSettings, get_settings
 
+logger = logging.getLogger(__name__)
+
+# The standalone OM-SDK runner (executed by the isolated /opt/om-venv Python).
+_OM_RUNNER = Path(__file__).with_name("catalog_om_runner.py")
+
 CATALOG_ASSET_KEY = AssetKey(["catalog_metadata"])
 
 # Stage labels (also the order they run in).
 STAGE_CLICKHOUSE = "clickhouse_metadata"
+STAGE_ICEBERG = "iceberg_metadata"
 STAGE_DBT = "dbt"
 
 
@@ -52,6 +64,21 @@ class CatalogIngestor(Protocol):
     """Runs one OpenMetadata ingestion workflow given its config dict."""
 
     def __call__(self, config: dict[str, Any]) -> None: ...
+
+
+@dataclass(frozen=True)
+class CatalogScope:
+    """The tenant data surfaces a catalog run is restricted to (golden rule 2).
+
+    Resolved at the boundary (from the tenant's resource map, or the single-tenant
+    ``DBT_SCHEMA`` on-prem) and threaded into every ingestion stage, so a run only
+    ever sees one tenant's tables — never inferred later or widened.
+    """
+
+    clickhouse_db: str                 # tenant's ClickHouse database == dbt schema
+    iceberg_namespace: str | None = None  # tenant's Iceberg namespace (lake metadata stage)
+    tenant: str | None = None          # tenant slug — set on the registry-driven path,
+    #                                    enables the cross-system lineage stage (catalog_lineage)
 
 
 @dataclass(frozen=True)
@@ -73,7 +100,9 @@ def _server_config(settings: OrchestrationSettings) -> dict[str, Any]:
     }
 
 
-def build_clickhouse_metadata_config(settings: OrchestrationSettings) -> dict[str, Any]:
+def build_clickhouse_metadata_config(
+    settings: OrchestrationSettings, scope: CatalogScope
+) -> dict[str, Any]:
     """Build the OM workflow that ingests the tenant's ClickHouse tables.
 
     Scoped to the tenant's ClickHouse database via ``schemaFilterPattern`` so the
@@ -99,7 +128,53 @@ def build_clickhouse_metadata_config(settings: OrchestrationSettings) -> dict[st
                     "type": "DatabaseMetadata",
                     "includeViews": True,
                     # Restrict ingestion to the tenant's own ClickHouse database.
-                    "schemaFilterPattern": {"includes": [settings.dbt_schema]},
+                    "schemaFilterPattern": {"includes": [scope.clickhouse_db]},
+                }
+            },
+        },
+        "sink": {"type": "metadata-rest", "config": {}},
+        "workflowConfig": {"openMetadataServerConfig": _server_config(settings)},
+    }
+
+
+def build_iceberg_metadata_config(
+    settings: OrchestrationSettings, scope: CatalogScope
+) -> dict[str, Any]:
+    """Build the OM workflow that ingests the tenant's Iceberg (lake) tables.
+
+    Registers the landing tables one hop upstream of ClickHouse, scoped to the tenant's
+    Iceberg namespace via ``schemaFilterPattern`` (golden rule 2). The REST catalog URI
+    / warehouse / token all come from the same ``ICEBERG__*`` env the backend writer
+    uses (golden rule 1). Only meaningful when the scope carries a namespace.
+    """
+    ice = settings.iceberg
+    cat = settings.catalog
+    namespace = scope.iceberg_namespace or ""
+    # OM's RestCatalogConnection accepts only {uri, credential, token, ssl, sigv4,
+    # fileSystem}; the warehouse is ``warehouseLocation`` on the IcebergCatalog (sibling
+    # of ``connection``), not inside the connection.
+    rest_connection: dict[str, Any] = {"uri": ice.catalog_uri}
+    if ice.catalog_token is not None:
+        rest_connection["token"] = ice.catalog_token.get_secret_value()
+    return {
+        "source": {
+            "type": "iceberg",
+            "serviceName": cat.iceberg_service_name,
+            "serviceConnection": {
+                "config": {
+                    "type": "Iceberg",
+                    "catalog": {
+                        "name": cat.iceberg_service_name,
+                        "connection": rest_connection,
+                        "warehouseLocation": ice.warehouse,
+                    },
+                }
+            },
+            "sourceConfig": {
+                "config": {
+                    "type": "DatabaseMetadata",
+                    # Restrict ingestion to the tenant's own Iceberg namespace.
+                    "schemaFilterPattern": {"includes": [namespace]},
                 }
             },
         },
@@ -145,40 +220,98 @@ def build_dbt_ingestion_config(
     }
 
 
-def _run_workflow(config: dict[str, Any]) -> None:
-    """Execute one OpenMetadata ingestion workflow (thin glue, lazily imported).
+def run_om_runner(
+    mode: str,
+    payload: dict[str, Any],
+    *,
+    python: str,
+    runner: Path = _OM_RUNNER,
+    run: Callable[..., Any] = subprocess.run,
+) -> None:
+    """Hand one payload to the isolated OM-SDK runner via the dedicated venv's Python.
 
-    The OpenMetadata ingestion SDK is an optional dependency (the ``catalog`` extra),
-    imported here so the rest of the code location — and its tests — don't require it.
+    The OM ingestion SDK can't share the dagster/dbt venv, so it lives in ``python``'s
+    venv and we invoke ``catalog_om_runner.py`` (``mode`` = ``workflow`` | ``lineage``)
+    with the payload serialised to a temp JSON file. ``run`` is injected so the argv +
+    serialisation are unit-testable without a subprocess. Raises on a non-zero exit.
     """
-    from metadata.workflow.metadata import MetadataWorkflow
+    fd, path = tempfile.mkstemp(suffix=".json", prefix="om_catalog_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+        argv: Sequence[str] = [python, str(runner), mode, path]
+        run(argv, check=True)
+    finally:
+        os.unlink(path)
 
-    workflow = MetadataWorkflow.create(config)
-    workflow.execute()
-    workflow.raise_from_status()
-    workflow.print_status()
-    workflow.stop()
+
+def _run_workflow(config: dict[str, Any]) -> None:
+    """Run one OpenMetadata ingestion workflow in the isolated OM-SDK venv (subprocess)."""
+    run_om_runner("workflow", config, python=get_settings().catalog.runner_python)
 
 
 def run_catalog_ingestion(
     settings: OrchestrationSettings,
     manifest_path: Path | str,
+    scope: CatalogScope,
     *,
     ingest: CatalogIngestor = _run_workflow,
 ) -> CatalogResult:
     """Run both ingestion stages (ClickHouse metadata, then dbt) and report what ran.
 
+    ``scope`` restricts every stage to one tenant's data surfaces (golden rule 2).
     ``ingest`` is injected so tests drive the full unit with a fake and no live OM
-    server. dbt runs after the ClickHouse metadata so its model→model lineage attaches
-    to tables that already exist in the catalog.
+    server. The Iceberg (lake) stage runs only when the scope carries a namespace —
+    the single-tenant static asset has none, while the registry-driven job does — and
+    is **best-effort**: OpenMetadata's Iceberg connector is immature, and the lake
+    tables are also created (and linked) by the cross-system lineage stage, so a scan
+    failure must not abort the run. dbt runs last so its model→model lineage attaches
+    to tables that already exist.
     """
-    ingest(build_clickhouse_metadata_config(settings))
+    stages = [STAGE_CLICKHOUSE]
+    ingest(build_clickhouse_metadata_config(settings, scope))
+    if scope.iceberg_namespace:
+        try:
+            ingest(build_iceberg_metadata_config(settings, scope))
+            stages.append(STAGE_ICEBERG)
+        except Exception as exc:  # noqa: BLE001 — best-effort enrichment; lineage still adds the hop
+            logger.warning("iceberg metadata stage skipped (connector error): %s", exc)
     ingest(build_dbt_ingestion_config(settings, manifest_path))
+    stages.append(STAGE_DBT)
     return CatalogResult(
         service_name=settings.catalog.service_name,
-        scoped_database=settings.dbt_schema,
-        stages=[STAGE_CLICKHOUSE, STAGE_DBT],
+        scoped_database=scope.clickhouse_db,
+        stages=stages,
     )
+
+
+def run_catalog_for_scope(
+    scope: CatalogScope, *, ingest: CatalogIngestor = _run_workflow
+) -> CatalogResult:
+    """Catalog one tenant from an explicit scope — the per-tenant ``catalog_job`` entry.
+
+    Runs the per-table ingestion stages, then — on the registry-driven path (when the
+    scope carries a tenant slug) — stitches the cross-system ``source → Iceberg →
+    ClickHouse → Cube`` lineage from that tenant's own registry rows. Wires the process
+    settings + shared dbt manifest so ``dynamic.py`` stays free of the dbt-project
+    import; ``ingest`` stays injectable for tests. Scope is resolved by the caller from
+    the registry (golden rule 2).
+    """
+    settings = get_settings()
+    result = run_catalog_ingestion(settings, dbt_project.manifest_path, scope, ingest=ingest)
+    if scope.tenant:
+        # Lazy imports: ``catalog_lineage`` depends on this module's ``CatalogScope``,
+        # and the registry read only happens on the live (stack) path.
+        from .catalog_lineage import run_lineage
+        from .registry import load_pipelines_for_tenant, load_semantic_models_for_tenant
+
+        run_lineage(
+            settings,
+            scope,
+            load_pipelines_for_tenant(scope.tenant),
+            load_semantic_models_for_tenant(scope.tenant),
+        )
+    return result
 
 
 @asset(
@@ -194,9 +327,15 @@ def run_catalog_ingestion(
     ),
 )
 def catalog_metadata() -> MaterializeResult:
-    """Materialize the catalog: push table metadata + dbt lineage to OpenMetadata."""
+    """Materialize the catalog: push table metadata + dbt lineage to OpenMetadata.
+
+    The single static asset scopes itself to the boundary tenant (the ``DBT_SCHEMA``
+    resolved on-prem); the per-tenant ``catalog_job`` (``dynamic.py``) catalogs every
+    other tenant from its registry-resolved scope.
+    """
     settings = get_settings()
-    result = run_catalog_ingestion(settings, dbt_project.manifest_path)
+    scope = CatalogScope(clickhouse_db=settings.dbt_schema)
+    result = run_catalog_ingestion(settings, dbt_project.manifest_path, scope)
     return MaterializeResult(
         metadata={
             "catalog_service": MetadataValue.text(result.service_name),

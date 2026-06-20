@@ -31,9 +31,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
-# git is needed by `dbt deps` to fetch package dependencies (dbt_expectations).
+# git: `dbt deps` fetches package deps (dbt_expectations). build-essential: the
+# OpenMetadata ingestion SDK (isolated venv, INSTALL_CATALOG=true) pulls native C
+# extensions (e.g. mmhash3) with no manylinux wheels, so they compile from source.
+# Both live in the builder stage only — the slim runtime image carries neither.
 RUN apt-get update \
- && apt-get install --no-install-recommends -y git \
+ && apt-get install --no-install-recommends -y git build-essential \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir uv
 
@@ -46,16 +49,26 @@ COPY dbt ./dbt
 # Editable install keeps the package files at this path so dbt_resource.py's
 # parents[2]/dbt resolution points at /opt/novasight/data-platform/dbt at runtime.
 #
-# The [catalog] extra (OpenMetadata ingestion SDK, used only by the catalog_metadata
-# asset) is OPT-IN: the asset imports the SDK lazily, so the code location loads
-# without it, and the SDK's dependency tree only resolves against pre-releases, which
-# would otherwise fail every build. Enable it with `--build-arg INSTALL_CATALOG=true`.
+# The OpenMetadata ingestion SDK (used only by the catalog stages) is OPT-IN AND
+# ISOLATED: it cannot share a venv with the dagster/dbt stack — its dependency tree
+# collides irreconcilably with dbt-clickhouse (on dbt-adapters). So it goes in a
+# SEPARATE venv (/opt/om-venv) that the catalog code shells out to (catalog_om_runner.py);
+# the main venv never imports it. Enable with `--build-arg INSTALL_CATALOG=true`.
+# /opt/om-venv is always created (empty when off) so the runtime COPY always succeeds.
 ARG INSTALL_CATALOG=false
 RUN uv venv "$VIRTUAL_ENV" \
  && uv pip install --no-cache -e ./orchestration \
+ && mkdir -p /opt/om-venv \
  && if [ "$INSTALL_CATALOG" = "true" ]; then \
-      uv pip install --no-cache --prerelease=allow -e "./orchestration[catalog]"; \
+      uv venv /opt/om-venv \
+      && VIRTUAL_ENV=/opt/om-venv uv pip install --no-cache --prerelease=allow \
+           "openmetadata-ingestion[clickhouse,iceberg,dbt]>=1.5,<1.7" \
+           "jaraco.classes" "jaraco.functools" "jaraco.context<5"; \
     fi
+# keyring (pulled by the OM connectors) is verified at runtime via the legacy
+# pkg_resources API, which setuptools 70's resolver can't match against the
+# underscore-named ``jaraco_context`` dist-info of jaraco.context>=5. Pinning <5 ships
+# the dot-named dist-info (like jaraco.classes/functools), so the check resolves.
 
 # Build the dbt package deps and the static manifest dagster-dbt loads at import.
 # Placeholders satisfy the required env_var() lookups in profiles.yml during parse
@@ -95,11 +108,12 @@ RUN apt-get update \
  && : > /opt/dagster/home/dagster.yaml
 
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/om-venv /opt/om-venv
 COPY --from=builder /opt/novasight /opt/novasight
 
 # The editable install referenced the builder path; the runtime path is identical
 # (/opt/novasight/data-platform/...), so imports and parents[2]/dbt still resolve.
-RUN chown -R dagster:dagster /opt/dagster /opt/novasight
+RUN chown -R dagster:dagster /opt/dagster /opt/novasight /opt/om-venv
 
 USER dagster
 WORKDIR /opt/novasight/data-platform

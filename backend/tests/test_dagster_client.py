@@ -15,9 +15,11 @@ import pytest
 
 from app.core.config import DagsterSettings
 from app.orchestration import (
+    CATALOG_OP,
     PIPELINE_OP,
     DagsterClient,
     DagsterError,
+    catalog_run_config,
     pipeline_run_config,
     transform_run_config,
 )
@@ -49,6 +51,11 @@ def test_transform_run_config_shape() -> None:
         "transform_job_id": "tid-1",
         "tenant": "acme",
     }
+
+
+def test_catalog_run_config_shape() -> None:
+    cfg = catalog_run_config("acme")
+    assert cfg == {"ops": {CATALOG_OP: {"config": {"tenant": "acme"}}}}
 
 
 # ---------------------------------------------------------------------------

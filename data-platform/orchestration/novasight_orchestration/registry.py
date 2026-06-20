@@ -84,6 +84,20 @@ class TransformRow:
     selection: str       # dbt selector string ("" == whole project)
 
 
+@dataclass(frozen=True)
+class TenantRow:
+    """A tenant and the data surfaces a catalog run scopes itself to.
+
+    ``clickhouse_db`` / ``iceberg_namespace`` come from the tenant's resource map —
+    the same per-tenant isolation the rest of the platform resolves at the boundary
+    (golden rule 2). The catalog asset filters its ingestion to exactly these.
+    """
+
+    tenant: str              # tenant slug — what the run-config contract expects
+    clickhouse_db: str       # tenant's ClickHouse database (== dbt schema)
+    iceberg_namespace: str   # tenant's Iceberg namespace (lake landing zone)
+
+
 def schedule_name(schedule_id: str | uuid.UUID) -> str:
     """Deterministic Dagster schedule name for a registry schedule id.
 
@@ -162,3 +176,106 @@ def load_transform(transform_job_id: str, engine: Engine | None = None) -> Trans
     return TransformRow(
         transform_job_id=str(row[0]), name=str(row[1]), selection=str(row[2]), tenant=str(row[3])
     )
+
+
+# A tenant only enters the catalog once it has a resource map (its ClickHouse DB /
+# Iceberg namespace exist), so every loader here INNER JOINs ``tenant_resource_maps``.
+_TENANT_SCOPE_SELECT = (
+    "SELECT t.slug, m.clickhouse_db, m.iceberg_namespace "
+    "FROM tenants t JOIN tenant_resource_maps m ON m.tenant_id = t.id"
+)
+
+
+def _tenant_row(row: object) -> TenantRow:
+    return TenantRow(
+        tenant=str(row[0]), clickhouse_db=str(row[1]), iceberg_namespace=str(row[2])  # type: ignore[index]
+    )
+
+
+def load_tenants(engine: Engine | None = None) -> list[TenantRow]:
+    """Load every provisioned tenant's catalog scope, for the per-tenant schedules.
+
+    Only tenants with a resource map are returned (the INNER JOIN), so a half-created
+    tenant never gets a catalog run pointed at a database that does not exist yet.
+    """
+    eng = engine or _engine()
+    with eng.connect() as conn:
+        rows = conn.execute(text(_TENANT_SCOPE_SELECT)).all()
+    return [_tenant_row(r) for r in rows]
+
+
+def load_tenant(slug: str, engine: Engine | None = None) -> TenantRow:
+    """Resolve one tenant's catalog scope by slug. Raises if not found / unprovisioned."""
+    eng = engine or _engine()
+    with eng.connect() as conn:
+        row = conn.execute(text(f"{_TENANT_SCOPE_SELECT} WHERE t.slug = :slug"), {"slug": slug}).first()
+    if row is None:
+        raise LookupError(f"tenant {slug} not found or has no resource map")
+    return _tenant_row(row)
+
+
+# ---------------------------------------------------------------------------
+# Lineage inputs — the per-tenant rows the cross-system lineage stage maps into
+# OpenMetadata edges (catalog_lineage.py). Read-only metadata; no source secrets.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CatalogPipelineRow:
+    """A pipeline's source→target shape, for source→raw→serving lineage edges."""
+
+    name: str
+    target_table: str        # landing table name (Iceberg namespace + ClickHouse DB)
+    source_kind: str         # connector kind, e.g. "sql_database" | "filesystem"
+    source_name: str         # the source connection's display name
+    source_object: str       # the extracted object (source table / file)
+    source_schema: str       # the source schema ("" when not applicable, e.g. files)
+
+
+@dataclass(frozen=True)
+class CatalogSemanticRow:
+    """A semantic model's cube→base-table shape, for ClickHouse→Cube lineage edges."""
+
+    name: str                # cube name (the logical semantic entity)
+    base_table: str          # ClickHouse serving table the cube is built over
+
+
+def load_pipelines_for_tenant(slug: str, engine: Engine | None = None) -> list[CatalogPipelineRow]:
+    """Load a tenant's pipelines with the source shape lineage needs (no secrets)."""
+    eng = engine or _engine()
+    query = text(
+        "SELECT p.name, p.target_table, p.config, sc.kind, sc.name "
+        "FROM pipelines p "
+        "JOIN source_connections sc ON sc.id = p.source_connection_id "
+        "JOIN tenants t ON t.id = p.tenant_id "
+        "WHERE t.slug = :slug"
+    )
+    with eng.connect() as conn:
+        rows = conn.execute(query, {"slug": slug}).all()
+    result: list[CatalogPipelineRow] = []
+    for r in rows:
+        cfg = r[2] if isinstance(r[2], dict) else {}
+        result.append(
+            CatalogPipelineRow(
+                name=str(r[0]),
+                target_table=str(r[1]),
+                source_kind=str(r[3]),
+                source_name=str(r[4]),
+                source_object=str(cfg.get("object", "")),
+                source_schema=str(cfg.get("source_schema") or ""),
+            )
+        )
+    return result
+
+
+def load_semantic_models_for_tenant(slug: str, engine: Engine | None = None) -> list[CatalogSemanticRow]:
+    """Load a tenant's semantic models (cube name + base table) for lineage edges."""
+    eng = engine or _engine()
+    query = text(
+        "SELECT s.name, s.base_table "
+        "FROM semantic_models s JOIN tenants t ON t.id = s.tenant_id "
+        "WHERE t.slug = :slug AND s.enabled = true"
+    )
+    with eng.connect() as conn:
+        rows = conn.execute(query, {"slug": slug}).all()
+    return [CatalogSemanticRow(name=str(r[0]), base_table=str(r[1])) for r in rows]

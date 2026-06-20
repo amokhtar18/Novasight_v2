@@ -12,16 +12,22 @@ on the configs produced. We verify three things the task calls for:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from novasight_orchestration.catalog import (
+    _OM_RUNNER,
     STAGE_CLICKHOUSE,
     STAGE_DBT,
+    STAGE_ICEBERG,
+    CatalogScope,
     build_clickhouse_metadata_config,
     build_dbt_ingestion_config,
+    build_iceberg_metadata_config,
     run_catalog_ingestion,
+    run_om_runner,
 )
 
 
@@ -31,19 +37,40 @@ def _secret(value: str) -> Any:
 
 def _settings(
     *,
-    dbt_schema: str = "tenant_local",
     service_name: str = "novasight_clickhouse",
     host_port: str = "http://openmetadata:8585/api",
+    iceberg_token: str | None = None,
 ) -> Any:
     """Minimal OrchestrationSettings stand-in (only the fields the builders read)."""
     return SimpleNamespace(
-        dbt_schema=dbt_schema,
         clickhouse=SimpleNamespace(
             host="clickhouse", port=8123, user="default", password=_secret("chpw")
         ),
-        catalog=SimpleNamespace(
-            host_port=host_port, service_name=service_name, jwt_token=_secret("jwt-tok")
+        iceberg=SimpleNamespace(
+            catalog_uri="http://iceberg-rest:8181",
+            warehouse="s3://lake/warehouse",
+            catalog_token=_secret(iceberg_token) if iceberg_token else None,
         ),
+        catalog=SimpleNamespace(
+            host_port=host_port,
+            service_name=service_name,
+            iceberg_service_name="novasight_iceberg",
+            source_service_name="novasight_sources",
+            semantic_service_name="novasight_semantic",
+            jwt_token=_secret("jwt-tok"),
+        ),
+    )
+
+
+def _scope(
+    clickhouse_db: str = "tenant_local",
+    *,
+    iceberg_namespace: str | None = None,
+    tenant: str | None = None,
+) -> CatalogScope:
+    """A tenant catalog scope (what the builders filter ingestion to)."""
+    return CatalogScope(
+        clickhouse_db=clickhouse_db, iceberg_namespace=iceberg_namespace, tenant=tenant
     )
 
 
@@ -60,7 +87,7 @@ def _manifest(tmp_path: Path, *, siblings: bool = False) -> Path:
 
 
 def test_clickhouse_config_is_env_driven() -> None:
-    cfg = build_clickhouse_metadata_config(_settings())
+    cfg = build_clickhouse_metadata_config(_settings(), _scope())
 
     assert cfg["source"]["type"] == "clickhouse"
     assert cfg["source"]["serviceName"] == "novasight_clickhouse"
@@ -76,8 +103,8 @@ def test_clickhouse_config_is_env_driven() -> None:
 
 
 def test_clickhouse_config_scopes_to_own_tenant_database() -> None:
-    a = build_clickhouse_metadata_config(_settings(dbt_schema="tenant_a"))
-    b = build_clickhouse_metadata_config(_settings(dbt_schema="tenant_b"))
+    a = build_clickhouse_metadata_config(_settings(), _scope("tenant_a"))
+    b = build_clickhouse_metadata_config(_settings(), _scope("tenant_b"))
 
     assert a["source"]["sourceConfig"]["config"]["schemaFilterPattern"]["includes"] == [
         "tenant_a"
@@ -88,6 +115,33 @@ def test_clickhouse_config_scopes_to_own_tenant_database() -> None:
     # No cross-tenant bleed in either rendered config.
     assert "tenant_b" not in json.dumps(a)
     assert "tenant_a" not in json.dumps(b)
+
+
+# --- Iceberg metadata config: lake datasets, env-driven, tenant-scoped ------------
+
+
+def test_iceberg_config_is_env_driven_and_scoped() -> None:
+    cfg = build_iceberg_metadata_config(_settings(), _scope(iceberg_namespace="ns_acme"))
+
+    assert cfg["source"]["type"] == "iceberg"
+    assert cfg["source"]["serviceName"] == "novasight_iceberg"
+    catalog = cfg["source"]["serviceConnection"]["config"]["catalog"]
+    # The REST connection carries only the uri (+ optional token); the warehouse is the
+    # catalog's warehouseLocation (OM's IcebergCatalog schema), not inside the connection.
+    assert catalog["connection"] == {"uri": "http://iceberg-rest:8181"}
+    assert catalog["warehouseLocation"] == "s3://lake/warehouse"
+    # Restricted to the tenant's own Iceberg namespace.
+    assert cfg["source"]["sourceConfig"]["config"]["schemaFilterPattern"]["includes"] == [
+        "ns_acme"
+    ]
+
+
+def test_iceberg_config_includes_token_when_set() -> None:
+    cfg = build_iceberg_metadata_config(
+        _settings(iceberg_token="rest-tok"), _scope(iceberg_namespace="ns_acme")
+    )
+    conn = cfg["source"]["serviceConnection"]["config"]["catalog"]["connection"]
+    assert conn["token"] == "rest-tok"
 
 
 # --- dbt config: end-to-end lineage from the manifest -----------------------------
@@ -118,27 +172,100 @@ def test_dbt_config_includes_sibling_catalog_and_run_results(tmp_path: Path) -> 
     assert src["dbtRunResultsFilePath"] == str(tmp_path / "run_results.json")
 
 
+# --- run_om_runner: shells out to the isolated OM-SDK venv ------------------------
+
+
+def test_run_om_runner_invokes_isolated_python_with_payload() -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_run(argv: list[str], check: bool) -> None:
+        seen["argv"] = list(argv)
+        seen["check"] = check
+        with open(argv[-1], encoding="utf-8") as fh:
+            seen["payload"] = json.load(fh)
+
+    run_om_runner(
+        "workflow", {"source": {"type": "clickhouse"}},
+        python="/opt/om-venv/bin/python", run=fake_run,
+    )
+
+    # Invoked the isolated venv's Python on the standalone runner, in workflow mode.
+    assert seen["argv"][:3] == ["/opt/om-venv/bin/python", str(_OM_RUNNER), "workflow"]
+    assert seen["check"] is True
+    # The payload was handed over as a JSON temp file, then cleaned up afterwards.
+    assert seen["payload"] == {"source": {"type": "clickhouse"}}
+    assert not os.path.exists(seen["argv"][3])
+
+
+def test_run_om_runner_cleans_up_temp_file_on_failure() -> None:
+    seen: dict[str, Any] = {}
+
+    def boom(argv: list[str], check: bool) -> None:
+        seen["path"] = argv[-1]
+        raise RuntimeError("runner failed")
+
+    try:
+        run_om_runner("lineage", {"edges": []}, python="py", run=boom)
+    except RuntimeError:
+        pass
+    assert not os.path.exists(seen["path"])  # temp file removed even on error
+
+
 # --- run_catalog_ingestion: both stages, injected workflow ------------------------
 
 
-def test_run_catalog_ingestion_runs_both_stages(tmp_path: Path) -> None:
+def test_run_catalog_ingestion_runs_clickhouse_then_dbt_without_namespace(
+    tmp_path: Path,
+) -> None:
     manifest = _manifest(tmp_path)
     captured: list[dict[str, Any]] = []
 
-    result = run_catalog_ingestion(_settings(), manifest, ingest=captured.append)
+    result = run_catalog_ingestion(_settings(), manifest, _scope(), ingest=captured.append)
 
-    # Datasets first (ClickHouse tables), then lineage (dbt models).
+    # No Iceberg namespace on the scope → lake stage skipped (static single-tenant asset).
     assert [c["source"]["type"] for c in captured] == ["clickhouse", "dbt"]
     assert result.stages == [STAGE_CLICKHOUSE, STAGE_DBT]
     assert result.service_name == "novasight_clickhouse"
     assert result.scoped_database == "tenant_local"
 
 
+def test_run_catalog_ingestion_includes_iceberg_when_namespace_set(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path)
+    captured: list[dict[str, Any]] = []
+
+    result = run_catalog_ingestion(
+        _settings(), manifest, _scope(iceberg_namespace="ns_acme"), ingest=captured.append
+    )
+
+    # Lake hop sits between ClickHouse metadata and dbt (source → Iceberg → ClickHouse).
+    assert [c["source"]["type"] for c in captured] == ["clickhouse", "iceberg", "dbt"]
+    assert result.stages == [STAGE_CLICKHOUSE, STAGE_ICEBERG, STAGE_DBT]
+
+
+def test_run_catalog_ingestion_iceberg_stage_is_best_effort(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path)
+    seen: list[str] = []
+
+    def ingest(cfg: dict[str, Any]) -> None:
+        kind = cfg["source"]["type"]
+        if kind == "iceberg":
+            raise RuntimeError("OM iceberg connector blew up")  # immature connector
+        seen.append(kind)
+
+    # A failing Iceberg scan must NOT abort the run: ClickHouse + dbt still ingest, and
+    # the lake hop is left to the lineage stage. STAGE_ICEBERG is omitted from the result.
+    result = run_catalog_ingestion(
+        _settings(), manifest, _scope(iceberg_namespace="ns_acme"), ingest=ingest
+    )
+    assert seen == ["clickhouse", "dbt"]
+    assert result.stages == [STAGE_CLICKHOUSE, STAGE_DBT]
+
+
 def test_run_catalog_ingestion_is_tenant_scoped(tmp_path: Path) -> None:
     manifest = _manifest(tmp_path)
     captured: list[dict[str, Any]] = []
 
-    run_catalog_ingestion(_settings(dbt_schema="acme"), manifest, ingest=captured.append)
+    run_catalog_ingestion(_settings(), manifest, _scope("acme"), ingest=captured.append)
 
     metadata_cfg = captured[0]
     assert metadata_cfg["source"]["sourceConfig"]["config"]["schemaFilterPattern"][

@@ -512,6 +512,10 @@ services:
     build:
       context: ../../data-platform
       dockerfile: orchestration/Dockerfile
+      # Opt-in OpenMetadata catalog SDK (isolated venv); enable with INSTALL_CATALOG=true
+      # in .env to build a catalog-capable image. Default false keeps builds fast/clean.
+      args:
+        INSTALL_CATALOG: ${INSTALL_CATALOG:-false}
     env_file:
       - ../../.env
     environment:
@@ -521,6 +525,9 @@ services:
       POSTGRES__HOST: postgres
       CLICKHOUSE__HOST: clickhouse
       OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
+      # Reach the Iceberg REST catalog by service name (the catalog metadata stage),
+      # overriding the host-side ICEBERG__CATALOG_URI from .env — same as the api service.
+      ICEBERG__CATALOG_URI: http://iceberg-rest:8181
     ports:
       - "${DAGSTER__PORT:-3000}:3000"
     depends_on:
@@ -538,6 +545,10 @@ services:
     build:
       context: ../../data-platform
       dockerfile: orchestration/Dockerfile
+      # Opt-in OpenMetadata catalog SDK (isolated venv); enable with INSTALL_CATALOG=true
+      # in .env to build a catalog-capable image. Default false keeps builds fast/clean.
+      args:
+        INSTALL_CATALOG: ${INSTALL_CATALOG:-false}
     env_file:
       - ../../.env
     environment:
@@ -547,6 +558,9 @@ services:
       POSTGRES__HOST: postgres
       CLICKHOUSE__HOST: clickhouse
       OPENMETADATA__HOST_PORT: http://openmetadata-server:8585/api
+      # Reach the Iceberg REST catalog by service name (the catalog metadata stage),
+      # overriding the host-side ICEBERG__CATALOG_URI from .env — same as the api service.
+      ICEBERG__CATALOG_URI: http://iceberg-rest:8181
     # The daemon needs the same code-location target as the webserver's default CMD
     # (-m novasight_orchestration.definitions); without it `dagster-daemon run` has no
     # workspace and exits with "No arguments given and no [tool.dagster] block".
