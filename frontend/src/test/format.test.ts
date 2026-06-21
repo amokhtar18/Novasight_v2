@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { formatBytes, formatCell, humanize } from "@/lib/format";
+import { formatBytes, formatCell, formatDuration, humanize } from "@/lib/format";
 
 describe("formatBytes", () => {
   it("formats common sizes", () => {
@@ -28,6 +28,21 @@ describe("formatCell", () => {
     expect(formatCell(1000)).toBe((1000).toLocaleString());
     expect(formatCell(true)).toBe("true");
     expect(formatCell("hi")).toBe("hi");
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats sub-second, seconds, minutes, and hours", () => {
+    const base = "2026-01-01T00:00:00Z";
+    expect(formatDuration(base, "2026-01-01T00:00:00.320Z")).toBe("320 ms");
+    expect(formatDuration(base, "2026-01-01T00:00:05Z")).toBe("5s");
+    expect(formatDuration(base, "2026-01-01T00:01:05Z")).toBe("1m 5s");
+    expect(formatDuration(base, "2026-01-01T02:03:00Z")).toBe("2h 3m");
+  });
+  it("is null-safe and rejects end-before-start", () => {
+    expect(formatDuration(null, "2026-01-01T00:00:05Z")).toBe("—");
+    expect(formatDuration("2026-01-01T00:00:05Z", null)).toBe("—");
+    expect(formatDuration("2026-01-01T00:00:05Z", "2026-01-01T00:00:00Z")).toBe("—");
   });
 });
 

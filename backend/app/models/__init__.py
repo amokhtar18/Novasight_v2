@@ -16,6 +16,7 @@ from app.models.kpi_threshold import KpiThreshold
 from app.models.pipeline import Pipeline, PipelineRun
 from app.models.report_definition import ReportDefinition
 from app.models.schedule import Schedule
+from app.models.schedule_pipeline import SchedulePipeline
 from app.models.semantic_model import SemanticModel
 from app.models.source_connection import SourceConnection
 from app.models.tenant import Tenant
@@ -36,6 +37,7 @@ __all__ = [
     "PipelineRun",
     "ReportDefinition",
     "Schedule",
+    "SchedulePipeline",
     "SemanticModel",
     "SourceConnection",
     "Tenant",

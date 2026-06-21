@@ -3,14 +3,18 @@
  * a small about/brand panel. Read-only platform info; no secrets are shown.
  */
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sparkles, Sun } from "lucide-react";
 
-import { useMe } from "@/api/hooks";
+import { useAiHealth, useMe } from "@/api/hooks";
+import { useIdentity } from "@/lib/identity";
 import { useTheme, type Theme } from "@/lib/theme";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { BrandMark } from "@/components/BrandMark";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -89,6 +93,9 @@ export function Settings() {
         </CardContent>
       </Card>
 
+      {/* AI provider connectivity */}
+      <AiProviderCard />
+
       {/* About */}
       <Card className="bg-card/70">
         <CardContent className="flex items-center gap-4 pt-6">
@@ -104,5 +111,72 @@ export function Settings() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * AiProviderCard — verify the configured AI provider + key with a live probe (#12).
+ *
+ * Superuser-only (the probe spends a few tokens); other users see a muted note. The
+ * probe never reveals the key — only a connected/failed status, the answering model,
+ * and round-trip latency.
+ */
+function AiProviderCard() {
+  const { isSuperuser } = useIdentity();
+  const probe = useAiHealth();
+  const result = probe.data;
+
+  return (
+    <Card className="mb-6 bg-card/70">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+          AI provider
+        </CardTitle>
+        <CardDescription>
+          Check that the configured model and API key are working. The key is never shown.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isSuperuser ? (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button size="sm" onClick={() => probe.mutate()} disabled={probe.isPending}>
+                {probe.isPending ? (
+                  <Spinner className="text-primary-foreground" />
+                ) : (
+                  <Sparkles className="h-4 w-4" aria-hidden />
+                )}
+                Test connection
+              </Button>
+              {result?.ok && <Badge variant="success">Connected</Badge>}
+              {result && !result.ok && <Badge variant="danger">Failed</Badge>}
+              {probe.isError && <Badge variant="danger">Error</Badge>}
+            </div>
+            {result?.ok && (
+              <p className="text-sm text-muted-foreground">
+                Responded as{" "}
+                <span className="font-medium text-foreground">{result.model}</span>
+                {result.latency_ms != null ? ` in ${result.latency_ms} ms.` : "."}
+              </p>
+            )}
+            {result && !result.ok && result.detail && (
+              <p className="text-sm text-destructive">{result.detail}</p>
+            )}
+            {probe.isError && (
+              <p className="text-sm text-destructive">
+                {probe.error instanceof Error
+                  ? probe.error.message
+                  : "Could not reach the server to run the test."}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Only workspace admins can run the AI connection test.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

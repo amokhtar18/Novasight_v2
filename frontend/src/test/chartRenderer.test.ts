@@ -199,6 +199,68 @@ describe("buildEChartsOption — number", () => {
 // Multiple series
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// v2 chart types + formatting (#8)
+// ---------------------------------------------------------------------------
+
+describe("buildEChartsOption — v2 types", () => {
+  it("hbar uses a value xAxis and a category yAxis", () => {
+    const option = buildEChartsOption({ ...barSpec, type: "hbar" }, sampleQueryResponse);
+    expect((option.xAxis as { type: string }).type).toBe("value");
+    const yAxis = option.yAxis as { type: string; data: string[] };
+    expect(yAxis.type).toBe("category");
+    expect(yAxis.data).toEqual(["alpha", "beta", "gamma"]);
+  });
+
+  it("gauge sums the series into one dial and omits the axes", () => {
+    const gaugeSpec: ChartSpec = {
+      type: "gauge",
+      query: countQuery,
+      encoding: { series: [{ field: "count" }] },
+    };
+    const option = buildEChartsOption(gaugeSpec, sampleQueryResponse);
+    const series = option.series as Array<{ type: string; data: Array<{ value: number }> }>;
+    expect(series[0].type).toBe("gauge");
+    expect(series[0].data[0].value).toBe(42); // 10 + 25 + 7
+    expect(option.xAxis).toBeUndefined();
+  });
+
+  it("combo renders the first series as bar and the rest as line", () => {
+    const multiData: QueryResponse = {
+      columns: ["month", "sales", "returns"],
+      rows: [
+        ["Jan", 100, 5],
+        ["Feb", 120, 8],
+      ],
+      row_count: 2,
+    };
+    const comboSpec: ChartSpec = {
+      type: "combo",
+      query: countQuery,
+      encoding: { x: "month", series: [{ field: "sales" }, { field: "returns" }] },
+    };
+    const series = buildEChartsOption(comboSpec, multiData).series as Array<{ type: string }>;
+    expect(series[0].type).toBe("bar");
+    expect(series[1].type).toBe("line");
+  });
+
+  it("donut renders a pie series with a ring radius", () => {
+    const series = buildEChartsOption({ ...pieSpec, type: "donut" }, sampleQueryResponse)
+      .series as Array<{ type: string; radius: string[] }>;
+    expect(series[0].type).toBe("pie");
+    expect(series[0].radius[0]).toBe("50%");
+  });
+
+  it("sorts categories by value descending", () => {
+    const option = buildEChartsOption(
+      { ...barSpec, options: { sort: "value_desc" } },
+      sampleQueryResponse
+    );
+    // 25 (beta) > 10 (alpha) > 7 (gamma)
+    expect((option.xAxis as { data: string[] }).data).toEqual(["beta", "alpha", "gamma"]);
+  });
+});
+
 describe("buildEChartsOption — multiple series", () => {
   it("maps each series spec to an ECharts series entry", () => {
     const multiData: QueryResponse = {

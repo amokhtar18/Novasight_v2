@@ -45,12 +45,29 @@ FieldName = Annotated[
     StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$", min_length=1, max_length=128),
 ]
 
-# The chart kinds the renderer supports. ``table`` and ``number`` are included in
-# the contract (both are valid ways to present a query result) even though they are
-# not x/series charts; the renderer handles them specially. ``number`` is a single
-# "big number" KPI (the total of its series across the result). ``scatter`` plots
-# each series against a numeric ``x`` (a value axis, not categories).
-ChartType = Literal["bar", "line", "area", "pie", "table", "number", "scatter"]
+# The chart kinds the renderer supports (v2, #8). The original set plus a curated,
+# Superset-inspired expansion. ``table``/``number``/``gauge`` present a result without a
+# category axis; the rest map onto the shared ``x`` + ``series`` encoding:
+#   bar/line/area/scatter — as before;          hbar — horizontal bar;
+#   pie/donut — share-of-total;                  combo — first series bar, rest line;
+#   funnel/treemap — labelled magnitudes;        radar — series as polygons over x;
+#   gauge — a single KPI dial.
+ChartType = Literal[
+    "bar",
+    "hbar",
+    "line",
+    "area",
+    "combo",
+    "pie",
+    "donut",
+    "scatter",
+    "funnel",
+    "treemap",
+    "radar",
+    "gauge",
+    "table",
+    "number",
+]
 
 
 class ChartQuery(BaseModel):
@@ -105,14 +122,44 @@ class ChartEncoding(BaseModel):
     series: list[SeriesEncoding] = Field(min_length=1)
 
 
+# A hex colour for a custom palette entry (``#rgb`` … ``#rrggbbaa``).
+HexColor = Annotated[str, StringConstraints(pattern=r"^#[0-9A-Fa-f]{3,8}$")]
+
+
+class NumberFormat(BaseModel):
+    """How numeric values are formatted in labels, tooltips, and value axes (#8)."""
+
+    style: Literal["plain", "currency", "percent"] = "plain"
+    # Fixed decimal places; None lets the renderer choose a sensible default.
+    decimals: int | None = Field(default=None, ge=0, le=10)
+    # Compact magnitudes (1.2K, 3.4M) for big numbers.
+    compact: bool = False
+    # Currency symbol/code for the ``currency`` style (e.g. "$", "€", "USD").
+    currency: str | None = Field(default=None, max_length=8)
+
+
 class ChartOptions(BaseModel):
-    """Display-only options. None of these affect the query or the data."""
+    """Display-only options (#8). None of these affect the query or the data."""
 
     title: str | None = None
     stacked: bool = False
+    # 100%-stacked (proportions) — only meaningful with ``stacked``.
+    percent: bool = False
     show_legend: bool = True
+    legend_position: Literal["top", "bottom", "left", "right"] = "top"
     x_axis_label: str | None = None
     y_axis_label: str | None = None
+    # Value-axis bounds + scale (None = auto).
+    y_min: float | None = None
+    y_max: float | None = None
+    log_scale: bool = False
+    # Render the value on each data point.
+    data_labels: bool = False
+    # Client-side sort of the plotted categories.
+    sort: Literal["none", "value_desc", "value_asc", "label_asc", "label_desc"] = "none"
+    number_format: NumberFormat = Field(default_factory=NumberFormat)
+    # Optional palette overriding the theme's default colours.
+    palette: list[HexColor] = Field(default_factory=list, max_length=24)
 
 
 class ChartSpec(BaseModel):
@@ -130,9 +177,9 @@ class ChartSpec(BaseModel):
 
     @model_validator(mode="after")
     def _require_x_for_axis_charts(self) -> ChartSpec:
-        # Axis charts are meaningless without a category axis; a pie needs a label
-        # column too. ``table`` and ``number`` present a result without an axis, so
-        # they may omit ``x``.
-        if self.type not in ("table", "number") and self.encoding.x is None:
+        # Axis/label charts need a category axis; a pie/funnel/treemap needs a label
+        # column too. ``table``, ``number`` and ``gauge`` present a single result or a
+        # raw table without an axis, so they may omit ``x``.
+        if self.type not in ("table", "number", "gauge") and self.encoding.x is None:
             raise ValueError(f"chart type '{self.type}' requires encoding.x")
         return self

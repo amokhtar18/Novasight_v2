@@ -7,12 +7,10 @@ import {
   Activity,
   BarChart3,
   Boxes,
-  Database,
   Layers,
   LayoutDashboard,
   LayoutGrid,
-  Lightbulb,
-  MessageSquare,
+  LineChart,
   Network,
   Settings,
   Shield,
@@ -43,16 +41,14 @@ export interface NavItem {
 /** Primary navigation, in display order (grouped by ``group``). */
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutGrid, end: true },
-  { to: "/data", label: "Data sources", icon: Database, group: "Ingest" },
   { to: "/pipelines", label: "Pipelines", icon: Workflow, group: "Ingest" },
   { to: "/operations", label: "Operations", icon: Activity, group: "Ingest" },
   { to: "/transforms", label: "Transforms", icon: Boxes, group: "Model" },
   { to: "/models", label: "Semantic models", icon: Layers, group: "Model" },
-  { to: "/explore", label: "Ask AI", icon: Sparkles, group: "Analyze" },
-  { to: "/chat", label: "Chat", icon: MessageSquare, group: "Analyze" },
+  { to: "/assistant", label: "Assistant", icon: Sparkles, group: "Analyze" },
   { to: "/build", label: "Chart builder", icon: BarChart3, group: "Analyze" },
+  { to: "/charts", label: "Charts", icon: LineChart, group: "Analyze" },
   { to: "/dashboards", label: "Dashboards", icon: LayoutDashboard, group: "Analyze" },
-  { to: "/insights", label: "Insights", icon: Lightbulb, group: "Analyze" },
   { to: "/admin", label: "Admin", icon: Shield, group: "Admin", adminOnly: true },
 ];
 
@@ -86,11 +82,10 @@ export function titleForPath(pathname: string): string {
   if (pathname.startsWith("/operations")) return "Operations";
   if (pathname.startsWith("/transforms")) return "Transforms";
   if (pathname.startsWith("/models")) return "Semantic models";
-  if (pathname.startsWith("/explore")) return "Ask AI";
-  if (pathname.startsWith("/chat")) return "Chat";
+  if (pathname.startsWith("/assistant")) return "Assistant";
+  if (pathname.startsWith("/charts")) return "Charts";
   if (pathname.startsWith("/build")) return "Chart builder";
   if (pathname.startsWith("/dashboards")) return "Dashboards";
-  if (pathname.startsWith("/insights")) return "Insights";
   if (pathname.startsWith("/admin")) return "Admin";
   if (pathname.startsWith("/settings")) return "Settings";
   return "NovaSight";

@@ -198,6 +198,39 @@ async def test_create_pin_and_get(client_with_db: TestClient, make_tenant: Any) 
 
 
 @pytest.mark.asyncio
+async def test_decoration_tiles(client_with_db: TestClient, make_tenant: Any) -> None:
+    # Non-chart tiles (#10): a text tile carries content + a null chart; a chart tile
+    # without chart_id is rejected.
+    await make_tenant("local")
+    dash = client_with_db.post(
+        "/api/v1/dashboards", headers=_auth(), json={"name": "Mixed"}
+    )
+    did = dash.json()["id"]
+
+    text_tile = client_with_db.post(
+        f"/api/v1/dashboards/{did}/tiles",
+        headers=_auth(),
+        json={"kind": "text", "content": {"text": "Quarterly review"}, "title": "Note"},
+    )
+    assert text_tile.status_code == 201, text_tile.text
+    body = text_tile.json()
+    assert body["kind"] == "text"
+    assert body["chart"] is None
+    assert body["content"] == {"text": "Quarterly review"}
+
+    # A chart tile still requires a chart_id (validator → 422).
+    bad = client_with_db.post(
+        f"/api/v1/dashboards/{did}/tiles",
+        headers=_auth(),
+        json={"kind": "chart"},
+    )
+    assert bad.status_code == 422
+
+    got = client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()
+    assert got["tiles"][0]["kind"] == "text"
+
+
+@pytest.mark.asyncio
 async def test_add_tile_rejects_cross_tenant_chart(
     client_with_db: TestClient, make_tenant: Any
 ) -> None:

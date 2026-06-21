@@ -13,10 +13,20 @@ import { useEffect, useRef } from "react";
 
 // Tree-shaken ECharts imports — only load what we use.
 import * as echarts from "echarts/core";
-import { BarChart, LineChart, PieChart, ScatterChart } from "echarts/charts";
+import {
+  BarChart,
+  FunnelChart,
+  GaugeChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  ScatterChart,
+  TreemapChart,
+} from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
+  RadarComponent,
   TooltipComponent,
   TitleComponent,
 } from "echarts/components";
@@ -27,20 +37,63 @@ import { readChartTheme, type ChartTheme } from "@/lib/chartTheme";
 import { useTheme } from "@/lib/theme";
 import { TableRenderer } from "@/components/chart/TableRenderer";
 import { NumberRenderer } from "@/components/chart/NumberRenderer";
-import type { ChartSpec, QueryResponse } from "@/types/api";
+import { formatChartValue } from "@/lib/chartFormat";
+import type { ChartOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
 
-// Register only what we use.
+// Register only what we use (v2 adds funnel/gauge/radar/treemap, #8).
 echarts.use([
   BarChart,
   LineChart,
   PieChart,
   ScatterChart,
+  FunnelChart,
+  GaugeChart,
+  RadarChart,
+  TreemapChart,
   GridComponent,
   LegendComponent,
+  RadarComponent,
   TooltipComponent,
   TitleComponent,
   CanvasRenderer,
 ]);
+
+type Row = QueryResponse["rows"][number];
+
+/** Reorder plotted rows per the spec's sort option (by first value or by x label). */
+function sortRows(rows: Row[], xIdx: number, valIdx: number, sort: ChartSort): Row[] {
+  if (sort === "none") return rows;
+  const arr = [...rows];
+  arr.sort((a, b) => {
+    if (sort === "value_desc" || sort === "value_asc") {
+      const av = Number(a[valIdx] ?? 0) || 0;
+      const bv = Number(b[valIdx] ?? 0) || 0;
+      return sort === "value_desc" ? bv - av : av - bv;
+    }
+    const al = a[xIdx] == null ? "" : String(a[xIdx]);
+    const bl = b[xIdx] == null ? "" : String(b[xIdx]);
+    return sort === "label_desc" ? bl.localeCompare(al) : al.localeCompare(bl);
+  });
+  return arr;
+}
+
+/** A themed value axis honoring number format, bounds, and log scale. */
+function valueAxis(
+  theme: ChartTheme,
+  options: ChartOptions,
+  fmt: (v: number) => string,
+  label?: string | null
+): Record<string, unknown> {
+  return {
+    type: options.log_scale ? "log" : "value",
+    name: label ?? undefined,
+    min: options.log_scale ? undefined : (options.y_min ?? undefined),
+    max: options.y_max ?? undefined,
+    axisLabel: { color: theme.text, formatter: (v: number) => fmt(v) },
+    splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
+    nameTextStyle: { color: theme.text },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Spec → ECharts option mapping
@@ -59,6 +112,14 @@ export function buildEChartsOption(
   const { x, series } = spec.encoding;
   const options = spec.options ?? {};
   const showLegend = options.show_legend ?? true;
+  const palette =
+    options.palette && options.palette.length > 0 ? options.palette : theme.palette;
+  const fmt = (v: number): string => formatChartValue(v, options.number_format);
+  const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
+
+  // ECharts' option types are strict-yet-loose; build each option as a plain object
+  // and cast at the boundary (the renderer is the only place that touches them).
+  const toOption = (o: Record<string, unknown>): EChartsOption => o as EChartsOption;
 
   // Guard: ensure the referenced columns exist in the response.
   const colIndex = (name: string): number => {
@@ -70,158 +131,265 @@ export function buildEChartsOption(
     }
     return idx;
   };
-
-  // Legend label for a series: explicit name, else the field name.
   const seriesLabel = (s: ChartSpec["encoding"]["series"][number]): string =>
     s.name ?? s.field;
 
   if (spec.type === "table") {
-    // Tables are not an ECharts option; the renderer presents them separately.
     throw new Error("table charts are rendered without ECharts (see Task 3.2)");
   }
-
   if (spec.type === "number") {
-    // Number (KPI) tiles are not an ECharts option; presented separately.
     throw new Error("number charts are rendered without ECharts (see NumberRenderer)");
   }
 
-  if (x === null || x === undefined) {
-    throw new Error(`chart type "${spec.type}" requires encoding.x`);
-  }
-  const xIdx = colIndex(x);
+  const titleBlock = options.title
+    ? { text: options.title, textStyle: { color: theme.text } }
+    : undefined;
+  const legendBlock = (): Record<string, unknown> | undefined => {
+    if (!showLegend) return undefined;
+    const pos = options.legend_position ?? "top";
+    const base = { data: series.map(seriesLabel), textStyle: { color: theme.text } };
+    if (pos === "bottom") return { ...base, bottom: 0 };
+    if (pos === "left") return { ...base, orient: "vertical", left: "left" };
+    if (pos === "right") return { ...base, orient: "vertical", right: "right" };
+    return { ...base, top: 0 };
+  };
+  const itemTooltip = {
+    trigger: "item",
+    backgroundColor: theme.tooltipBg,
+    borderColor: theme.tooltipBorder,
+    textStyle: { color: theme.text },
+  };
+  const axisTooltip = {
+    trigger: "axis",
+    backgroundColor: theme.tooltipBg,
+    borderColor: theme.tooltipBorder,
+    textStyle: { color: theme.text },
+    valueFormatter: (v: number | string) => fmt(Number(v)),
+  };
+  const dataLabel = options.data_labels ? { show: true, color: theme.text } : undefined;
 
+  // ---- Gauge: a single KPI dial (no category axis). --------------------
+  if (spec.type === "gauge") {
+    const valIdx = colIndex(series[0].field);
+    const total = rows.reduce((acc, row) => acc + num(row[valIdx]), 0);
+    const maxVal = options.y_max ?? Math.max(total * 1.25, 1);
+    return toOption({
+      color: palette,
+      textStyle: { color: theme.text },
+      title: titleBlock,
+      series: [
+        {
+          type: "gauge",
+          min: options.y_min ?? 0,
+          max: maxVal,
+          progress: { show: true },
+          axisLine: { lineStyle: { color: [[1, theme.axisLine]] } },
+          axisLabel: { color: theme.text, formatter: (v: number) => fmt(v) },
+          detail: { formatter: (v: number) => fmt(v), color: theme.text },
+          title: { color: theme.text },
+          data: [{ value: total, name: seriesLabel(series[0]) }],
+        },
+      ],
+    });
+  }
+
+  // ---- Scatter: numeric x vs each series' y (value axes). --------------
   if (spec.type === "scatter") {
-    // Scatter plots numeric x vs each series' y as [x, y] points (value axes).
+    if (x === null || x === undefined) throw new Error('chart type "scatter" requires encoding.x');
+    const xIdx = colIndex(x);
     const seriesList = series.map((s) => {
       const yIdx = colIndex(s.field);
       return {
         name: seriesLabel(s),
         type: "scatter" as const,
         itemStyle: s.color ? { color: s.color } : undefined,
-        data: rows.map((row) => [
-          row[xIdx] === null ? 0 : (row[xIdx] as number),
-          row[yIdx] === null ? 0 : (row[yIdx] as number),
-        ]),
+        data: rows.map((row) => [num(row[xIdx]), num(row[yIdx])]),
       };
     });
-
-    return {
-      color: theme.palette,
+    return toOption({
+      color: palette,
       textStyle: { color: theme.text },
-      title: options.title
-        ? { text: options.title, textStyle: { color: theme.text } }
-        : undefined,
-      tooltip: {
-        trigger: "item",
-        backgroundColor: theme.tooltipBg,
-        borderColor: theme.tooltipBorder,
-        textStyle: { color: theme.text },
-      },
+      title: titleBlock,
+      tooltip: itemTooltip,
       grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
-      legend: showLegend
-        ? { data: series.map(seriesLabel), textStyle: { color: theme.text }, top: 0 }
-        : undefined,
-      xAxis: {
-        type: "value",
-        name: options.x_axis_label ?? undefined,
-        axisLabel: { color: theme.text },
-        axisLine: { lineStyle: { color: theme.axisLine } },
-        splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
-        nameTextStyle: { color: theme.text },
-      },
-      yAxis: {
-        type: "value",
-        name: options.y_axis_label ?? undefined,
-        axisLabel: { color: theme.text },
-        splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
-        nameTextStyle: { color: theme.text },
-      },
+      legend: legendBlock(),
+      xAxis: valueAxis(theme, options, fmt, options.x_axis_label),
+      yAxis: valueAxis(theme, options, fmt, options.y_axis_label),
       series: seriesList,
-    };
+    });
   }
 
-  const categories = rows.map((row) => {
-    const val = row[xIdx];
-    return val === null || val === undefined ? "(null)" : String(val);
-  });
+  // Every remaining type needs a category column.
+  if (x === null || x === undefined) {
+    throw new Error(`chart type "${spec.type}" requires encoding.x`);
+  }
+  const xIdx = colIndex(x);
+  const srows = sortRows(
+    rows,
+    xIdx,
+    series.length ? colIndex(series[0].field) : xIdx,
+    options.sort ?? "none"
+  );
+  const categories = srows.map((row) =>
+    row[xIdx] === null || row[xIdx] === undefined ? "(null)" : String(row[xIdx])
+  );
 
-  if (spec.type === "pie") {
+  // ---- Pie / Donut. ---------------------------------------------------
+  if (spec.type === "pie" || spec.type === "donut") {
     const seriesSpec = series[0];
     if (!seriesSpec) throw new Error("Pie chart requires at least one series");
     const valIdx = colIndex(seriesSpec.field);
-
-    return {
-      color: theme.palette,
+    return toOption({
+      color: palette,
       textStyle: { color: theme.text },
-      title: options.title
-        ? { text: options.title, textStyle: { color: theme.text } }
-        : undefined,
-      tooltip: {
-        trigger: "item",
-        backgroundColor: theme.tooltipBg,
-        borderColor: theme.tooltipBorder,
-        textStyle: { color: theme.text },
-      },
-      legend: showLegend
-        ? { orient: "vertical", left: "left", textStyle: { color: theme.text } }
-        : undefined,
+      title: titleBlock,
+      tooltip: itemTooltip,
+      legend: legendBlock(),
       series: [
         {
           name: seriesLabel(seriesSpec),
           type: "pie",
-          radius: ["42%", "68%"],
+          radius: spec.type === "donut" ? ["50%", "72%"] : ["42%", "68%"],
           itemStyle: { borderColor: theme.tooltipBg, borderWidth: 2 },
-          data: rows.map((row) => ({
-            name:
-              row[xIdx] === null || row[xIdx] === undefined
-                ? "(null)"
-                : String(row[xIdx]),
-            value: row[valIdx] === null ? 0 : (row[valIdx] as number),
-          })),
+          label: options.data_labels ? { color: theme.text } : undefined,
+          data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
           emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: "rgba(0, 0, 0, 0.5)",
-            },
+            itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.5)" },
           },
         },
       ],
-    };
+    });
   }
 
-  // bar | line | area  ("area" is a line series with an areaStyle)
+  // ---- Funnel. --------------------------------------------------------
+  if (spec.type === "funnel") {
+    const valIdx = colIndex(series[0].field);
+    return toOption({
+      color: palette,
+      textStyle: { color: theme.text },
+      title: titleBlock,
+      tooltip: itemTooltip,
+      legend: legendBlock(),
+      series: [
+        {
+          type: "funnel",
+          left: "10%",
+          right: "10%",
+          label: { color: theme.text },
+          data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
+        },
+      ],
+    });
+  }
+
+  // ---- Treemap. -------------------------------------------------------
+  if (spec.type === "treemap") {
+    const valIdx = colIndex(series[0].field);
+    return toOption({
+      color: palette,
+      textStyle: { color: theme.text },
+      title: titleBlock,
+      tooltip: itemTooltip,
+      series: [
+        {
+          type: "treemap",
+          roam: false,
+          breadcrumb: { show: false },
+          label: { color: "#fff" },
+          data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
+        },
+      ],
+    });
+  }
+
+  // ---- Radar: each series is a polygon over the x categories. ---------
+  if (spec.type === "radar") {
+    const valIdxs = series.map((s) => colIndex(s.field));
+    const maxVal = Math.max(1, ...valIdxs.flatMap((vi) => srows.map((row) => num(row[vi]))));
+    return toOption({
+      color: palette,
+      textStyle: { color: theme.text },
+      title: titleBlock,
+      tooltip: itemTooltip,
+      legend: legendBlock(),
+      radar: {
+        indicator: categories.map((c) => ({ name: c, max: maxVal })),
+        axisName: { color: theme.text },
+        splitLine: { lineStyle: { color: theme.axisLine } },
+      },
+      series: [
+        {
+          type: "radar",
+          data: series.map((s, si) => ({
+            name: seriesLabel(s),
+            value: srows.map((row) => num(row[valIdxs[si]])),
+          })),
+        },
+      ],
+    });
+  }
+
+  // ---- Horizontal bar. ------------------------------------------------
+  if (spec.type === "hbar") {
+    const seriesList = series.map((s) => {
+      const vi = colIndex(s.field);
+      return {
+        name: seriesLabel(s),
+        type: "bar" as const,
+        stack: options.stacked ? "total" : undefined,
+        itemStyle: s.color ? { color: s.color } : undefined,
+        label: dataLabel,
+        data: srows.map((row) => num(row[vi])),
+      };
+    });
+    return toOption({
+      color: palette,
+      textStyle: { color: theme.text },
+      title: titleBlock,
+      tooltip: axisTooltip,
+      grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
+      legend: legendBlock(),
+      xAxis: valueAxis(theme, options, fmt, options.x_axis_label),
+      yAxis: {
+        type: "category",
+        data: categories,
+        axisLabel: { color: theme.text },
+        axisLine: { lineStyle: { color: theme.axisLine } },
+      },
+      series: seriesList,
+    });
+  }
+
+  // ---- Bar / line / area / combo. -------------------------------------
   const isArea = spec.type === "area";
-  const seriesList = series.map((s) => {
+  const isCombo = spec.type === "combo";
+  const seriesList = series.map((s, si) => {
     const valIdx = colIndex(s.field);
+    const type = isCombo
+      ? si === 0
+        ? "bar"
+        : "line"
+      : isArea || spec.type === "line"
+        ? "line"
+        : "bar";
     return {
       name: seriesLabel(s),
-      type: (isArea ? "line" : spec.type) as "bar" | "line",
+      type: type as "bar" | "line",
       stack: options.stacked ? "total" : undefined,
       areaStyle: isArea ? {} : undefined,
       itemStyle: s.color ? { color: s.color } : undefined,
-      data: rows.map((row) =>
-        row[valIdx] === null ? 0 : (row[valIdx] as number)
-      ),
+      label: dataLabel,
+      data: srows.map((row) => num(row[valIdx])),
     };
   });
 
-  return {
-    color: theme.palette,
+  return toOption({
+    color: palette,
     textStyle: { color: theme.text },
-    title: options.title
-      ? { text: options.title, textStyle: { color: theme.text } }
-      : undefined,
-    tooltip: {
-      trigger: "axis",
-      backgroundColor: theme.tooltipBg,
-      borderColor: theme.tooltipBorder,
-      textStyle: { color: theme.text },
-    },
+    title: titleBlock,
+    tooltip: axisTooltip,
     grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
-    legend: showLegend
-      ? { data: series.map(seriesLabel), textStyle: { color: theme.text }, top: 0 }
-      : undefined,
+    legend: legendBlock(),
     xAxis: {
       type: "category",
       name: options.x_axis_label ?? undefined,
@@ -230,15 +398,9 @@ export function buildEChartsOption(
       axisLine: { lineStyle: { color: theme.axisLine } },
       nameTextStyle: { color: theme.text },
     },
-    yAxis: {
-      type: "value",
-      name: options.y_axis_label ?? undefined,
-      axisLabel: { color: theme.text },
-      splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
-      nameTextStyle: { color: theme.text },
-    },
+    yAxis: valueAxis(theme, options, fmt, options.y_axis_label),
     series: seriesList,
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------

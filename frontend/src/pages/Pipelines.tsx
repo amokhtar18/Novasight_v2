@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   CalendarClock,
   ChevronDown,
@@ -42,9 +43,12 @@ import {
   useUpdateSource,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DatasetsPanel } from "@/components/data/DatasetsPanel";
 import { PipelineWizard } from "@/components/pipeline/PipelineWizard";
 import { CronBuilder } from "@/components/schedule/CronBuilder";
+import { SchedulesPanel } from "@/components/schedule/SchedulesPanel";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -66,15 +70,65 @@ import type {
   SourceConnectionRead,
 } from "@/types/api";
 
+const HUB_TABS = ["sources", "pipelines", "schedules"] as const;
+type HubTab = (typeof HUB_TABS)[number];
+
+/**
+ * Pipelines — the Ingest hub (#1). One home for everything that gets data in:
+ * data sources (SQL/file connections + CSV uploads), the pipelines built on them,
+ * and the schedules that run them. The active tab is mirrored to ``?tab=`` so deep
+ * links (and the "set it up in Pipelines" links) can target a specific tab.
+ */
 export function Pipelines() {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab") ?? "";
+  const tab: HubTab = (HUB_TABS as readonly string[]).includes(raw)
+    ? (raw as HubTab)
+    : "sources";
+
+  function setTab(next: string) {
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("tab", next);
+        return p;
+      },
+      { replace: true }
+    );
+  }
+
   return (
     <div className="animate-in-up space-y-6">
       <PageHeader
         title="Pipelines"
-        description="Connect a source, then build a pipeline that lands data in the lake and registers it to ClickHouse. Run it now or review its history."
+        description="Connect data sources, build pipelines that land data in the lake and ClickHouse, then run or schedule them."
       />
-      <SourcesSection />
-      <PipelinesSection />
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="sources">
+            <Database className="h-4 w-4" aria-hidden />
+            Data sources
+          </TabsTrigger>
+          <TabsTrigger value="pipelines">
+            <Workflow className="h-4 w-4" aria-hidden />
+            Pipelines
+          </TabsTrigger>
+          <TabsTrigger value="schedules">
+            <CalendarClock className="h-4 w-4" aria-hidden />
+            Schedules
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="sources" className="mt-4 space-y-6">
+          <SourcesSection />
+          <DatasetsPanel />
+        </TabsContent>
+        <TabsContent value="pipelines" className="mt-4">
+          <PipelinesSection />
+        </TabsContent>
+        <TabsContent value="schedules" className="mt-4">
+          <SchedulesPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -429,7 +483,7 @@ function PipelinesSection() {
                 name={p.name}
                 target={p.target_table}
                 enabled={p.enabled}
-                schedules={(schedules ?? []).filter((s) => s.target_id === p.id)}
+                schedules={(schedules ?? []).filter((s) => s.pipeline_ids.includes(p.id))}
               />
             ))}
           </ul>
@@ -660,7 +714,7 @@ function ScheduleDialog({
       return;
     }
     createSchedule.mutate(
-      { name: `${pipelineName} schedule`, target_id: pipelineId, cron: cron.trim() },
+      { name: `${pipelineName} schedule`, pipeline_ids: [pipelineId], cron: cron.trim() },
       {
         onSuccess: () => toast.success("Schedule added"),
         onError: (err) =>

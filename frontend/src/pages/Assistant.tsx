@@ -1,15 +1,24 @@
 /**
- * Chat — ask questions over the governed semantic layer (#11).
+ * Assistant — the unified AI surface (#7/#11): one grounded agent for chat, charts,
+ * NL→SQL, and insights, replacing the separate Ask AI / Chat / Insights pages.
  *
- * Sends a question to POST /ai/chat, which runs a grounded tool-dispatch loop on
- * the backend (the model may only call governed, tenant-scoped tools). The reply
- * shows the answer plus which tools the assistant used, for transparency.
+ * Sends a message to POST /ai/assistant (the #13 agent framework). The reply shows the
+ * grounded answer, which skills ran, plus any proposed **charts** (save or pin) and
+ * **insight summaries** — propose-then-confirm: nothing is persisted until you act.
+ * When a session has produced charts, "Build dashboard" assembles them into one.
  */
 
 import { useRef, useState } from "react";
-import { MessageSquare, Send, Sparkles, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { LayoutDashboard, Lightbulb, Send, Sparkles, User } from "lucide-react";
+import { toast } from "sonner";
 
-import { useChat } from "@/api/hooks";
+import {
+  useAddDashboardTile,
+  useAssistant,
+  useCreateChart,
+  useCreateDashboard,
+} from "@/api/hooks";
 import { useChartData } from "@/lib/useChartData";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ChartRenderer } from "@/components/chart/ChartRenderer";
@@ -25,27 +34,37 @@ interface Turn {
   role: "user" | "assistant";
   text: string;
   tools?: string[];
-  chart?: ChartSpec | null;
+  charts?: ChartSpec[];
+  insights?: string[];
 }
 
 const SUGGESTIONS = [
   "What semantic models can I query?",
-  "Show total amount by region.",
+  "Chart total amount by region.",
+  "Summarize sales by region.",
   "Which region has the highest sales?",
 ];
 
-export function Chat() {
-  const chat = useChat();
+export function Assistant() {
+  const assistant = useAssistant();
+  const createDashboard = useCreateDashboard();
+  const createChart = useCreateChart();
+  const addTile = useAddDashboardTile();
+  const navigate = useNavigate();
+
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [building, setBuilding] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const sessionCharts = turns.flatMap((t) => t.charts ?? []);
 
   function send(message: string) {
     const trimmed = message.trim();
-    if (!trimmed || chat.isPending) return;
+    if (!trimmed || assistant.isPending) return;
     setTurns((t) => [...t, { role: "user", text: trimmed }]);
     setInput("");
-    chat.mutate(
+    assistant.mutate(
       { message: trimmed },
       {
         onSuccess: (resp) => {
@@ -55,7 +74,8 @@ export function Chat() {
               role: "assistant",
               text: resp.answer,
               tools: resp.tools_used,
-              chart: resp.chart,
+              charts: resp.charts,
+              insights: resp.insights,
             },
           ]);
           requestAnimationFrame(() =>
@@ -66,11 +86,41 @@ export function Chat() {
     );
   }
 
+  async function buildDashboard() {
+    if (sessionCharts.length === 0 || building) return;
+    setBuilding(true);
+    try {
+      const board = await createDashboard.mutateAsync({ name: "Assistant dashboard" });
+      for (const spec of sessionCharts) {
+        const chart = await createChart.mutateAsync({
+          name: spec.options?.title ?? "Chart",
+          spec,
+          source_kind: "semantic",
+        });
+        await addTile.mutateAsync({ dashboardId: board.id, tile: { chart_id: chart.id } });
+      }
+      toast.success("Dashboard created");
+      navigate(`/dashboards/${board.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not build the dashboard");
+    } finally {
+      setBuilding(false);
+    }
+  }
+
   return (
     <div className="animate-in-up flex h-[calc(100vh-9rem)] flex-col">
       <PageHeader
-        title="Chat"
-        description="Ask about your data in plain English. Answers are grounded on the governed semantic layer — every figure traces to a tool result."
+        title="Assistant"
+        description="Ask about your data in plain English — chat, charts, and insights, all grounded on the governed semantic layer. Every figure traces to a skill result."
+        actions={
+          sessionCharts.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={buildDashboard} disabled={building}>
+              <LayoutDashboard className="h-4 w-4" aria-hidden />
+              {building ? "Building…" : `Build dashboard (${sessionCharts.length})`}
+            </Button>
+          ) : undefined
+        }
       />
 
       <div
@@ -80,11 +130,11 @@ export function Chat() {
         {turns.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <MessageSquare className="h-6 w-6" aria-hidden />
+              <Sparkles className="h-6 w-6" aria-hidden />
             </span>
             <p className="max-w-md text-sm text-muted-foreground">
-              Ask a question about your data. The assistant queries only governed
-              models — it never invents numbers.
+              Ask a question, request a chart, or ask for a summary. The assistant queries
+              only governed models — it never invents numbers.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
@@ -107,11 +157,7 @@ export function Chat() {
               }
               aria-hidden
             >
-              {turn.role === "user" ? (
-                <User className="h-4 w-4" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
+              {turn.role === "user" ? <User className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
             </span>
             <div className="min-w-0 flex-1">
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{turn.text}</p>
@@ -124,23 +170,28 @@ export function Chat() {
                   ))}
                 </div>
               )}
-              {turn.chart && <ChatChart spec={turn.chart} />}
+              {turn.insights?.map((summary, j) => (
+                <InsightCard key={j} summary={summary} />
+              ))}
+              {turn.charts?.map((spec, j) => (
+                <AssistantChart key={j} spec={spec} />
+              ))}
             </div>
           </div>
         ))}
 
-        {chat.isPending && (
+        {assistant.isPending && (
           <div className="flex items-center gap-2 pl-11 text-sm text-muted-foreground">
             <Spinner label="Thinking" />
           </div>
         )}
 
-        {chat.isError && (
+        {assistant.isError && (
           <Alert variant="destructive">
-            <AlertTitle>Chat failed</AlertTitle>
+            <AlertTitle>Assistant failed</AlertTitle>
             <AlertDescription>
-              {chat.error instanceof Error
-                ? chat.error.message
+              {assistant.error instanceof Error
+                ? assistant.error.message
                 : "The assistant is temporarily unavailable. Please try again."}
             </AlertDescription>
           </Alert>
@@ -157,12 +208,12 @@ export function Chat() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about your data…"
+          placeholder="Ask, chart, or summarize…"
           aria-label="Message"
           maxLength={2000}
           className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
-        <Button type="submit" disabled={!input.trim() || chat.isPending}>
+        <Button type="submit" disabled={!input.trim() || assistant.isPending}>
           <Send className="h-4 w-4" aria-hidden />
           Send
         </Button>
@@ -171,14 +222,20 @@ export function Chat() {
   );
 }
 
+function InsightCard({ summary }: { summary: string }) {
+  return (
+    <div className="mt-3 flex gap-2 rounded-lg border bg-background/50 p-3">
+      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+      <p className="text-sm leading-relaxed">{summary}</p>
+    </div>
+  );
+}
+
 /**
- * ChatChart — render an AI-generated chart inline and let the user keep it.
- *
- * Re-runs the spec's grounded query (useChartData) like any saved chart, then offers
- * to save it or pin it to a dashboard — the conversational analogue of the builder's
- * AI path (#12). A separate component so the data hook isn't called conditionally.
+ * AssistantChart — render a proposed chart inline and let the user keep it. Re-runs the
+ * spec's grounded query (useChartData), then offers Save / pin-to-dashboard.
  */
-function ChatChart({ spec }: { spec: ChartSpec }) {
+function AssistantChart({ spec }: { spec: ChartSpec }) {
   const { data, isLoading, isError } = useChartData(spec);
   const title = spec.options?.title ?? "AI chart";
 

@@ -719,7 +719,7 @@ async def test_cat3_chart_spec_rejection_query_never_called(
     [
         ("not valid json {{{", "malformed_json"),
         (json.dumps({**_VALID_CHART_DICT, "evil_field": "injected"}), "extra_field"),
-        (json.dumps({**_VALID_CHART_DICT, "type": "treemap"}), "invalid_type"),
+        (json.dumps({**_VALID_CHART_DICT, "type": "sankey"}), "invalid_type"),
         (
             json.dumps(
                 {

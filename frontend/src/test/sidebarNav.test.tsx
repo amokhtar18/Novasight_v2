@@ -55,8 +55,9 @@ describe("Sidebar grouping", () => {
     renderSidebar();
     // Desktop rail + would-be mobile drawer both render NavList, so links may
     // appear more than once; getAllByRole keeps the assertion robust.
-    expect(screen.getAllByRole("link", { name: /Data sources/ }).length).toBeGreaterThan(0);
+    // (The standalone "Data sources" link was retired into the Pipelines/Ingest hub, #1.)
     expect(screen.getAllByRole("link", { name: /Pipelines/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /Operations/ }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Semantic models/ }).length).toBeGreaterThan(0);
   });
 

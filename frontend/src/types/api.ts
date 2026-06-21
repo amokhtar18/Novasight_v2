@@ -66,7 +66,22 @@ export interface QueryResponse {
  * aggregation, and encoding `field` values are display references to columns in a
  * `QueryResponse`.
  */
-export type ChartType = "bar" | "line" | "area" | "pie" | "table" | "number" | "scatter";
+// Chart kinds the renderer supports (v2, #8). Mirrors schemas/chart.py.
+export type ChartType =
+  | "bar"
+  | "hbar"
+  | "line"
+  | "area"
+  | "combo"
+  | "pie"
+  | "donut"
+  | "scatter"
+  | "funnel"
+  | "treemap"
+  | "radar"
+  | "gauge"
+  | "table"
+  | "number";
 
 /** Where a chart's data comes from. At least one source must be present. */
 export interface ChartQuery {
@@ -102,13 +117,37 @@ export interface ChartEncoding {
   series: SeriesEncoding[];
 }
 
-/** Display-only options. None of these affect the query or the data. */
+/** How numeric values are formatted in labels, tooltips, and value axes (#8). */
+export interface NumberFormat {
+  style?: "plain" | "currency" | "percent";
+  decimals?: number | null;
+  compact?: boolean;
+  currency?: string | null;
+}
+
+export type ChartSort =
+  | "none"
+  | "value_desc"
+  | "value_asc"
+  | "label_asc"
+  | "label_desc";
+
+/** Display-only options (#8). None of these affect the query or the data. */
 export interface ChartOptions {
   title?: string | null;
   stacked?: boolean;
+  percent?: boolean;
   show_legend?: boolean;
+  legend_position?: "top" | "bottom" | "left" | "right";
   x_axis_label?: string | null;
   y_axis_label?: string | null;
+  y_min?: number | null;
+  y_max?: number | null;
+  log_scale?: boolean;
+  data_labels?: boolean;
+  sort?: ChartSort;
+  number_format?: NumberFormat;
+  palette?: string[];
 }
 
 export interface ChartSpec {
@@ -384,11 +423,13 @@ export interface PipelineRunSummary extends PipelineRunRead {
 }
 
 // Schedules — /api/v1/schedules (mirrors schemas/schedule.py)
+// A reusable schedule drives one or more pipelines (#3, M:N).
 export interface ScheduleRead {
   id: string;
   name: string;
   target_kind: string;
-  target_id: string;
+  /** Pipelines this schedule drives. */
+  pipeline_ids: string[];
   cron: string;
   enabled: boolean;
   created_at: string;
@@ -398,7 +439,8 @@ export interface ScheduleRead {
 export interface ScheduleCreate {
   name: string;
   target_kind?: "pipeline";
-  target_id: string;
+  /** One or more pipelines to attach (must be non-empty). */
+  pipeline_ids: string[];
   cron: string;
   enabled?: boolean;
 }
@@ -407,6 +449,8 @@ export interface ScheduleUpdate {
   name?: string;
   cron?: string;
   enabled?: boolean;
+  /** When provided, replaces the schedule's attached pipelines (non-empty). */
+  pipeline_ids?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -438,12 +482,23 @@ export interface DimensionDef {
 
 export type SemanticJoinRelationship = "one_to_one" | "one_to_many" | "many_to_one";
 
-/** A join from this model to another cube by column equality. */
+/**
+ * A join from this model to another cube by column equality. Single-key
+ * (local_key/foreign_key) or composite (local_keys/foreign_keys, equal length) — #6.
+ */
 export interface SemanticJoinDef {
   name: string;
   relationship: SemanticJoinRelationship;
-  local_key: string;
-  foreign_key: string;
+  local_key?: string | null;
+  foreign_key?: string | null;
+  local_keys?: string[];
+  foreign_keys?: string[];
+}
+
+/** A serving-table column — GET /api/v1/serving/tables/{table}/columns. */
+export interface ServingColumn {
+  name: string;
+  type: string;
 }
 
 export interface SemanticModelConfig {
@@ -530,6 +585,26 @@ export interface DbtModelDefRead {
   updated_at: string;
 }
 
+// dbt lineage DAG — GET /api/v1/dbt-models/lineage (mirrors services/dbt_lineage.py)
+export interface LineageNode {
+  /** Namespaced id, e.g. "model:mart_orders". */
+  id: string;
+  label: string;
+  /** "model" | "source" | "external". */
+  kind: string;
+  layer?: string | null;
+}
+
+export interface LineageEdge {
+  source: string;
+  target: string;
+}
+
+export interface LineageGraph {
+  nodes: LineageNode[];
+  edges: LineageEdge[];
+}
+
 export interface DbtModelDefCreate {
   name: string;
   layer?: DbtLayer;
@@ -591,16 +666,24 @@ export interface SavedChartRead {
 // ---------------------------------------------------------------------------
 
 /** A dashboard tile: a placed saved chart (chart embedded for one-round-trip render). */
+// What a dashboard tile holds (#10): a pinned chart, or a decoration object.
+export type TileKind = "chart" | "text" | "markdown" | "image" | "divider" | "filter";
+
 export interface DashboardTileRead {
   id: string;
-  chart_id: string;
+  kind: TileKind;
+  /** Set for chart tiles; null for decoration tiles. */
+  chart_id: string | null;
+  /** Payload for non-chart tiles (text/markdown body, image url, filter member, …). */
+  content: Record<string, unknown> | null;
   title: string | null;
   position: number;
   x: number;
   y: number;
   w: number;
   h: number;
-  chart: SavedChartRead;
+  /** Embedded chart for chart tiles; null for decoration tiles. */
+  chart: SavedChartRead | null;
 }
 
 /** A dashboard in the list view (no tiles, just a count). */
@@ -640,7 +723,10 @@ export interface DashboardUpdate {
 }
 
 export interface DashboardTileCreate {
-  chart_id: string;
+  /** Defaults to "chart". A chart tile needs chart_id; decorations carry content. */
+  kind?: TileKind;
+  chart_id?: string | null;
+  content?: Record<string, unknown> | null;
   title?: string | null;
   w?: number | null;
   h?: number | null;
@@ -801,6 +887,40 @@ export interface InsightRequest {
 
 export interface InsightResponse {
   summary: string;
+}
+
+// ---------------------------------------------------------------------------
+// Unified assistant — POST /api/v1/ai/assistant  (#7/#11)
+// ---------------------------------------------------------------------------
+
+export interface AssistantRequest {
+  message: string;
+}
+
+export interface AssistantResponse {
+  /** Grounded answer — figures trace to skill results. */
+  answer: string;
+  /** Grounded skills the assistant called (for transparency). */
+  tools_used: string[];
+  /** Validated charts the assistant proposed, for the user to save/pin. */
+  charts: ChartSpec[];
+  /** Guardrailed insight summaries the assistant produced. */
+  insights: string[];
+}
+
+// ---------------------------------------------------------------------------
+// AI provider health probe — GET /api/v1/ai/health
+// ---------------------------------------------------------------------------
+
+export interface AIHealthResponse {
+  /** True when a minimal completion round-tripped through the configured provider. */
+  ok: boolean;
+  /** Model that answered the probe (on success). */
+  model?: string | null;
+  /** Round-trip latency in milliseconds (on success). */
+  latency_ms?: number | null;
+  /** Safe status detail on failure (never includes the API key). */
+  detail?: string | null;
 }
 
 // ---------------------------------------------------------------------------

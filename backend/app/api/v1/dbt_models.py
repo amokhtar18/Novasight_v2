@@ -25,6 +25,7 @@ from app.schemas.dbt_model import (
     DbtTestRead,
     IncrementalConfig,
 )
+from app.services.dbt_lineage import LineageGraph, build_lineage
 from app.services.dbt_models import DbtModelService, get_dbt_model_service
 from app.services.transforms import TransformService, get_transform_service
 from app.tenancy.context import TenantContext, get_tenant_context
@@ -61,6 +62,19 @@ async def list_dbt_models(
 ) -> list[DbtModelRead]:
     """List the tenant's dbt model definitions."""
     return [_to_read(m) for m in await svc.list_for_tenant(ctx)]
+
+
+@router.get("/lineage", response_model=LineageGraph)
+async def dbt_lineage(
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: DbtModelService = Depends(get_dbt_model_service),  # noqa: B008
+) -> LineageGraph:
+    """The tenant's dbt dependency DAG, derived from ``ref()``/``source()`` in model SQL.
+
+    Declared before ``/{model_id}`` so the literal ``lineage`` segment isn't parsed as a
+    model id. Self-contained (no dbt manifest) — see ``app.services.dbt_lineage``.
+    """
+    return build_lineage(await svc.list_for_tenant(ctx))
 
 
 @router.get("/{model_id}", response_model=DbtModelRead)

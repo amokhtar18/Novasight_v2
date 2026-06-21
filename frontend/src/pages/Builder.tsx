@@ -1,34 +1,24 @@
 /**
- * Builder — the low-code chart builder.
+ * Builder — the low-code chart builder (v2, #8).
  *
- * Three ways to a chart, all sharing one renderer + chart-spec:
- *  1. Semantic model: pick a governed model, a dimension, a measure, and a chart
- *     type; the structured query runs read-only against the semantic layer and
- *     renders live. This is the governed, Metabase-/Superset-like path.
- *  2. Dataset: pick a CSV dataset, a group-by column, a metric, and a chart type.
- *  3. AI: describe the chart in plain English (NLChartPanel).
+ * Charts are built on the **governed semantic layer only** (the dataset/CSV path was
+ * retired — CSV stays an ingestion on-ramp; model it, then chart it). Two ways to a
+ * chart, both emitting the same ChartSpec → one renderer:
+ *  1. Point-and-click: pick a model, dimension, measure, chart type, and formatting.
+ *  2. AI: describe the chart in plain English (NLChartPanel).
  *
- * Any result can be saved server-side (SaveChartButton) or pinned to a dashboard.
- * State for each path lives in a small hook and is prop-drilled so the controls
- * (left) and the preview (right) share one source of truth.
+ * The result can be saved server-side (SaveChartButton) or pinned to a dashboard.
  */
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { BarChart3, Database, Layers, SlidersHorizontal } from "lucide-react";
+import { BarChart3, Layers, SlidersHorizontal } from "lucide-react";
 
-import {
-  useDatasets,
-  useDatasetQuery,
-  useSemanticModels,
-  useSemanticQuery,
-} from "@/api/hooks";
+import { useSemanticModels, useSemanticQuery } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ChartRenderer } from "@/components/chart/ChartRenderer";
 import { NLChartPanel } from "@/components/chart/NLChartPanel";
 import { SaveChartButton } from "@/components/chart/SaveChartButton";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -38,38 +28,97 @@ import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { humanize } from "@/lib/format";
 import type {
-  AggFunction,
+  ChartOptions,
+  ChartSort,
   ChartSpec,
   ChartType,
   NLChartResponse,
-  QueryRequest,
+  NumberFormat,
   SemanticGranularity,
   SemanticQueryRequest,
 } from "@/types/api";
 
-const CHART_TYPES: ChartType[] = ["bar", "line", "area", "pie", "table", "number", "scatter"];
-const AGG_FUNCTIONS: AggFunction[] = ["count", "sum", "avg", "min", "max"];
-// Granularities offered for a time dimension (the common BI buckets).
+const CHART_TYPES: ChartType[] = [
+  "bar",
+  "hbar",
+  "line",
+  "area",
+  "combo",
+  "pie",
+  "donut",
+  "scatter",
+  "funnel",
+  "treemap",
+  "radar",
+  "gauge",
+  "table",
+  "number",
+];
 const GRANULARITIES: SemanticGranularity[] = ["day", "week", "month", "quarter", "year"];
-const METRIC_ALIAS = "value";
+const SORTS: ChartSort[] = ["none", "value_desc", "value_asc", "label_asc", "label_desc"];
 const DEFAULT_LIMIT = 50;
 
-type SourceMode = "semantic" | "dataset";
+interface FormatState {
+  stacked: boolean;
+  legend: "top" | "bottom" | "left" | "right" | "hidden";
+  dataLabels: boolean;
+  sort: ChartSort;
+  numberStyle: NumberFormat["style"];
+  decimals: string;
+  compact: boolean;
+  currency: string;
+  yMin: string;
+  yMax: string;
+  logScale: boolean;
+}
+
+const DEFAULT_FORMAT: FormatState = {
+  stacked: false,
+  legend: "top",
+  dataLabels: false,
+  sort: "none",
+  numberStyle: "plain",
+  decimals: "",
+  compact: false,
+  currency: "",
+  yMin: "",
+  yMax: "",
+  logScale: false,
+};
+
+/** Compose the display-only ChartOptions for the spec from the format controls. */
+function toChartOptions(title: string, f: FormatState): ChartOptions {
+  const numOrNull = (s: string): number | null =>
+    s.trim() !== "" && Number.isFinite(Number(s)) ? Number(s) : null;
+  return {
+    title,
+    stacked: f.stacked,
+    show_legend: f.legend !== "hidden",
+    legend_position: f.legend === "hidden" ? "top" : f.legend,
+    data_labels: f.dataLabels,
+    sort: f.sort,
+    log_scale: f.logScale,
+    y_min: numOrNull(f.yMin),
+    y_max: numOrNull(f.yMax),
+    number_format: {
+      style: f.numberStyle,
+      decimals: f.decimals.trim() !== "" ? Number(f.decimals) : null,
+      compact: f.compact,
+      currency: f.currency.trim() || null,
+    },
+  };
+}
 
 export function Builder() {
-  const [sourceMode, setSourceMode] = useState<SourceMode>("semantic");
-  const [aiResult, setAiResult] = useState<NLChartResponse | null>(null);
+  const semantic = useSemanticBuilder();
 
-  // Both builders are instantiated; each gates its own data query on `active` so
-  // the inactive mode never runs a query, but switching modes keeps state.
-  const semantic = useSemanticBuilder(sourceMode === "semantic");
-  const dataset = useDatasetBuilder(sourceMode === "dataset");
+  const [aiResult, setAiResult] = useState<NLChartResponse | null>(null);
 
   return (
     <div className="animate-in-up">
       <PageHeader
         title="Chart builder"
-        description="Point-and-click to build a chart on a governed model or a dataset, or describe one in plain English. Save the result."
+        description="Point-and-click to build a chart on a governed semantic model, or describe one in plain English. Format it, then save the result."
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
@@ -79,37 +128,17 @@ export function Builder() {
               <SlidersHorizontal className="h-4 w-4" aria-hidden />
               Configure
             </CardTitle>
-            <CardDescription>Choose a data source, then map it to a chart.</CardDescription>
+            <CardDescription>Map a governed model to a chart, then format it.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="b-source-mode">Data source</Label>
-              <Select
-                id="b-source-mode"
-                value={sourceMode}
-                onChange={(e) => setSourceMode(e.target.value as SourceMode)}
-              >
-                <option value="semantic">Semantic model</option>
-                <option value="dataset">Dataset (CSV)</option>
-              </Select>
-            </div>
-
-            {sourceMode === "semantic" ? (
-              <SemanticControls s={semantic} />
-            ) : (
-              <DatasetControls d={dataset} />
-            )}
+            <SemanticControls s={semantic} />
           </CardContent>
         </Card>
 
         <div className="space-y-6">
-          {sourceMode === "semantic" ? (
-            <SemanticPreview s={semantic} />
-          ) : (
-            <DatasetPreview d={dataset} />
-          )}
+          <SemanticPreview s={semantic} />
 
-          {/* AI path (shared by both modes) */}
+          {/* AI path */}
           <NLChartPanel onResult={setAiResult} />
           {aiResult && (
             <div className="flex flex-wrap justify-end gap-2">
@@ -137,7 +166,7 @@ export function Builder() {
 
 type SemanticBuilder = ReturnType<typeof useSemanticBuilder>;
 
-function useSemanticBuilder(active: boolean) {
+function useSemanticBuilder() {
   const { data: models, isLoading: modelsLoading } = useSemanticModels();
 
   const [modelName, setModelName] = useState("");
@@ -145,6 +174,7 @@ function useSemanticBuilder(active: boolean) {
   const [measure, setMeasure] = useState("");
   const [granularity, setGranularity] = useState<SemanticGranularity>("month");
   const [chartType, setChartType] = useState<ChartType>("bar");
+  const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
 
   const model = models?.find((m) => m.name === modelName) ?? models?.[0];
   const effDimension = dimension || model?.dimensions[0]?.name || "";
@@ -155,28 +185,24 @@ function useSemanticBuilder(active: boolean) {
   // the rolled-up column the chart plots is keyed `<dimension>.<granularity>`.
   const isTimeDimension =
     model?.dimensions.find((d) => d.name === effDimension)?.type === "time";
-  const timeDimensions = isTimeDimension
-    ? [{ dimension: effDimension, granularity }]
-    : [];
+  const timeDimensions = isTimeDimension ? [{ dimension: effDimension, granularity }] : [];
   const xField = isTimeDimension ? `${effDimension}.${granularity}` : effDimension;
 
-  const request: SemanticQueryRequest | null =
-    active && ready
-      ? isTimeDimension
-        ? {
-            measures: [effMeasure],
-            dimensions: [],
-            time_dimensions: timeDimensions,
-            limit: DEFAULT_LIMIT,
-          }
-        : { measures: [effMeasure], dimensions: [effDimension], limit: DEFAULT_LIMIT }
-      : null;
+  const request: SemanticQueryRequest | null = ready
+    ? isTimeDimension
+      ? {
+          measures: [effMeasure],
+          dimensions: [],
+          time_dimensions: timeDimensions,
+          limit: DEFAULT_LIMIT,
+        }
+      : { measures: [effMeasure], dimensions: [effDimension], limit: DEFAULT_LIMIT }
+    : null;
   const result = useSemanticQuery(request);
 
-  const measureLabel =
-    model?.measures.find((m) => m.name === effMeasure)?.title ?? effMeasure;
-  const dimLabel =
-    model?.dimensions.find((d) => d.name === effDimension)?.title ?? effDimension;
+  const measureLabel = model?.measures.find((m) => m.name === effMeasure)?.title ?? effMeasure;
+  const dimLabel = model?.dimensions.find((d) => d.name === effDimension)?.title ?? effDimension;
+  const title = `${measureLabel} by ${dimLabel}${isTimeDimension ? ` (${granularity})` : ""}`;
 
   const spec: ChartSpec = {
     version: "1",
@@ -189,9 +215,7 @@ function useSemanticBuilder(active: boolean) {
       x: xField || null,
       series: [{ field: effMeasure, name: measureLabel }],
     },
-    options: {
-      title: `${measureLabel} by ${dimLabel}${isTimeDimension ? ` (${granularity})` : ""}`,
-    },
+    options: toChartOptions(title, format),
   };
 
   return {
@@ -209,6 +233,8 @@ function useSemanticBuilder(active: boolean) {
     setGranularity,
     chartType,
     setChartType,
+    format,
+    setFormat,
     ready,
     spec,
     result,
@@ -227,8 +253,8 @@ function SemanticControls({ s }: { s: SemanticBuilder }) {
   if (!s.models || s.models.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No semantic models are available yet. Create one over a data mart, then come
-        back to build a chart on it.
+        No semantic models are available yet. Create one over a data mart, then come back
+        to build a chart on it.
       </p>
     );
   }
@@ -276,11 +302,7 @@ function SemanticControls({ s }: { s: SemanticBuilder }) {
 
       <div className="space-y-1.5">
         <Label htmlFor="b-sem-measure">Measure</Label>
-        <Select
-          id="b-sem-measure"
-          value={s.measure}
-          onChange={(e) => s.setMeasure(e.target.value)}
-        >
+        <Select id="b-sem-measure" value={s.measure} onChange={(e) => s.setMeasure(e.target.value)}>
           {s.model?.measures.map((m) => (
             <option key={m.name} value={m.name}>
               {m.title}
@@ -303,7 +325,147 @@ function SemanticControls({ s }: { s: SemanticBuilder }) {
           ))}
         </Select>
       </div>
+
+      <FormatControls format={s.format} setFormat={s.setFormat} />
     </>
+  );
+}
+
+function FormatControls({
+  format: f,
+  setFormat,
+}: {
+  format: FormatState;
+  setFormat: (next: FormatState) => void;
+}) {
+  const set = <K extends keyof FormatState>(key: K, value: FormatState[K]) =>
+    setFormat({ ...f, [key]: value });
+
+  return (
+    <details className="rounded-lg border bg-background/40 p-3" open={false}>
+      <summary className="cursor-pointer text-sm font-medium">Formatting</summary>
+      <div className="mt-3 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="f-legend">Legend</Label>
+            <Select
+              id="f-legend"
+              value={f.legend}
+              onChange={(e) => set("legend", e.target.value as FormatState["legend"])}
+            >
+              {(["top", "bottom", "left", "right", "hidden"] as const).map((p) => (
+                <option key={p} value={p}>
+                  {humanize(p)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-sort">Sort</Label>
+            <Select
+              id="f-sort"
+              value={f.sort}
+              onChange={(e) => set("sort", e.target.value as ChartSort)}
+            >
+              {SORTS.map((srt) => (
+                <option key={srt} value={srt}>
+                  {humanize(srt)}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="f-numstyle">Number format</Label>
+            <Select
+              id="f-numstyle"
+              value={f.numberStyle}
+              onChange={(e) => set("numberStyle", e.target.value as NumberFormat["style"])}
+            >
+              {(["plain", "currency", "percent"] as const).map((st) => (
+                <option key={st} value={st}>
+                  {humanize(st)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-decimals">Decimals</Label>
+            <Input
+              id="f-decimals"
+              value={f.decimals}
+              onChange={(e) => set("decimals", e.target.value)}
+              placeholder="auto"
+              inputMode="numeric"
+            />
+          </div>
+        </div>
+
+        {f.numberStyle === "currency" && (
+          <div className="space-y-1.5">
+            <Label htmlFor="f-currency">Currency symbol</Label>
+            <Input
+              id="f-currency"
+              value={f.currency}
+              onChange={(e) => set("currency", e.target.value)}
+              placeholder="$"
+            />
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="f-ymin">Y min</Label>
+            <Input
+              id="f-ymin"
+              value={f.yMin}
+              onChange={(e) => set("yMin", e.target.value)}
+              placeholder="auto"
+              inputMode="numeric"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-ymax">Y max</Label>
+            <Input
+              id="f-ymax"
+              value={f.yMax}
+              onChange={(e) => set("yMax", e.target.value)}
+              placeholder="auto"
+              inputMode="numeric"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.stacked} onChange={(e) => set("stacked", e.target.checked)} />
+            Stacked
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={f.dataLabels}
+              onChange={(e) => set("dataLabels", e.target.checked)}
+            />
+            Data labels
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={f.compact} onChange={(e) => set("compact", e.target.checked)} />
+            Compact
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={f.logScale}
+              onChange={(e) => set("logScale", e.target.checked)}
+            />
+            Log scale
+          </label>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -324,11 +486,7 @@ function SemanticPreview({ s }: { s: SemanticBuilder }) {
               sourceKind="semantic"
               sourceRef={s.model?.name ?? null}
             />
-            <AddToDashboard
-              spec={s.spec}
-              title={s.spec.options?.title || "Chart"}
-              data={data}
-            />
+            <AddToDashboard spec={s.spec} title={s.spec.options?.title || "Chart"} data={data} />
           </div>
         )}
       </CardHeader>
@@ -368,217 +526,6 @@ function SemanticPreview({ s }: { s: SemanticBuilder }) {
             icon={<BarChart3 className="h-6 w-6" />}
             title="No data to chart"
             description="This model returned no rows for the chosen dimension and measure."
-          />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ===========================================================================
-// Dataset path
-// ===========================================================================
-
-type DatasetBuilder = ReturnType<typeof useDatasetBuilder>;
-
-function useDatasetBuilder(active: boolean) {
-  const { data: datasets, isLoading: datasetsLoading } = useDatasets();
-
-  const [datasetId, setDatasetId] = useState<string>("");
-  const [dimension, setDimension] = useState("");
-  const [fn, setFn] = useState<AggFunction>("count");
-  const [metricColumn, setMetricColumn] = useState("");
-  const [chartType, setChartType] = useState<ChartType>("bar");
-
-  const effectiveDatasetId = datasetId || datasets?.[0]?.id || "";
-  const dimReady = dimension.trim().length > 0;
-  const metricReady = fn === "count" || metricColumn.trim().length > 0;
-  const ready = !!effectiveDatasetId && dimReady && metricReady;
-
-  const query: QueryRequest = {
-    dimensions: dimReady ? [dimension.trim()] : [],
-    metrics: [
-      {
-        function: fn,
-        column: fn === "count" ? undefined : metricColumn.trim() || undefined,
-        alias: METRIC_ALIAS,
-      },
-    ],
-    limit: DEFAULT_LIMIT,
-  };
-  const result = useDatasetQuery(active && ready ? effectiveDatasetId : null, query);
-
-  const metricLabel =
-    fn === "count" ? "Count" : `${humanize(fn)} of ${humanize(metricColumn || "")}`;
-  const spec: ChartSpec = {
-    version: "1",
-    type: chartType,
-    query: { dataset_id: effectiveDatasetId || null, query },
-    encoding: {
-      x: dimension.trim() || null,
-      series: [{ field: METRIC_ALIAS, name: metricLabel }],
-    },
-    options: { title: `${metricLabel} by ${humanize(dimension || "")}` },
-  };
-
-  return {
-    datasets,
-    datasetsLoading,
-    datasetId: effectiveDatasetId,
-    setDatasetId,
-    dimension,
-    setDimension,
-    fn,
-    setFn,
-    metricColumn,
-    setMetricColumn,
-    chartType,
-    setChartType,
-    ready,
-    spec,
-    result,
-  };
-}
-
-function DatasetControls({ d }: { d: DatasetBuilder }) {
-  if (!d.datasetsLoading && (!d.datasets || d.datasets.length === 0)) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No datasets yet.{" "}
-        <Link to="/data" className="underline">
-          Upload a CSV
-        </Link>{" "}
-        to build a chart on it.
-      </p>
-    );
-  }
-
-  return (
-    <>
-      <div className="space-y-1.5">
-        <Label htmlFor="b-dataset">Dataset</Label>
-        <Select id="b-dataset" value={d.datasetId} onChange={(e) => d.setDatasetId(e.target.value)}>
-          {d.datasets?.map((ds) => (
-            <option key={ds.id} value={ds.id}>
-              {ds.name}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="b-dimension">Group by column</Label>
-        <Input
-          id="b-dimension"
-          value={d.dimension}
-          onChange={(e) => d.setDimension(e.target.value)}
-          placeholder="e.g. category"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="b-fn">Metric</Label>
-          <Select id="b-fn" value={d.fn} onChange={(e) => d.setFn(e.target.value as AggFunction)}>
-            {AGG_FUNCTIONS.map((f) => (
-              <option key={f} value={f}>
-                {humanize(f)}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="b-metric-col">Column</Label>
-          <Input
-            id="b-metric-col"
-            value={d.metricColumn}
-            onChange={(e) => d.setMetricColumn(e.target.value)}
-            placeholder={d.fn === "count" ? "(not needed)" : "e.g. amount"}
-            disabled={d.fn === "count"}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="b-type">Chart type</Label>
-        <Select
-          id="b-type"
-          value={d.chartType}
-          onChange={(e) => d.setChartType(e.target.value as ChartType)}
-        >
-          {CHART_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {humanize(t)}
-            </option>
-          ))}
-        </Select>
-      </div>
-    </>
-  );
-}
-
-function DatasetPreview({ d }: { d: DatasetBuilder }) {
-  const { data, isLoading, isError, error } = d.result;
-  const hasData = !!data && data.row_count > 0;
-  const noDatasets = !d.datasetsLoading && (!d.datasets || d.datasets.length === 0);
-
-  return (
-    <Card className="bg-card/70">
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Preview</CardTitle>
-        {d.ready && hasData && (
-          <div className="flex flex-wrap gap-2">
-            <SaveChartButton
-              spec={d.spec}
-              defaultName={d.spec.options?.title ?? "Chart"}
-              sourceKind="dataset"
-              sourceRef={d.datasetId || null}
-            />
-            <AddToDashboard spec={d.spec} title={d.spec.options?.title || "Chart"} />
-          </div>
-        )}
-      </CardHeader>
-      <CardContent>
-        {noDatasets ? (
-          <EmptyState
-            icon={<Database className="h-6 w-6" />}
-            title="No datasets to build from"
-            description="Upload a CSV first, then come back to build charts."
-            action={
-              <Button asChild>
-                <Link to="/data">Go to data sources</Link>
-              </Button>
-            }
-          />
-        ) : !d.ready ? (
-          <EmptyState
-            icon={<BarChart3 className="h-6 w-6" />}
-            title="Configure your chart"
-            description="Choose a group-by column (and a metric column for sum/avg/min/max) to see a preview."
-          />
-        ) : isLoading ? (
-          <div className="flex h-72 items-center justify-center">
-            <Spinner label="Running query" />
-          </div>
-        ) : isError ? (
-          <Alert variant="destructive">
-            <AlertTitle>Query failed</AlertTitle>
-            <AlertDescription>
-              {error instanceof Error ? error.message : "Check your column names."}
-            </AlertDescription>
-          </Alert>
-        ) : hasData ? (
-          <ChartRenderer
-            spec={d.spec}
-            data={data}
-            title={d.spec.options?.title ?? undefined}
-            className="h-80"
-          />
-        ) : (
-          <EmptyState
-            icon={<BarChart3 className="h-6 w-6" />}
-            title="No data to chart"
-            description={`Nothing grouped by "${d.dimension}". Check the column name matches a CSV header.`}
           />
         )}
       </CardContent>

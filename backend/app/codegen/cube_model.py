@@ -127,9 +127,13 @@ def _render_measure(m: MeasureDef) -> str:
 
 
 def _render_join(j: JoinDef) -> str:
-    # All identifiers (target cube + both key columns) → safe inside the template.
+    # All identifiers (target cube + every key column) → safe inside the template.
     # ``${CUBE}`` is this cube's alias; ``${<target>}`` is the joined cube's alias.
-    sql = f"`${{CUBE}}.{j.local_key} = ${{{j.name}}}.{j.foreign_key}`"
+    # Composite joins AND each column equality together (#6).
+    conditions = " AND ".join(
+        f"${{CUBE}}.{local} = ${{{j.name}}}.{foreign}" for local, foreign in j.key_pairs
+    )
+    sql = f"`{conditions}`"
     return f"    {j.name}: {{ relationship: `{j.relationship}`, sql: {sql} }}"
 
 

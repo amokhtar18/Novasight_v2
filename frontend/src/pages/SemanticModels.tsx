@@ -15,6 +15,8 @@ import {
   useCreateSemanticModelDef,
   useDeleteSemanticModelDef,
   useSemanticModelDefs,
+  useServingColumns,
+  useServingTables,
   useUpdateSemanticModelDef,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -36,6 +38,7 @@ import { formatRelativeTime } from "@/lib/format";
 import type {
   DimensionType,
   MeasureType,
+  SemanticJoinDef,
   SemanticJoinRelationship,
   SemanticModelDefCreate,
   SemanticModelDefRead,
@@ -94,6 +97,10 @@ export function SemanticModels() {
   const isEdit = editingId !== null;
   const saving = createModel.isPending || updateModel.isPending;
 
+  // Serving-layer introspection (#6): base-table + column suggestions for the wizard.
+  const { data: servingTables } = useServingTables();
+  const { data: servingColumns } = useServingColumns(baseTable.trim() || null);
+
   function reset() {
     setName("");
     setBaseTable("");
@@ -126,8 +133,9 @@ export function SemanticModels() {
       (m.config.joins ?? []).map((j) => ({
         name: j.name,
         relationship: j.relationship,
-        localKey: j.local_key,
-        foreignKey: j.foreign_key,
+        // Show composite keys as comma-separated; fall back to the single-key form.
+        localKey: (j.local_keys ?? (j.local_key ? [j.local_key] : [])).join(", "),
+        foreignKey: (j.foreign_keys ?? (j.foreign_key ? [j.foreign_key] : [])).join(", "),
       }))
     );
     setOpen(true);
@@ -144,14 +152,19 @@ export function SemanticModels() {
     const cleanDimensions = dimensions
       .filter((d) => d.name.trim())
       .map((d) => ({ name: d.name.trim(), type: d.type, sql: d.sql.trim() }));
-    const cleanJoins = joins
+    // Keys may be comma-separated for multi-column joins (#6) → local_keys/foreign_keys.
+    const splitKeys = (raw: string): string[] =>
+      raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const cleanJoins: SemanticJoinDef[] = joins
       .filter((j) => j.name.trim() && j.localKey.trim() && j.foreignKey.trim())
-      .map((j) => ({
-        name: j.name.trim(),
-        relationship: j.relationship,
-        local_key: j.localKey.trim(),
-        foreign_key: j.foreignKey.trim(),
-      }));
+      .map((j): SemanticJoinDef => {
+        const locals = splitKeys(j.localKey);
+        const foreigns = splitKeys(j.foreignKey);
+        const base = { name: j.name.trim(), relationship: j.relationship };
+        return locals.length > 1 || foreigns.length > 1
+          ? { ...base, local_keys: locals, foreign_keys: foreigns }
+          : { ...base, local_key: locals[0], foreign_key: foreigns[0] };
+      });
 
     if (!name.trim() || !baseTable.trim()) {
       toast.error("Name and base table are required");
@@ -159,6 +172,13 @@ export function SemanticModels() {
     }
     if (cleanMeasures.length === 0 && cleanDimensions.length === 0) {
       toast.error("Add at least one measure or dimension");
+      return;
+    }
+    const mismatched = cleanJoins.find(
+      (j) => j.local_keys && j.local_keys.length !== (j.foreign_keys?.length ?? 0)
+    );
+    if (mismatched) {
+      toast.error("Each join needs the same number of local and target columns");
       return;
     }
 
@@ -309,7 +329,22 @@ export function SemanticModels() {
                 value={baseTable}
                 onChange={(e) => setBaseTable(e.target.value)}
                 placeholder="e.g. mart_sales"
+                list="sm-tables"
               />
+              {/* Serving introspection (#6): pick a mart, and its columns drive the
+                  suggestions below. Free text is still allowed (e.g. a not-yet-built mart). */}
+              <datalist id="sm-tables">
+                {(servingTables ?? []).map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+              <datalist id="sm-columns">
+                {(servingColumns ?? []).map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.type}
+                  </option>
+                ))}
+              </datalist>
             </div>
           </div>
 
@@ -343,12 +378,13 @@ export function SemanticModels() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Column" htmlFor={`m-sql-${i}`}>
+                <Field label="Column / expression" htmlFor={`m-sql-${i}`}>
                   <Input
                     id={`m-sql-${i}`}
                     value={row.sql}
                     onChange={(e) => setMeasures(update(measures, i, { sql: e.target.value }))}
-                    placeholder={row.type === "count" ? "(optional)" : "amount"}
+                    placeholder={row.type === "count" ? "(optional)" : "amount or if(paid, amount, 0)"}
+                    list="sm-columns"
                   />
                 </Field>
                 <RemoveButton
@@ -389,12 +425,13 @@ export function SemanticModels() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Column" htmlFor={`d-sql-${i}`}>
+                <Field label="Column / expression" htmlFor={`d-sql-${i}`}>
                   <Input
                     id={`d-sql-${i}`}
                     value={row.sql}
                     onChange={(e) => setDimensions(update(dimensions, i, { sql: e.target.value }))}
-                    placeholder="region"
+                    placeholder="region or upper(region)"
+                    list="sm-columns"
                   />
                 </Field>
                 <RemoveButton
@@ -444,20 +481,21 @@ export function SemanticModels() {
                       ))}
                     </Select>
                   </Field>
-                  <Field label="This column" htmlFor={`j-local-${i}`}>
+                  <Field label="This column(s)" htmlFor={`j-local-${i}`}>
                     <Input
                       id={`j-local-${i}`}
                       value={row.localKey}
                       onChange={(e) => setJoins(update(joins, i, { localKey: e.target.value }))}
-                      placeholder="customer_id"
+                      placeholder="customer_id (or a, b)"
+                      list="sm-columns"
                     />
                   </Field>
-                  <Field label="Target column" htmlFor={`j-foreign-${i}`}>
+                  <Field label="Target column(s)" htmlFor={`j-foreign-${i}`}>
                     <Input
                       id={`j-foreign-${i}`}
                       value={row.foreignKey}
                       onChange={(e) => setJoins(update(joins, i, { foreignKey: e.target.value }))}
-                      placeholder="id"
+                      placeholder="id (or a, b)"
                     />
                   </Field>
                   <RemoveButton

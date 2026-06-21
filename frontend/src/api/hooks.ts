@@ -31,6 +31,8 @@ import {
   deleteSource,
   deleteUser,
   deprovisionTenant,
+  getAiHealth,
+  getDbtLineage,
   getDashboard,
   getHealth,
   getMe,
@@ -46,6 +48,8 @@ import {
   listSchedules,
   listSemanticModelDefs,
   listSemanticModels,
+  listServingColumns,
+  listServingTables,
   listSourceEngines,
   listSourceKinds,
   listSources,
@@ -53,6 +57,7 @@ import {
   listUsers,
   login,
   logout,
+  postAssistant,
   postChat,
   postInsight,
   postNLChart,
@@ -76,6 +81,7 @@ import {
 } from "./client";
 import { useAuthStore } from "@/store/authStore";
 import type {
+  AssistantRequest,
   ChartCreate,
   ChatRequest,
   DashboardCreate,
@@ -119,6 +125,7 @@ export const queryKeys = {
   recentRuns: () => ["pipelines", "runs", "recent"] as const,
   schedules: () => ["schedules"] as const,
   dbtModels: () => ["dbt-models"] as const,
+  dbtLineage: () => ["dbt-models", "lineage"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
   charts: () => ["charts"] as const,
   dashboards: () => ["dashboards"] as const,
@@ -236,6 +243,13 @@ export function useChat() {
   });
 }
 
+/** Mutation: the unified assistant — grounded agent over chat + charts + insights. */
+export function useAssistant() {
+  return useMutation({
+    mutationFn: (request: AssistantRequest) => postAssistant(request),
+  });
+}
+
 /** Mutation: NL→SQL — translate a question to validated SQL and execute it. */
 export function useNLQuery() {
   return useMutation({
@@ -247,6 +261,17 @@ export function useNLQuery() {
 export function useInsight() {
   return useMutation({
     mutationFn: (request: InsightRequest) => postInsight(request),
+  });
+}
+
+/**
+ * Mutation: probe the configured AI provider/key (the Settings "Test connection").
+ * A mutation (not a query) so it only fires on an explicit click — the probe spends
+ * a few tokens and must not run on mount or refetch.
+ */
+export function useAiHealth() {
+  return useMutation({
+    mutationFn: () => getAiHealth(),
   });
 }
 
@@ -335,6 +360,33 @@ export function useUpdateSemanticModelDef() {
       void client.invalidateQueries({ queryKey: queryKeys.semanticModelDefs() });
       void client.invalidateQueries({ queryKey: queryKeys.semanticModels() });
     },
+  });
+}
+
+/** Query: the tenant's serving (ClickHouse) tables — base-table options for the wizard. */
+export function useServingTables() {
+  return useQuery({
+    queryKey: ["serving", "tables"] as const,
+    queryFn: listServingTables,
+    staleTime: 5 * 60_000,
+    retry: 0,
+  });
+}
+
+/**
+ * Query: a serving table's columns — column suggestions for measures/dimensions.
+ * Disabled until a base table is chosen so it only runs when relevant.
+ */
+export function useServingColumns(table: string | null) {
+  return useQuery({
+    queryKey: ["serving", "columns", table] as const,
+    queryFn: () => {
+      if (!table) throw new Error("a table is required");
+      return listServingColumns(table);
+    },
+    enabled: !!table,
+    staleTime: 5 * 60_000,
+    retry: 0,
   });
 }
 
@@ -553,6 +605,19 @@ export function useDeleteSchedule() {
 /** Query: the tenant's dbt model definitions. */
 export function useDbtModels() {
   return useQuery({ queryKey: queryKeys.dbtModels(), queryFn: listDbtModels });
+}
+
+/**
+ * Query: the tenant's dbt dependency DAG (#5). Disabled until `enabled` so it only
+ * runs when the Lineage tab is opened.
+ */
+export function useDbtLineage(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.dbtLineage(),
+    queryFn: getDbtLineage,
+    enabled,
+    staleTime: 60_000,
+  });
 }
 
 /** Mutation: define a dbt model. Invalidates the list. */

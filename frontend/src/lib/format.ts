@@ -33,6 +33,30 @@ export function formatRelativeTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/**
+ * Compact elapsed time between two ISO timestamps, e.g. "1m 5s", "320 ms", "2h 3m".
+ * Null-safe: returns "—" when either bound is missing/invalid or the end precedes
+ * the start (e.g. a run that hasn't finished yet).
+ */
+export function formatDuration(
+  startIso: string | null | undefined,
+  endIso: string | null | undefined
+): string {
+  if (!startIso || !endIso) return "—";
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return "—";
+  const ms = end - start;
+  if (ms < 1000) return `${ms} ms`;
+  const totalSecs = Math.round(ms / 1000);
+  const secs = totalSecs % 60;
+  const mins = Math.floor(totalSecs / 60) % 60;
+  const hours = Math.floor(totalSecs / 3600);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
 /** Format a cell value for display in a table (null-safe, locale-aware numbers). */
 export function formatCell(value: unknown): string {
   if (value === null || value === undefined) return "—";

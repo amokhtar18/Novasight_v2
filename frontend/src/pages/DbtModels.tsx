@@ -7,8 +7,19 @@
  * run materializes it to ClickHouse.
  */
 
-import { useState } from "react";
-import { Boxes, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Boxes,
+  LayoutGrid,
+  List,
+  Loader2,
+  Network,
+  Pencil,
+  Play,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -19,7 +30,9 @@ import {
   useUpdateDbtModel,
 } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { LineageView } from "@/components/dbt/LineageView";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -34,6 +47,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatRelativeTime } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import type {
   DbtIncrementalStrategy,
   DbtLayer,
@@ -95,6 +109,28 @@ export function DbtModels() {
   const [strategy, setStrategy] = useState<DbtIncrementalStrategy>("merge");
   const [onSchemaChange, setOnSchemaChange] = useState<DbtOnSchemaChange>("ignore");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  // View + filters (#4): tiles⇄list, search by name, and layer/materialization/status.
+  const [view, setView] = useState<"tiles" | "list">("tiles");
+  const [search, setSearch] = useState("");
+  const [layerFilter, setLayerFilter] = useState<"all" | DbtLayer>("all");
+  const [matFilter, setMatFilter] = useState<"all" | DbtMaterialization>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const [tab, setTab] = useState<"models" | "lineage">("models");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (models ?? []).filter((m) => {
+      if (q && !m.name.toLowerCase().includes(q)) return false;
+      if (layerFilter !== "all" && m.layer !== layerFilter) return false;
+      if (matFilter !== "all" && m.materialization !== matFilter) return false;
+      if (statusFilter === "enabled" && !m.enabled) return false;
+      if (statusFilter === "disabled" && m.enabled) return false;
+      return true;
+    });
+  }, [models, search, layerFilter, matFilter, statusFilter]);
+
+  const isRunning = (id: string) => runModel.isPending && runModel.variables === id;
 
   const isEdit = editingId !== null;
   const saving = createModel.isPending || updateModel.isPending;
@@ -218,6 +254,19 @@ export function DbtModels() {
         }
       />
 
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "models" | "lineage")}>
+        <TabsList>
+          <TabsTrigger value="models">
+            <Boxes className="h-4 w-4" aria-hidden />
+            Models
+          </TabsTrigger>
+          <TabsTrigger value="lineage">
+            <Network className="h-4 w-4" aria-hidden />
+            Lineage
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="models" className="mt-4">
+
       {isLoading ? (
         <div className="flex h-48 items-center justify-center">
           <Spinner label="Loading models" />
@@ -235,62 +284,74 @@ export function DbtModels() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {models.map((m) => (
-            <div
-              key={m.id}
-              className="group relative rounded-xl border bg-card/70 p-5 transition-colors hover:border-primary/50"
-            >
-              <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Boxes className="h-5 w-5" aria-hidden />
-              </span>
-              <p className="truncate font-medium">{m.name}</p>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {m.layer} · {m.materialization}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="secondary">
-                  {m.tests.length} test{m.tests.length === 1 ? "" : "s"}
-                </Badge>
-                {!m.enabled && <Badge variant="info">disabled</Badge>}
-              </div>
-              <p className="mt-3 text-[0.7rem] text-muted-foreground">
-                Updated {formatRelativeTime(m.updated_at)}
-              </p>
-              <button
-                type="button"
-                onClick={() => handleRun(m.id, m.name)}
-                disabled={runModel.isPending && runModel.variables === m.id}
-                aria-label={`Run ${m.name}`}
-                title="Build now via Dagster"
-                className="absolute right-[4.75rem] top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-100 disabled:cursor-not-allowed"
-              >
-                {runModel.isPending && runModel.variables === m.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(m)}
-                aria-label={`Edit ${m.name}`}
-                className="absolute right-11 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(m.id)}
-                aria-label={`Delete ${m.name}`}
-                className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+        <>
+          <DbtToolbar
+            view={view}
+            setView={setView}
+            search={search}
+            setSearch={setSearch}
+            layerFilter={layerFilter}
+            setLayerFilter={setLayerFilter}
+            matFilter={matFilter}
+            setMatFilter={setMatFilter}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            count={filtered.length}
+            total={models.length}
+          />
+          {filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              No models match these filters.
+            </p>
+          ) : view === "tiles" ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={m}
+                  running={isRunning(m.id)}
+                  onRun={() => handleRun(m.id, m.name)}
+                  onEdit={() => openEdit(m)}
+                  onDelete={() => setPendingDelete(m.id)}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border bg-card/70">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Name</th>
+                    <th className="px-4 py-2 font-medium">Layer</th>
+                    <th className="px-4 py-2 font-medium">Materialization</th>
+                    <th className="px-4 py-2 font-medium">Tests</th>
+                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">Updated</th>
+                    <th className="px-4 py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filtered.map((m) => (
+                    <ModelRow
+                      key={m.id}
+                      model={m}
+                      running={isRunning(m.id)}
+                      onRun={() => handleRun(m.id, m.name)}
+                      onEdit={() => openEdit(m)}
+                      onDelete={() => setPendingDelete(m.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
+        </TabsContent>
+        <TabsContent value="lineage" className="mt-4">
+          <LineageView />
+        </TabsContent>
+      </Tabs>
 
       {/* Create / edit wizard */}
       <Dialog
@@ -549,5 +610,232 @@ export function DbtModels() {
         </DialogFooter>
       </Dialog>
     </div>
+  );
+}
+
+// --- toolbar + view components (#4) ----------------------------------------
+
+function DbtToolbar({
+  view,
+  setView,
+  search,
+  setSearch,
+  layerFilter,
+  setLayerFilter,
+  matFilter,
+  setMatFilter,
+  statusFilter,
+  setStatusFilter,
+  count,
+  total,
+}: {
+  view: "tiles" | "list";
+  setView: (v: "tiles" | "list") => void;
+  search: string;
+  setSearch: (v: string) => void;
+  layerFilter: "all" | DbtLayer;
+  setLayerFilter: (v: "all" | DbtLayer) => void;
+  matFilter: "all" | DbtMaterialization;
+  setMatFilter: (v: "all" | DbtMaterialization) => void;
+  statusFilter: "all" | "enabled" | "disabled";
+  setStatusFilter: (v: "all" | "enabled" | "disabled") => void;
+  count: number;
+  total: number;
+}) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-1 flex-wrap items-center gap-2">
+        <div className="relative min-w-[12rem] flex-1">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search models…"
+            aria-label="Search models"
+            className="pl-8"
+          />
+        </div>
+        <Select
+          aria-label="Filter by layer"
+          value={layerFilter}
+          onChange={(e) => setLayerFilter(e.target.value as "all" | DbtLayer)}
+        >
+          <option value="all">All layers</option>
+          {LAYERS.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </Select>
+        <Select
+          aria-label="Filter by materialization"
+          value={matFilter}
+          onChange={(e) => setMatFilter(e.target.value as "all" | DbtMaterialization)}
+        >
+          <option value="all">All materializations</option>
+          {MATERIALIZATIONS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </Select>
+        <Select
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={(e) =>
+            setStatusFilter(e.target.value as "all" | "enabled" | "disabled")
+          }
+        >
+          <option value="all">All statuses</option>
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </Select>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {count} of {total}
+        </span>
+        <div className="inline-flex rounded-lg border p-0.5">
+          {(
+            [
+              ["tiles", LayoutGrid, "Tile view"],
+              ["list", List, "List view"],
+            ] as const
+          ).map(([v, Icon, label]) => (
+            <button
+              key={v}
+              type="button"
+              aria-label={label}
+              aria-pressed={view === v}
+              onClick={() => setView(v)}
+              className={cn(
+                "rounded-md p-1.5 transition-colors",
+                view === v
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ModelViewProps {
+  model: DbtModelDefRead;
+  running: boolean;
+  onRun: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function ModelCard({ model: m, running, onRun, onEdit, onDelete }: ModelViewProps) {
+  return (
+    <div className="group relative rounded-xl border bg-card/70 p-5 transition-colors hover:border-primary/50">
+      <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Boxes className="h-5 w-5" aria-hidden />
+      </span>
+      <p className="truncate font-medium">{m.name}</p>
+      <p className="mt-1 truncate text-xs text-muted-foreground">
+        {m.layer} · {m.materialization}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Badge variant="secondary">
+          {m.tests.length} test{m.tests.length === 1 ? "" : "s"}
+        </Badge>
+        {m.incremental && (
+          <Badge variant="secondary">{m.incremental.incremental_strategy ?? "incremental"}</Badge>
+        )}
+        {!m.enabled && <Badge variant="info">disabled</Badge>}
+      </div>
+      <p className="mt-3 text-[0.7rem] text-muted-foreground">
+        Updated {formatRelativeTime(m.updated_at)}
+      </p>
+      <button
+        type="button"
+        onClick={onRun}
+        disabled={running}
+        aria-label={`Run ${m.name}`}
+        title="Build now via Dagster"
+        className="absolute right-[4.75rem] top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-100"
+      >
+        {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+      </button>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit ${m.name}`}
+        className="absolute right-11 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={`Delete ${m.name}`}
+        className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function ModelRow({ model: m, running, onRun, onEdit, onDelete }: ModelViewProps) {
+  return (
+    <tr className="hover:bg-accent/30">
+      <td className="px-4 py-2 font-medium">{m.name}</td>
+      <td className="px-4 py-2 text-muted-foreground">{m.layer}</td>
+      <td className="px-4 py-2 text-muted-foreground">{m.materialization}</td>
+      <td className="px-4 py-2">
+        <Badge variant="secondary">{m.tests.length}</Badge>
+      </td>
+      <td className="px-4 py-2">
+        {m.enabled ? (
+          <Badge variant="success">enabled</Badge>
+        ) : (
+          <Badge variant="info">disabled</Badge>
+        )}
+      </td>
+      <td className="px-4 py-2 text-xs text-muted-foreground">
+        {formatRelativeTime(m.updated_at)}
+      </td>
+      <td className="px-4 py-2">
+        <div className="flex justify-end gap-1">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={running}
+            aria-label={`Run ${m.name}`}
+            title="Build now via Dagster"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed"
+          >
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${m.name}`}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={`Delete ${m.name}`}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

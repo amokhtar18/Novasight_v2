@@ -49,7 +49,13 @@ class Dashboard(TimestampMixin, Base):
 
 
 class DashboardTile(TimestampMixin, Base):
-    """One placed chart on a dashboard (grid position + size)."""
+    """One placed object on a dashboard (grid position + size).
+
+    A tile is a ``kind`` of content (#10): a pinned ``chart`` (the original kind), or a
+    decoration — ``text``, ``markdown``, ``image``, ``divider``, or ``filter``. Chart
+    tiles carry a ``chart_id``; the rest carry their payload in ``content`` (and have a
+    null ``chart_id``).
+    """
 
     __tablename__ = "dashboard_tiles"
 
@@ -60,10 +66,17 @@ class DashboardTile(TimestampMixin, Base):
     dashboard_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("dashboards.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    chart_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("charts.id", ondelete="CASCADE"), nullable=False
+    # What this tile is: "chart" | "text" | "markdown" | "image" | "divider" | "filter".
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="chart", server_default="chart"
     )
-    # Optional per-tile title override (defaults to the chart's name).
+    # A pinned chart (chart tiles only); null for decoration tiles.
+    chart_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("charts.id", ondelete="CASCADE"), nullable=True
+    )
+    # Payload for non-chart tiles (text/markdown body, image url, filter member, …).
+    content: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Optional per-tile title override (defaults to the chart's name for chart tiles).
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Ordering + simple grid layout (12-col grid convention; w/h in grid units).
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

@@ -20,9 +20,6 @@ const Login = lazy(() =>
 const Overview = lazy(() =>
   import("@/pages/Overview").then((m) => ({ default: m.Overview }))
 );
-const DataSources = lazy(() =>
-  import("@/pages/DataSources").then((m) => ({ default: m.DataSources }))
-);
 const DatasetDetail = lazy(() =>
   import("@/pages/DatasetDetail").then((m) => ({ default: m.DatasetDetail }))
 );
@@ -38,21 +35,20 @@ const Operations = lazy(() =>
 const DbtModels = lazy(() =>
   import("@/pages/DbtModels").then((m) => ({ default: m.DbtModels }))
 );
-const Chat = lazy(() => import("@/pages/Chat").then((m) => ({ default: m.Chat })));
-const Explore = lazy(() =>
-  import("@/pages/Explore").then((m) => ({ default: m.Explore }))
+const Assistant = lazy(() =>
+  import("@/pages/Assistant").then((m) => ({ default: m.Assistant }))
 );
 const Builder = lazy(() =>
   import("@/pages/Builder").then((m) => ({ default: m.Builder }))
+);
+const Charts = lazy(() =>
+  import("@/pages/Charts").then((m) => ({ default: m.Charts }))
 );
 const Dashboards = lazy(() =>
   import("@/pages/Dashboards").then((m) => ({ default: m.Dashboards }))
 );
 const DashboardDetail = lazy(() =>
   import("@/pages/DashboardDetail").then((m) => ({ default: m.DashboardDetail }))
-);
-const Insights = lazy(() =>
-  import("@/pages/Insights").then((m) => ({ default: m.Insights }))
 );
 const Admin = lazy(() => import("@/pages/Admin").then((m) => ({ default: m.Admin })));
 const Settings = lazy(() =>
@@ -92,18 +88,22 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<Overview />} />
-          <Route path="data" element={<DataSources />} />
+          {/* The standalone Data sources page is retired into the Ingest hub (#1). */}
+          <Route path="data" element={<Navigate to="/pipelines?tab=sources" replace />} />
           <Route path="data/:datasetId" element={<DatasetDetail />} />
           <Route path="pipelines" element={<Pipelines />} />
           <Route path="operations" element={<Operations />} />
           <Route path="transforms" element={<DbtModels />} />
           <Route path="models" element={<SemanticModels />} />
-          <Route path="explore" element={<Explore />} />
-          <Route path="chat" element={<Chat />} />
+          {/* Ask AI / Chat / Insights are unified into the Assistant (#7/#11). */}
+          <Route path="assistant" element={<Assistant />} />
+          <Route path="explore" element={<Navigate to="/assistant" replace />} />
+          <Route path="chat" element={<Navigate to="/assistant" replace />} />
+          <Route path="insights" element={<Navigate to="/assistant" replace />} />
           <Route path="build" element={<Builder />} />
+          <Route path="charts" element={<Charts />} />
           <Route path="dashboards" element={<Dashboards />} />
           <Route path="dashboards/:dashboardId" element={<DashboardDetail />} />
-          <Route path="insights" element={<Insights />} />
           <Route path="admin" element={<Admin />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />

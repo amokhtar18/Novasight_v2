@@ -26,6 +26,8 @@ self-contained prompt you paste into Claude Code, one at a time.
 - `phase-4-ai-layer.md` — semantic layer, NL→SQL, NL→chart, insights
 - `phase-5-reporting-governance.md` — Excel reports, alerts, catalog, encryption
 - `phase-6-scale-out.md` — Helm/K8s, cloud multi-tenant, UX polish
+- `phase-7-fine-tuning.md` — ingest hub, M:N schedules, dbt views + lineage, semantic
+  wizard v2, charts/dashboards v2, unified AI assistant + agent framework
 
 Golden rule reminder: **never hardcode configuration in the backend.** Every task that
 introduces a config value must add it to settings + `.env.example` + `docs/CONFIGURATION.md`.

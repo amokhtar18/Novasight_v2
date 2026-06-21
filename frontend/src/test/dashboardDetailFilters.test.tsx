@@ -18,6 +18,7 @@ vi.mock("react-router-dom", () => ({
 vi.mock("@/api/hooks", () => ({
   useDashboard: vi.fn(),
   useUpdateDashboard: vi.fn(),
+  useAddDashboardTile: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 vi.mock("@/components/dashboard/DashboardGrid", () => ({
   DashboardGrid: ({

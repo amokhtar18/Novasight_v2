@@ -68,7 +68,9 @@ const spec: ChartSpec = {
 
 const tile: DashboardTileRead = {
   id: "tile-1",
+  kind: "chart",
   chart_id: "chart-1",
+  content: null,
   title: "Region totals",
   position: 0,
   x: 0,

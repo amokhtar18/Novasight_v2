@@ -149,3 +149,63 @@ def test_field_name_rejects_injection() -> None:
                 "encoding": {"x": "month; drop table", "series": [{"field": "sales"}]},
             }
         )
+
+
+# --- v2 chart types + formatting options (#8) -------------------------------
+
+@pytest.mark.parametrize("chart_type", ["hbar", "combo", "donut", "funnel", "treemap", "radar"])
+def test_new_axis_chart_types_accept_x_and_series(chart_type: str) -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": chart_type,
+            "query": {"metric_refs": ["sales.total"]},
+            "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+        }
+    )
+    assert spec.type == chart_type
+
+
+def test_gauge_may_omit_x() -> None:
+    # gauge is a single-value dial — like number/table it needs no category axis.
+    spec = ChartSpec.model_validate(
+        {
+            "type": "gauge",
+            "query": {"metric_refs": ["sales.total"]},
+            "encoding": {"series": [{"field": "sales.total"}]},
+        }
+    )
+    assert spec.type == "gauge"
+    assert spec.encoding.x is None
+
+
+def test_advanced_options_validate() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {"metric_refs": ["sales.total"]},
+            "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+            "options": {
+                "legend_position": "bottom",
+                "sort": "value_desc",
+                "data_labels": True,
+                "log_scale": True,
+                "number_format": {"style": "currency", "currency": "$", "decimals": 2},
+                "palette": ["#3b82f6", "#22c55e"],
+            },
+        }
+    )
+    assert spec.options.number_format.style == "currency"
+    assert spec.options.palette == ["#3b82f6", "#22c55e"]
+    assert spec.options.sort == "value_desc"
+
+
+def test_invalid_palette_colour_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ChartSpec.model_validate(
+            {
+                "type": "bar",
+                "query": {"metric_refs": ["sales.total"]},
+                "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+                "options": {"palette": ["not-a-color"]},
+            }
+        )

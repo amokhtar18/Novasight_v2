@@ -8,10 +8,13 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 import type { EngineSpec, PipelineRead, SourceConnectionRead } from "@/types/api";
 
 vi.mock("@/api/hooks", () => ({
+  useDatasets: vi.fn(),
+  useUploadDataset: vi.fn(),
   useSources: vi.fn(),
   useSourceKinds: vi.fn(),
   useSourceEngines: vi.fn(),
@@ -83,6 +86,15 @@ function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRea
   createScheduleMutate = vi.fn();
   introspectMutateAsync = vi.fn().mockResolvedValue({ schemas: [], tables: [], columns: [] });
   // @ts-expect-error partial mock
+  vi.mocked(hooks.useDatasets).mockReturnValue(query([]));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useUploadDataset).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  });
+  // @ts-expect-error partial mock
   vi.mocked(hooks.useSources).mockReturnValue(query(opts.sources ?? []));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useSourceKinds).mockReturnValue(query(["sql_database", "filesystem"]));
@@ -124,17 +136,32 @@ function setup(opts: { sources?: SourceConnectionRead[]; pipelines?: PipelineRea
 
 afterEach(() => vi.clearAllMocks());
 
+// The page is the tabbed Ingest hub (#1): "Data sources" is the default tab; the
+// pipeline + schedule flows live behind the "Pipelines" tab. The hub uses router
+// hooks, so renders are wrapped in a MemoryRouter.
+function renderHub() {
+  return render(
+    <MemoryRouter>
+      <Pipelines />
+    </MemoryRouter>
+  );
+}
+function goToPipelinesTab() {
+  fireEvent.click(screen.getByRole("tab", { name: "Pipelines" }));
+}
+
 describe("Pipelines page", () => {
   it("shows empty states for sources and pipelines", () => {
     setup({});
-    render(<Pipelines />);
+    renderHub();
     expect(screen.getByText(/no sources yet/i)).toBeInTheDocument();
+    goToPipelinesTab();
     expect(screen.getByText(/no pipelines yet/i)).toBeInTheDocument();
   });
 
   it("creates a source with the selected engine and its default port", () => {
     setup({});
-    render(<Pipelines />);
+    renderHub();
 
     fireEvent.click(screen.getByRole("button", { name: /new source/i }));
     fireEvent.change(document.querySelector("#src-name")!, { target: { value: "wh" } });
@@ -170,7 +197,7 @@ describe("Pipelines page", () => {
       has_secret: true,
     };
     setup({ sources: [dbSource] });
-    render(<Pipelines />);
+    renderHub();
 
     fireEvent.click(screen.getByRole("button", { name: /edit warehouse/i }));
     fireEvent.change(document.querySelector("#src-database")!, { target: { value: "analytics" } });
@@ -193,7 +220,8 @@ describe("Pipelines page", () => {
   it("creates a pipeline from a file source (Details → Review)", () => {
     const fileSource: SourceConnectionRead = { ...source, id: "f1", name: "lake", kind: "filesystem" };
     setup({ sources: [fileSource] });
-    render(<Pipelines />);
+    renderHub();
+    goToPipelinesTab();
 
     fireEvent.click(screen.getByRole("button", { name: /new pipeline/i }));
     fireEvent.change(document.querySelector("#pl-name")!, { target: { value: "orders_daily" } });
@@ -234,7 +262,8 @@ describe("Pipelines page", () => {
         return { schemas: ["public"], tables: [], columns: [] };
       }
     );
-    render(<Pipelines />);
+    renderHub();
+    goToPipelinesTab();
 
     fireEvent.click(screen.getByRole("button", { name: /new pipeline/i }));
     fireEvent.change(document.querySelector("#pl-name")!, { target: { value: "orders_sync" } });
@@ -281,7 +310,8 @@ describe("Pipelines page", () => {
 
   it("runs a pipeline now", () => {
     setup({ sources: [source], pipelines: [pipeline] });
-    render(<Pipelines />);
+    renderHub();
+    goToPipelinesTab();
     fireEvent.click(screen.getByRole("button", { name: /^run$/i }));
     expect(runPipelineMutate).toHaveBeenCalledWith(
       "p1",
@@ -291,14 +321,15 @@ describe("Pipelines page", () => {
 
   it("schedules a pipeline via the cron builder (advanced mode)", () => {
     setup({ sources: [source], pipelines: [pipeline] });
-    render(<Pipelines />);
+    renderHub();
+    goToPipelinesTab();
     fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
     // The raw cron input lives under the builder's Advanced tab.
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
     fireEvent.change(document.querySelector("#sch-cron")!, { target: { value: "0 6 * * *" } });
     fireEvent.click(screen.getByRole("button", { name: /add schedule/i }));
     expect(createScheduleMutate).toHaveBeenCalledWith(
-      { name: "orders_daily schedule", target_id: "p1", cron: "0 6 * * *" },
+      { name: "orders_daily schedule", pipeline_ids: ["p1"], cron: "0 6 * * *" },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
     );
   });

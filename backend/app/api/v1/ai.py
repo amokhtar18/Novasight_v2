@@ -23,14 +23,17 @@ the authenticated JWT — never from the request body.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.ai.assistant import AssistantService, get_assistant_service
 from app.ai.chat import ChatService, get_chat_service
-from app.ai.gateway.provider import LLMProviderError
+from app.ai.gateway import LLMGateway, get_llm_gateway
+from app.ai.gateway.provider import LLMProviderError, LLMRequest
 from app.ai.insights import (
     InsightGuardrailError,
     InsightService,
@@ -45,6 +48,7 @@ from app.ai.nl_chart import (
 )
 from app.ai.nl_sql import NLToSQLService, SQLValidationError, get_nl_to_sql_service
 from app.ai.semantic.client import CubeAuthError, CubeQueryError
+from app.core.security import Principal, require_tenant_superuser
 from app.schemas.chart import ChartSpec
 from app.schemas.query import QueryResponse
 from app.tenancy.context import TenantContext, get_tenant_context
@@ -698,3 +702,163 @@ async def chat(
     return ChatResponse(
         answer=result.answer, tools_used=result.tools_used, chart=result.chart
     )
+
+
+# ---------------------------------------------------------------------------
+# Unified assistant (#7/#11): one grounded agent for chat, charts & insights
+# ---------------------------------------------------------------------------
+
+
+class AssistantRequest(BaseModel):
+    """Request body for POST /ai/assistant."""
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="A natural-language question or instruction about the tenant's data.",
+    )
+
+
+class AssistantResponse(BaseModel):
+    """Response for POST /ai/assistant.
+
+    Attributes:
+        answer: The assistant's grounded answer (figures trace to skill results).
+        tools_used: The grounded skills the assistant called (for transparency).
+        charts: Validated chart specs the assistant proposed (save/pin client-side).
+        insights: Guardrailed insight summaries the assistant produced.
+    """
+
+    answer: str = Field(description="Grounded natural-language answer.")
+    tools_used: list[str] = Field(description="Names of the skills the assistant called.")
+    charts: list[ChartSpec] = Field(
+        default_factory=list, description="Proposed charts to save/pin."
+    )
+    insights: list[str] = Field(
+        default_factory=list, description="Proposed insight summaries."
+    )
+
+
+@router.post(
+    "/assistant",
+    response_model=AssistantResponse,
+    status_code=200,
+    responses={503: {"description": "LLM provider or semantic layer unavailable"}},
+    summary="Unified assistant over the governed semantic layer (chat + charts + insights)",
+    description=(
+        "Runs the NovaSight agent (the #13 framework): the model may call only grounded, "
+        "tenant-scoped skills (list/query semantic models, validated NL→SQL, NL→chart, "
+        "insight summaries). Proposed charts + insights ride back on the reply for the "
+        "user to save/pin/confirm — nothing is persisted by the agent. The tenant scope "
+        "is resolved from the JWT; the model cannot widen it."
+    ),
+)
+async def assistant(
+    payload: AssistantRequest,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: AssistantService = Depends(get_assistant_service),  # noqa: B008
+) -> AssistantResponse:
+    """Answer a question over the tenant's governed semantic layer via the agent."""
+    try:
+        result = await svc.ask(ctx, payload.message)
+    except LLMProviderError as exc:
+        logger.error(
+            "Assistant LLM provider error: tenant_id=%r provider=%r status=%r",
+            ctx.tenant_id,
+            exc.provider,
+            exc.status_code,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="AI provider is temporarily unavailable. Please try again.",
+        ) from exc
+    return AssistantResponse(
+        answer=result.answer,
+        tools_used=result.tools_used,
+        charts=result.charts,
+        insights=result.insights,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Provider health probe (#12): a cheap live check of the configured AI key
+# ---------------------------------------------------------------------------
+
+
+class AIHealthResponse(BaseModel):
+    """Response for GET /ai/health — a live connectivity probe of the AI provider.
+
+    ``ok`` is True when a minimal completion round-trips. On failure the probe fails
+    *soft* (HTTP 200 with ``ok=False`` + a safe ``detail``) so the Settings "Test
+    connection" UI can render the status inline rather than treating a bad key as a
+    request error. The API key is never echoed (see the provider's safety guarantees).
+    """
+
+    ok: bool = Field(description="True when the provider answered a minimal probe.")
+    model: str | None = Field(default=None, description="Model that answered the probe.")
+    latency_ms: int | None = Field(default=None, description="Round-trip latency in ms.")
+    detail: str | None = Field(default=None, description="Safe status detail on failure.")
+
+
+def _safe_health_detail(exc: LLMProviderError) -> str:
+    """Map a provider error to a safe, user-facing status (never leaks the key)."""
+    if exc.status_code == 401:
+        return "Authentication failed — check the configured AI API key (AI__API_KEY)."
+    if exc.status_code == 429:
+        return "The key is valid but the provider is rate-limiting requests."
+    if exc.status_code is None:
+        return "Could not reach the AI provider — check the network and base URL."
+    return f"AI provider error (HTTP {exc.status_code})."
+
+
+@router.get(
+    "/health",
+    response_model=AIHealthResponse,
+    status_code=200,
+    summary="Probe the configured AI provider/key with a minimal completion",
+    description=(
+        "Sends a minimal completion through the LLM gateway to verify the configured "
+        "provider + API key actually work. Fails soft: provider/auth failures return "
+        "HTTP 200 with ok=False and a safe message (the key is never echoed). "
+        "Tenant-superuser only — the probe spends a few tokens."
+    ),
+)
+async def ai_health(
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    _: Principal = Depends(require_tenant_superuser),  # noqa: B008
+    gateway: LLMGateway = Depends(get_llm_gateway),  # noqa: B008
+) -> AIHealthResponse:
+    """Probe the AI provider with a minimal completion (#12).
+
+    Soft-fail contract: any ``LLMProviderError`` is mapped to a safe ``detail`` and
+    returned with ``ok=False`` (HTTP 200) — the key is never surfaced. The tenant
+    scope comes from the JWT; the probe carries no tenant data into the prompt.
+    """
+    start = time.perf_counter()
+    try:
+        resp = await gateway.complete(
+            LLMRequest(
+                system="You are a connectivity probe. Reply with a single word.",
+                user_message="Reply with the word: ok",
+                max_tokens=5,
+            ),
+            ctx=ctx,
+        )
+    except LLMProviderError as exc:
+        logger.warning(
+            "AI health probe failed: tenant_id=%r provider=%r status=%r",
+            ctx.tenant_id,
+            exc.provider,
+            exc.status_code,
+        )
+        return AIHealthResponse(ok=False, detail=_safe_health_detail(exc))
+
+    latency_ms = int((time.perf_counter() - start) * 1000)
+    logger.info(
+        "AI health probe ok: tenant_id=%r model=%r latency_ms=%d",
+        ctx.tenant_id,
+        resp.model,
+        latency_ms,
+    )
+    return AIHealthResponse(ok=True, model=resp.model, latency_ms=latency_ms)

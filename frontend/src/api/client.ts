@@ -14,6 +14,9 @@ import { loadConfig } from "@/lib/config";
 import { useAuthStore } from "@/store/authStore";
 import type {
   AccessTokenResponse,
+  AIHealthResponse,
+  AssistantRequest,
+  AssistantResponse,
   ChartCreate,
   ChatRequest,
   ChatResponse,
@@ -33,6 +36,7 @@ import type {
   HealthRead,
   InsightRequest,
   InsightResponse,
+  LineageGraph,
   LoginRequest,
   MeRead,
   NLChartRequest,
@@ -60,6 +64,7 @@ import type {
   SemanticModelDefUpdate,
   SemanticModelRead,
   SemanticQueryRequest,
+  ServingColumn,
   SuggestionsResponse,
   TenantProvisionRequest,
   TenantRead,
@@ -243,6 +248,11 @@ export async function updateDbtModel(
     { method: "PATCH", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
+}
+
+/** GET /dbt-models/lineage — the tenant's dbt dependency DAG (ref()/source() parse). */
+export async function getDbtLineage(): Promise<LineageGraph> {
+  return apiFetch<LineageGraph>("/dbt-models/lineage", {}, { Accept: "application/json" });
 }
 
 /** POST /dbt-models/{id}/run — build this model now via Dagster; returns the launched run. */
@@ -497,6 +507,24 @@ export async function deleteSemanticModelDef(id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Serving-layer introspection (semantic wizard dropdowns, #6)
+// ---------------------------------------------------------------------------
+
+/** GET /serving/tables — the tenant's serving (ClickHouse) table names. */
+export async function listServingTables(): Promise<string[]> {
+  return apiFetch<string[]>("/serving/tables", {}, { Accept: "application/json" });
+}
+
+/** GET /serving/tables/{table}/columns — a serving table's columns (name + type). */
+export async function listServingColumns(table: string): Promise<ServingColumn[]> {
+  return apiFetch<ServingColumn[]>(
+    `/serving/tables/${encodeURIComponent(table)}/columns`,
+    {},
+    { Accept: "application/json" }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Saved charts (tenant-scoped CRUD)
 // ---------------------------------------------------------------------------
 
@@ -662,6 +690,15 @@ export async function postChat(request: ChatRequest): Promise<ChatResponse> {
   );
 }
 
+/** POST /ai/assistant — the unified grounded agent (chat + charts + insights). */
+export async function postAssistant(request: AssistantRequest): Promise<AssistantResponse> {
+  return apiFetch<AssistantResponse>(
+    "/ai/assistant",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
 /** POST /ai/insights — summarise an already-computed result set. */
 export async function postInsight(request: InsightRequest): Promise<InsightResponse> {
   return apiFetch<InsightResponse>(
@@ -669,6 +706,15 @@ export async function postInsight(request: InsightRequest): Promise<InsightRespo
     { method: "POST", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );
+}
+
+/**
+ * GET /ai/health — probe the configured AI provider/key with a minimal completion.
+ * Fails soft server-side (200 with ok=false on a bad key), so this only throws on
+ * transport/auth errors, never on a "key doesn't work" result.
+ */
+export async function getAiHealth(): Promise<AIHealthResponse> {
+  return apiFetch<AIHealthResponse>("/ai/health", {}, { Accept: "application/json" });
 }
 
 /** POST /ai/datasets/{id}/suggestions — validated chart suggestions. */

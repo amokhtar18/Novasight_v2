@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pipeline import Pipeline
 from app.models.schedule import Schedule
+from app.models.schedule_pipeline import SchedulePipeline
 from app.services.schedules import ScheduleService
 
 _SESSION_SECRET = "test-session-secret-do-not-use-in-production-0123456789"
@@ -118,7 +119,7 @@ async def test_create_requires_superuser(
 ) -> None:
     tenant = await make_tenant("local")
     p = await _make_pipeline(session, tenant)
-    body = {"name": "nightly", "target_id": str(p.id), "cron": "0 2 * * *"}
+    body = {"name": "nightly", "pipeline_ids": [str(p.id)], "cron": "0 2 * * *"}
     assert client_with_db.post("/api/v1/schedules", headers=_auth(), json=body).status_code == 403
 
 
@@ -128,7 +129,7 @@ async def test_create_validates_cron(
 ) -> None:
     tenant = await make_tenant("local")
     p = await _make_pipeline(session, tenant)
-    bad = {"name": "x", "target_id": str(p.id), "cron": "not a cron"}
+    bad = {"name": "x", "pipeline_ids": [str(p.id)], "cron": "not a cron"}
     resp = client_with_db.post("/api/v1/schedules", headers=_auth("local", SU), json=bad)
     assert resp.status_code == 422
 
@@ -144,16 +145,18 @@ async def test_create_get_and_isolation(
     created = client_with_db.post(
         "/api/v1/schedules",
         headers=_auth("local", SU),
-        json={"name": "nightly", "target_id": str(p.id), "cron": "0 2 * * *"},
+        json={"name": "nightly", "pipeline_ids": [str(p.id)], "cron": "0 2 * * *"},
     )
     assert created.status_code == 201, created.text
     sid = created.json()["id"]
+    # The created schedule echoes its attached pipelines (#3).
+    assert created.json()["pipeline_ids"] == [str(p.id)]
 
     # other can't bind local's pipeline.
     cross = client_with_db.post(
         "/api/v1/schedules",
         headers=_auth("other", SU),
-        json={"name": "x", "target_id": str(p.id), "cron": "0 2 * * *"},
+        json={"name": "x", "pipeline_ids": [str(p.id)], "cron": "0 2 * * *"},
     )
     assert cross.status_code == 404
 
@@ -170,20 +173,22 @@ async def test_create_due_runs_enqueues_for_due_enabled_pipeline(
     enabled_pipe = await _make_pipeline(session, tenant, enabled=True)
     disabled_pipe = await _make_pipeline(session, tenant, enabled=False)
     # Every-minute cron → always due.
-    session.add(Schedule(
-        tenant_id=tenant.id, name="due", target_kind="pipeline",
-        target_id=enabled_pipe.id, cron="* * * * *", enabled=True,
-    ))
+    due = Schedule(tenant_id=tenant.id, name="due", target_kind="pipeline",
+                   target_id=enabled_pipe.id, cron="* * * * *", enabled=True)
     # Due, but its pipeline is disabled → skipped.
-    session.add(Schedule(
-        tenant_id=tenant.id, name="skip", target_kind="pipeline",
-        target_id=disabled_pipe.id, cron="* * * * *", enabled=True,
-    ))
+    skip = Schedule(tenant_id=tenant.id, name="skip", target_kind="pipeline",
+                    target_id=disabled_pipe.id, cron="* * * * *", enabled=True)
     # Disabled schedule → never dispatched.
-    session.add(Schedule(
-        tenant_id=tenant.id, name="off", target_kind="pipeline",
-        target_id=enabled_pipe.id, cron="* * * * *", enabled=False,
-    ))
+    off = Schedule(tenant_id=tenant.id, name="off", target_kind="pipeline",
+                   target_id=enabled_pipe.id, cron="* * * * *", enabled=False)
+    session.add_all([due, skip, off])
+    await session.flush()
+    # Fan-out reads the join table (#3): attach each schedule to its pipeline.
+    session.add_all([
+        SchedulePipeline(schedule_id=due.id, pipeline_id=enabled_pipe.id, tenant_id=tenant.id),
+        SchedulePipeline(schedule_id=skip.id, pipeline_id=disabled_pipe.id, tenant_id=tenant.id),
+        SchedulePipeline(schedule_id=off.id, pipeline_id=enabled_pipe.id, tenant_id=tenant.id),
+    ])
     await session.flush()
 
     enqueued: list[str] = []
@@ -194,3 +199,30 @@ async def test_create_due_runs_enqueues_for_due_enabled_pipeline(
     # Exactly one run: the due, enabled schedule on the enabled pipeline.
     assert len(run_ids) == 1
     assert enqueued == [str(run_ids[0])]
+
+
+@pytest.mark.asyncio
+async def test_create_due_runs_fans_out_to_all_attached_pipelines(
+    make_tenant: Any, session: AsyncSession
+) -> None:
+    # One reusable schedule attached to two enabled pipelines → two runs (#3).
+    tenant = await make_tenant("local")
+    p1 = await _make_pipeline(session, tenant, enabled=True)
+    p2 = await _make_pipeline(session, tenant, enabled=True)
+    sched = Schedule(tenant_id=tenant.id, name="nightly", target_kind="pipeline",
+                     target_id=p1.id, cron="* * * * *", enabled=True)
+    session.add(sched)
+    await session.flush()
+    session.add_all([
+        SchedulePipeline(schedule_id=sched.id, pipeline_id=p1.id, tenant_id=tenant.id),
+        SchedulePipeline(schedule_id=sched.id, pipeline_id=p2.id, tenant_id=tenant.id),
+    ])
+    await session.flush()
+
+    enqueued: list[str] = []
+    run_ids = await ScheduleService(session).create_due_runs(
+        datetime(2026, 1, 1, 12, 0, tzinfo=UTC), enqueued.append
+    )
+
+    assert len(run_ids) == 2
+    assert sorted(enqueued) == sorted(str(r) for r in run_ids)

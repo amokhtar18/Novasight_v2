@@ -73,7 +73,7 @@ class DashboardService:
         """Load a dashboard with its ordered tiles, each embedding its chart."""
         dashboard = await self._get(ctx, dashboard_id)
         charts = await self._charts_by_id(
-            ctx, [t.chart_id for t in dashboard.tiles]
+            ctx, [t.chart_id for t in dashboard.tiles if t.chart_id is not None]
         )
         return self._to_read(dashboard, charts)
 
@@ -119,7 +119,9 @@ class DashboardService:
         # The row UPDATE expires the onupdate ``updated_at``; reload it explicitly so
         # ``_to_read`` doesn't trigger a sync lazy-load (MissingGreenlet) in async.
         await self._db.refresh(dashboard, attribute_names=["updated_at"])
-        charts = await self._charts_by_id(ctx, [t.chart_id for t in dashboard.tiles])
+        charts = await self._charts_by_id(
+            ctx, [t.chart_id for t in dashboard.tiles if t.chart_id is not None]
+        )
         return self._to_read(dashboard, charts)
 
     async def delete(self, ctx: TenantContext, dashboard_id: uuid.UUID) -> None:
@@ -135,7 +137,11 @@ class DashboardService:
         self, ctx: TenantContext, dashboard_id: uuid.UUID, data: DashboardTileCreate
     ) -> DashboardTileRead:
         dashboard = await self._get(ctx, dashboard_id)
-        chart = await self._get_chart(ctx, data.chart_id)
+        # Chart tiles resolve (and tenant-check) their chart; decoration tiles don't.
+        chart: Chart | None = None
+        if data.kind == "chart":
+            assert data.chart_id is not None  # guaranteed by DashboardTileCreate validator
+            chart = await self._get_chart(ctx, data.chart_id)
 
         next_position = (
             max((t.position for t in dashboard.tiles), default=-1) + 1
@@ -143,7 +149,9 @@ class DashboardService:
         tile = DashboardTile(
             tenant_id=uuid.UUID(ctx.tenant_id),
             dashboard_id=dashboard.id,
-            chart_id=chart.id,
+            kind=data.kind,
+            chart_id=chart.id if chart else None,
+            content=data.content,
             title=data.title,
             position=next_position,
             w=data.w if data.w is not None else _DEFAULT_W,
@@ -164,6 +172,8 @@ class DashboardService:
         tile = await self._get_tile(ctx, dashboard_id, tile_id)
         if data.title is not None:
             tile.title = data.title
+        if data.content is not None:
+            tile.content = data.content
         if data.position is not None:
             tile.position = data.position
         if data.x is not None:
@@ -175,7 +185,7 @@ class DashboardService:
         if data.h is not None:
             tile.h = data.h
         await self._db.flush()
-        chart = await self._get_chart(ctx, tile.chart_id)
+        chart = await self._get_chart(ctx, tile.chart_id) if tile.chart_id else None
         return self._tile_to_read(tile, chart)
 
     async def delete_tile(
@@ -202,7 +212,9 @@ class DashboardService:
             tile.w = layout.w
             tile.h = layout.h
         await self._db.flush()
-        charts = await self._charts_by_id(ctx, [t.chart_id for t in dashboard.tiles])
+        charts = await self._charts_by_id(
+            ctx, [t.chart_id for t in dashboard.tiles if t.chart_id is not None]
+        )
         return self._to_read(dashboard, charts)
 
     # ------------------------------------------------------------------
@@ -269,11 +281,16 @@ class DashboardService:
     def _to_read(
         self, dashboard: Dashboard, charts: dict[uuid.UUID, Chart]
     ) -> DashboardRead:
-        tiles = [
-            self._tile_to_read(t, charts[t.chart_id])
-            for t in sorted(dashboard.tiles, key=lambda t: t.position)
-            if t.chart_id in charts
-        ]
+        tiles: list[DashboardTileRead] = []
+        for t in sorted(dashboard.tiles, key=lambda t: t.position):
+            if t.kind == "chart":
+                chart = charts.get(t.chart_id) if t.chart_id is not None else None
+                # A chart tile whose chart was deleted is dropped (can't render).
+                if chart is None:
+                    continue
+                tiles.append(self._tile_to_read(t, chart))
+            else:
+                tiles.append(self._tile_to_read(t, None))
         return DashboardRead(
             id=dashboard.id,
             name=dashboard.name,
@@ -286,17 +303,19 @@ class DashboardService:
         )
 
     @staticmethod
-    def _tile_to_read(tile: DashboardTile, chart: Chart) -> DashboardTileRead:
+    def _tile_to_read(tile: DashboardTile, chart: Chart | None) -> DashboardTileRead:
         return DashboardTileRead(
             id=tile.id,
+            kind=tile.kind,
             chart_id=tile.chart_id,
+            content=tile.content,
             title=tile.title,
             position=tile.position,
             x=tile.x,
             y=tile.y,
             w=tile.w,
             h=tile.h,
-            chart=chart_to_read(chart),
+            chart=chart_to_read(chart) if chart is not None else None,
         )
 
 

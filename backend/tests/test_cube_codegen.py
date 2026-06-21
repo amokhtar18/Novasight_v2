@@ -66,6 +66,41 @@ def test_render_joins_block() -> None:
     assert expected in js
 
 
+def test_render_composite_join() -> None:
+    # Multi-column joins AND each column equality together (#6).
+    config = SemanticModelConfig(
+        measures=[MeasureDef(name="rows", type="count")],
+        joins=[
+            JoinDef(
+                name="line_items",
+                relationship="one_to_many",
+                local_keys=["order_id", "region"],
+                foreign_keys=["order_id", "region"],
+            )
+        ],
+    )
+    js = render_tenant_models([CubeModelInput("orders", "mart_orders", config)])
+    expected = (
+        "line_items: { relationship: `one_to_many`, "
+        "sql: `${CUBE}.order_id = ${line_items}.order_id AND "
+        "${CUBE}.region = ${line_items}.region` }"
+    )
+    assert expected in js
+
+
+def test_render_expression_member_is_json_encoded() -> None:
+    # A validated expression measure/dimension is JSON-encoded into the JS string (#6).
+    config = SemanticModelConfig(
+        measures=[
+            MeasureDef(name="paid_total", type="sum", sql="if(status = 'paid', amount, 0)"),
+        ],
+        dimensions=[DimensionDef(name="region_up", type="string", sql="upper(region)")],
+    )
+    js = render_tenant_models([CubeModelInput("sales", "mart_sales", config)])
+    assert 'sql: "if(status = \'paid\', amount, 0)"' in js
+    assert 'sql: "upper(region)"' in js
+
+
 def test_no_joins_block_when_empty() -> None:
     js = render_tenant_models(
         [CubeModelInput("m", "t", SemanticModelConfig(

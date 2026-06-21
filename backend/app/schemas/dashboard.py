@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.saved_chart import ChartRead
 from app.schemas.semantic import SemanticFilter
+
+# What a dashboard tile holds (#10): a pinned chart, or a decoration object.
+TileKind = Literal["chart", "text", "markdown", "image", "divider", "filter"]
 
 
 class DashboardCreate(BaseModel):
@@ -39,18 +43,35 @@ class DashboardUpdate(BaseModel):
 
 
 class DashboardTileCreate(BaseModel):
-    """Body for ``POST /dashboards/{id}/tiles`` — pin a saved chart."""
+    """Body for ``POST /dashboards/{id}/tiles`` — pin a chart or add an object (#10).
 
-    chart_id: uuid.UUID
+    A ``chart`` tile requires ``chart_id``; every other ``kind`` carries its payload in
+    ``content`` (e.g. ``{"text": "..."}``, ``{"url": "..."}``, ``{"member": "..."}``) and
+    must not set ``chart_id``.
+    """
+
+    kind: TileKind = "chart"
+    chart_id: uuid.UUID | None = None
+    content: dict[str, Any] | None = None
     title: str | None = Field(default=None, max_length=255)
     w: int | None = Field(default=None, ge=1, le=12)
     h: int | None = Field(default=None, ge=1, le=12)
+
+    @model_validator(mode="after")
+    def _check_kind(self) -> DashboardTileCreate:
+        if self.kind == "chart" and self.chart_id is None:
+            raise ValueError("a chart tile requires chart_id")
+        if self.kind != "chart" and self.chart_id is not None:
+            raise ValueError(f"a {self.kind} tile must not set chart_id")
+        return self
 
 
 class DashboardTileUpdate(BaseModel):
     """Body for ``PATCH /dashboards/{id}/tiles/{tile_id}`` — partial."""
 
     title: str | None = Field(default=None, max_length=255)
+    # Replace a decoration tile's payload (e.g. edit text/markdown/image).
+    content: dict[str, Any] | None = None
     position: int | None = Field(default=None, ge=0)
     x: int | None = Field(default=None, ge=0)
     y: int | None = Field(default=None, ge=0)
@@ -76,17 +97,20 @@ class DashboardLayoutUpdate(BaseModel):
 
 
 class DashboardTileRead(BaseModel):
-    """A placed tile, with its saved chart embedded so the grid renders in one round-trip."""
+    """A placed tile. Chart tiles embed their saved chart so the grid renders in one
+    round-trip; decoration tiles (#10) carry their ``content`` and a null ``chart``."""
 
     id: uuid.UUID
-    chart_id: uuid.UUID
+    kind: str
+    chart_id: uuid.UUID | None
+    content: dict[str, Any] | None
     title: str | None
     position: int
     x: int
     y: int
     w: int
     h: int
-    chart: ChartRead
+    chart: ChartRead | None
 
 
 class DashboardSummary(BaseModel):

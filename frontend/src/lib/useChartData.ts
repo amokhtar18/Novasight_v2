@@ -26,29 +26,30 @@ import type {
 const EMPTY_QUERY: QueryRequest = { dimensions: [], metrics: [] };
 const DEFAULT_LIMIT = 200;
 
-export function useChartData(spec: ChartSpec, filters?: SemanticFilter[]) {
-  const metricRefs = spec.query.metric_refs ?? [];
+export function useChartData(spec: ChartSpec | null, filters?: SemanticFilter[]) {
+  const metricRefs = spec?.query.metric_refs ?? [];
   const isSemantic = metricRefs.length > 0;
 
   // A semantic chart over a time dimension carries it in `query.time_dimensions`; the
   // granularity-rolled column (its `<dimension>.<granularity>` key) is `encoding.x`,
   // so it goes to Cube as a timeDimension — never as a plain `dimensions` entry.
-  const timeDimensions = spec.query.time_dimensions ?? [];
+  const timeDimensions = spec?.query.time_dimensions ?? [];
   const hasTimeDim = timeDimensions.length > 0;
 
-  const semanticRequest: SemanticQueryRequest | null = isSemantic
-    ? {
-        measures: metricRefs,
-        dimensions: hasTimeDim ? [] : spec.encoding.x ? [spec.encoding.x] : [],
-        ...(hasTimeDim ? { time_dimensions: timeDimensions } : {}),
-        limit: DEFAULT_LIMIT,
-        ...(filters && filters.length > 0 ? { filters } : {}),
-      }
-    : null;
+  const semanticRequest: SemanticQueryRequest | null =
+    isSemantic && spec
+      ? {
+          measures: metricRefs,
+          dimensions: hasTimeDim ? [] : spec.encoding.x ? [spec.encoding.x] : [],
+          ...(hasTimeDim ? { time_dimensions: timeDimensions } : {}),
+          limit: DEFAULT_LIMIT,
+          ...(filters && filters.length > 0 ? { filters } : {}),
+        }
+      : null;
 
   const datasetId =
-    !isSemantic && spec.query.dataset_id && spec.query.query ? spec.query.dataset_id : null;
-  const datasetRequest = spec.query.query ?? EMPTY_QUERY;
+    !isSemantic && spec?.query.dataset_id && spec.query.query ? spec.query.dataset_id : null;
+  const datasetRequest = spec?.query.query ?? EMPTY_QUERY;
 
   const semantic = useSemanticQuery(semanticRequest);
   const dataset = useDatasetQuery(datasetId, datasetRequest);

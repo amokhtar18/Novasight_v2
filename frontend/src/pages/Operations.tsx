@@ -1,34 +1,20 @@
 /**
  * Operations — the run & schedule control room (Phase 2, operations UIs).
  *
- * Two consolidated, cross-pipeline views the per-pipeline Pipelines page can't give:
- *  1. Schedules — every cron schedule in the tenant, with pause/resume + delete.
+ * Two consolidated, cross-pipeline views the per-pipeline Ingest hub can't give:
+ *  1. Schedules — every cron schedule in the tenant (shared SchedulesPanel).
  *  2. Recent runs — a live feed of runs across all pipelines (polls every 10s).
- *
- * Mutations (pause/resume, delete) require the tenant superuser role; the backend
- * enforces it and the UI hides those controls for non-superusers (and surfaces a
- * 403 as a toast if the backend rejects a call anyway).
  */
 
-import {
-  CalendarClock,
-  Pause,
-  Play,
-  Trash2,
-} from "lucide-react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
+import { Play } from "lucide-react";
 
-import {
-  useDeleteSchedule,
-  usePipelines,
-  useRecentRuns,
-  useSchedules,
-  useUpdateSchedule,
-} from "@/api/hooks";
-import { useIdentity } from "@/lib/identity";
+import { useRecentRuns } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { SchedulesPanel } from "@/components/schedule/SchedulesPanel";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -38,8 +24,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { formatRelativeTime } from "@/lib/format";
-import type { PipelineRunSummary, ScheduleRead } from "@/types/api";
+import { formatDuration, formatRelativeTime } from "@/lib/format";
+import type { PipelineRunSummary } from "@/types/api";
+
+// Time windows for the recent-runs filter, in milliseconds (null = all time).
+const WINDOWS: { value: string; label: string; ms: number | null }[] = [
+  { value: "all", label: "All time", ms: null },
+  { value: "1h", label: "Last hour", ms: 60 * 60_000 },
+  { value: "24h", label: "Last 24 hours", ms: 24 * 60 * 60_000 },
+  { value: "7d", label: "Last 7 days", ms: 7 * 24 * 60 * 60_000 },
+];
 
 function runBadgeVariant(status: string): "success" | "danger" | "info" | "secondary" {
   if (status === "success") return "success";
@@ -55,144 +49,47 @@ export function Operations() {
         title="Operations"
         description="Manage every schedule and watch recent pipeline runs across the workspace — without opening the orchestrator."
       />
-      <SchedulesSection />
+      <SchedulesPanel />
       <RecentRunsSection />
     </div>
   );
 }
 
-// ===========================================================================
-// Schedules
-// ===========================================================================
-
-function SchedulesSection() {
-  const { data: schedules, isLoading } = useSchedules();
-  const { data: pipelines } = usePipelines();
-  const { isSuperuser } = useIdentity();
-
-  const pipelineName = (id: string): string =>
-    pipelines?.find((p) => p.id === id)?.name ?? "unknown pipeline";
-
-  return (
-    <Card className="bg-card/70">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarClock className="h-4 w-4" aria-hidden />
-          Schedules
-        </CardTitle>
-        <CardDescription>
-          Cron schedules that run pipelines automatically. Create them from a pipeline; pause
-          or remove them here.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex h-24 items-center justify-center">
-            <Spinner label="Loading schedules" />
-          </div>
-        ) : !schedules || schedules.length === 0 ? (
-          <EmptyState
-            icon={<CalendarClock className="h-6 w-6" />}
-            title="No schedules yet"
-            description="Open a pipeline and add a schedule to run it on a cadence."
-          />
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {schedules.map((s) => (
-              <ScheduleRow
-                key={s.id}
-                schedule={s}
-                pipelineName={pipelineName(s.target_id)}
-                canManage={isSuperuser}
-              />
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ScheduleRow({
-  schedule,
-  pipelineName,
-  canManage,
-}: {
-  schedule: ScheduleRead;
-  pipelineName: string;
-  canManage: boolean;
-}) {
-  const updateSchedule = useUpdateSchedule();
-  const deleteSchedule = useDeleteSchedule();
-
-  function handleToggle() {
-    updateSchedule.mutate(
-      { id: schedule.id, patch: { enabled: !schedule.enabled } },
-      {
-        onSuccess: () =>
-          toast.success(schedule.enabled ? "Schedule paused" : "Schedule resumed"),
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : "Could not update the schedule"),
-      }
-    );
-  }
-
-  return (
-    <li className="flex items-center justify-between gap-3 py-2.5">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{schedule.name}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          <span className="font-mono">{schedule.cron}</span> · {pipelineName}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {!schedule.enabled && <Badge variant="secondary">paused</Badge>}
-        {canManage && (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleToggle}
-              disabled={updateSchedule.isPending}
-            >
-              {schedule.enabled ? (
-                <>
-                  <Pause className="h-4 w-4" aria-hidden />
-                  Pause
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" aria-hidden />
-                  Resume
-                </>
-              )}
-            </Button>
-            <button
-              type="button"
-              onClick={() =>
-                deleteSchedule.mutate(schedule.id, {
-                  onError: (err) =>
-                    toast.error(err instanceof Error ? err.message : "Delete failed"),
-                })
-              }
-              aria-label={`Delete schedule ${schedule.name}`}
-              className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
-        )}
-      </div>
-    </li>
-  );
-}
-
-// ===========================================================================
-// Recent runs
-// ===========================================================================
-
 function RecentRunsSection() {
-  const { data: runs, isLoading } = useRecentRuns();
+  const { data: runs, isLoading, dataUpdatedAt } = useRecentRuns();
+
+  // Filters (#2): status, pipeline, and a run-time window. Applied client-side over
+  // the live feed so they stay responsive across the 10s poll without refetching.
+  const [status, setStatus] = useState("all");
+  const [pipeline, setPipeline] = useState("all");
+  const [windowKey, setWindowKey] = useState("all");
+
+  // Distinct pipelines present in the feed, for the pipeline filter (id → name).
+  const pipelineOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of runs ?? []) {
+      if (!seen.has(r.pipeline_id)) seen.set(r.pipeline_id, r.pipeline_name);
+    }
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [runs]);
+
+  const filtered = useMemo(() => {
+    const windowMs = WINDOWS.find((w) => w.value === windowKey)?.ms ?? null;
+    // Anchor the window to when the feed was last fetched (pure + refreshes with the
+    // 10s poll), rather than reading the clock during render.
+    const cutoff = windowMs != null ? dataUpdatedAt - windowMs : null;
+    return (runs ?? []).filter((r) => {
+      if (status !== "all" && r.status !== status) return false;
+      if (pipeline !== "all" && r.pipeline_id !== pipeline) return false;
+      if (cutoff != null) {
+        const t = new Date(r.created_at).getTime();
+        if (Number.isNaN(t) || t < cutoff) return false;
+      }
+      return true;
+    });
+  }, [runs, status, pipeline, windowKey, dataUpdatedAt]);
+
+  const hasRuns = !!runs && runs.length > 0;
 
   return (
     <Card className="bg-card/70">
@@ -210,18 +107,74 @@ function RecentRunsSection() {
           <div className="flex h-24 items-center justify-center">
             <Spinner label="Loading runs" />
           </div>
-        ) : !runs || runs.length === 0 ? (
+        ) : !hasRuns ? (
           <EmptyState
             icon={<Play className="h-6 w-6" />}
             title="No runs yet"
             description="Run a pipeline (now or on a schedule) and its history shows up here."
           />
         ) : (
-          <ul className="divide-y divide-border/60">
-            {runs.map((r) => (
-              <RecentRunRow key={r.id} run={r} />
-            ))}
-          </ul>
+          <>
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label htmlFor="run-status" className="text-xs text-muted-foreground">
+                  Status
+                </Label>
+                <Select id="run-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="all">All statuses</option>
+                  <option value="success">Success</option>
+                  <option value="error">Error</option>
+                  <option value="running">Running</option>
+                  <option value="queued">Queued</option>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="run-pipeline" className="text-xs text-muted-foreground">
+                  Pipeline
+                </Label>
+                <Select
+                  id="run-pipeline"
+                  value={pipeline}
+                  onChange={(e) => setPipeline(e.target.value)}
+                >
+                  <option value="all">All pipelines</option>
+                  {pipelineOptions.map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="run-window" className="text-xs text-muted-foreground">
+                  Run time
+                </Label>
+                <Select
+                  id="run-window"
+                  value={windowKey}
+                  onChange={(e) => setWindowKey(e.target.value)}
+                >
+                  {WINDOWS.map((w) => (
+                    <option key={w.value} value={w.value}>
+                      {w.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No runs match these filters.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {filtered.map((r) => (
+                  <RecentRunRow key={r.id} run={r} />
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -229,6 +182,7 @@ function RecentRunsSection() {
 }
 
 function RecentRunRow({ run }: { run: PipelineRunSummary }) {
+  const duration = formatDuration(run.started_at, run.finished_at);
   return (
     <li className="flex items-center justify-between gap-3 py-2 text-sm">
       <span className="flex min-w-0 items-center gap-2">
@@ -237,6 +191,7 @@ function RecentRunRow({ run }: { run: PipelineRunSummary }) {
       </span>
       <span className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
         <span>{run.rows != null ? `${run.rows} rows` : run.error ? run.error : ""}</span>
+        {duration !== "—" && <span title="Run duration">⏱ {duration}</span>}
         <span>{formatRelativeTime(run.created_at)}</span>
       </span>
     </li>

@@ -25,8 +25,17 @@
   "options": {
     "title": "Monthly sales vs returns",
     "stacked": false,
+    "percent": false,
     "show_legend": true,
+    "legend_position": "top",
     "x_axis_label": "Month",
-    "y_axis_label": "Amount"
+    "y_axis_label": "Amount",
+    "y_min": null,
+    "y_max": null,
+    "log_scale": false,
+    "data_labels": false,
+    "sort": "none",
+    "number_format": { "style": "plain", "decimals": null, "compact": false, "currency": null },
+    "palette": []
   }
 }

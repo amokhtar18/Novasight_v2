@@ -148,6 +148,28 @@ describe("DbtModels wizard", () => {
     );
   });
 
+  it("filters models by search (#4)", () => {
+    const a = { ...existingModel, id: "m1", name: "mart_orders" };
+    const b = { ...existingModel, id: "m2", name: "stg_customers", layer: "staging" };
+    // @ts-expect-error partial mock
+    mockModels.mockReturnValue({ data: [a, b], isLoading: false });
+    render(<DbtModels />);
+    expect(screen.getByText("mart_orders")).toBeInTheDocument();
+    expect(screen.getByText("stg_customers")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "stg" } });
+    expect(screen.queryByText("mart_orders")).not.toBeInTheDocument();
+    expect(screen.getByText("stg_customers")).toBeInTheDocument();
+  });
+
+  it("switches to the list view (#4)", () => {
+    // @ts-expect-error partial mock
+    mockModels.mockReturnValue({ data: [existingModel], isLoading: false });
+    render(<DbtModels />);
+    fireEvent.click(screen.getByRole("button", { name: "List view" }));
+    expect(screen.getByRole("columnheader", { name: "Materialization" })).toBeInTheDocument();
+    expect(screen.getByText("mart_orders")).toBeInTheDocument();
+  });
+
   it("runs a model when its Run button is clicked", () => {
     const model = {
       id: "m1", name: "mart_orders", layer: "marts", materialization: "table",

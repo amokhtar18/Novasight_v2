@@ -30,11 +30,16 @@ def _validate_cron(value: str) -> str:
 
 
 class ScheduleCreate(BaseModel):
-    """Body for ``POST /schedules``."""
+    """Body for ``POST /schedules``.
+
+    A reusable schedule attaches to one *or more* pipelines (#3): ``pipeline_ids``
+    must be non-empty and every id must belong to the caller's tenant (enforced in
+    the service). ``target_kind`` stays ``pipeline``.
+    """
 
     name: str = Field(..., min_length=1, max_length=255)
     target_kind: TargetKind = "pipeline"
-    target_id: uuid.UUID
+    pipeline_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=100)
     cron: str = Field(..., min_length=1, max_length=128)
     enabled: bool = True
 
@@ -42,11 +47,16 @@ class ScheduleCreate(BaseModel):
 
 
 class ScheduleUpdate(BaseModel):
-    """Body for ``PATCH /schedules/{id}`` — partial."""
+    """Body for ``PATCH /schedules/{id}`` — partial.
+
+    When ``pipeline_ids`` is provided it *replaces* the schedule's attachments (must
+    be non-empty). Omit it to leave attachments unchanged.
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     cron: str | None = Field(default=None, min_length=1, max_length=128)
     enabled: bool | None = None
+    pipeline_ids: list[uuid.UUID] | None = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("cron")
     @classmethod
@@ -55,12 +65,12 @@ class ScheduleUpdate(BaseModel):
 
 
 class ScheduleRead(BaseModel):
-    """A schedule as returned to clients."""
+    """A schedule as returned to clients (with its attached pipelines)."""
 
     id: uuid.UUID
     name: str
     target_kind: str
-    target_id: uuid.UUID
+    pipeline_ids: list[uuid.UUID]
     cron: str
     enabled: bool
     created_at: datetime

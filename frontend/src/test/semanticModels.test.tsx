@@ -14,6 +14,8 @@ vi.mock("@/api/hooks", () => ({
   useCreateSemanticModelDef: vi.fn(),
   useUpdateSemanticModelDef: vi.fn(),
   useDeleteSemanticModelDef: vi.fn(),
+  useServingTables: vi.fn(),
+  useServingColumns: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -22,6 +24,8 @@ import {
   useCreateSemanticModelDef,
   useDeleteSemanticModelDef,
   useSemanticModelDefs,
+  useServingColumns,
+  useServingTables,
   useUpdateSemanticModelDef,
 } from "@/api/hooks";
 import type { SemanticModelDefRead } from "@/types/api";
@@ -45,6 +49,10 @@ beforeEach(() => {
   mockUpdate.mockReturnValue({ mutateAsync: updateMutateAsync, isPending: false });
   // @ts-expect-error partial mock
   mockDelete.mockReturnValue({ mutate: vi.fn() });
+  // @ts-expect-error partial mock
+  vi.mocked(useServingTables).mockReturnValue({ data: [] });
+  // @ts-expect-error partial mock
+  vi.mocked(useServingColumns).mockReturnValue({ data: [] });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -142,6 +150,40 @@ describe("SemanticModels", () => {
               relationship: "many_to_one",
               local_key: "customer_id",
               foreign_key: "id",
+            },
+          ],
+        }),
+      })
+    );
+  });
+
+  it("sends composite keys for a multi-column join (#6)", async () => {
+    render(<SemanticModels />);
+    fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);
+
+    setValue("sm-name", "orders");
+    setValue("sm-table", "mart_orders");
+    setValue("m-name-0", "rows");
+    setValue("m-type-0", "count");
+
+    const addButtons = screen.getAllByRole("button", { name: /^add$/i });
+    fireEvent.click(addButtons[addButtons.length - 1]);
+    setValue("j-name-0", "line_items");
+    setValue("j-local-0", "order_id, region");
+    setValue("j-foreign-0", "order_id, region");
+
+    fireEvent.click(screen.getByRole("button", { name: /create model/i }));
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalled());
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          joins: [
+            {
+              name: "line_items",
+              relationship: "many_to_one",
+              local_keys: ["order_id", "region"],
+              foreign_keys: ["order_id", "region"],
             },
           ],
         }),

@@ -17,10 +17,11 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
-# A SQL-safe identifier (member name or a column reference). No dots, no expressions —
-# richer SQL is a later (Phase 2) concern; the slice stays injection-proof by design.
+from app.core.sql_expression import validate_expression
+
+# A SQL-safe identifier (member name, base table, join key). No dots, no expressions.
 Identifier = Annotated[
     str,
     StringConstraints(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", min_length=1, max_length=128),
@@ -37,14 +38,23 @@ JoinRelationship = Literal["one_to_one", "one_to_many", "many_to_one"]
 
 
 class MeasureDef(BaseModel):
-    """One governed measure, e.g. ``sum(amount) AS total_amount``."""
+    """One governed measure, e.g. ``sum(amount)`` or ``sum(if(paid, amount, 0))``.
+
+    ``sql`` is the column or **validated expression** to aggregate (#6) — a bare
+    column name still works, but window/string/CASE expressions are now allowed,
+    bounded by the member-expression allow-list. Optional only for ``count``.
+    """
 
     name: Identifier
     type: MeasureType
-    # The column to aggregate. Optional only for ``count`` (→ ``count(*)``).
-    sql: Identifier | None = None
+    sql: str | None = Field(default=None, max_length=1000)
     title: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("sql")
+    @classmethod
+    def _validate_sql(cls, value: str | None) -> str | None:
+        return None if value is None else validate_expression(value)
 
     @model_validator(mode="after")
     def _require_sql_for_non_count(self) -> MeasureDef:
@@ -54,29 +64,61 @@ class MeasureDef(BaseModel):
 
 
 class DimensionDef(BaseModel):
-    """One governed dimension (a column exposed for grouping/filtering)."""
+    """One governed dimension — a column or **validated expression** for grouping (#6)."""
 
     name: Identifier
     type: DimensionType
-    sql: Identifier
+    sql: str = Field(..., max_length=1000)
     title: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
     primary_key: bool = False
 
+    @field_validator("sql")
+    @classmethod
+    def _validate_sql(cls, value: str) -> str:
+        return validate_expression(value)
+
 
 class JoinDef(BaseModel):
-    """A join to another cube: ``this.local_key = <name>.foreign_key``.
+    """A join to another cube: ``this.local_key = <name>.foreign_key`` (#6 multi-column).
 
-    ``name`` is the **target cube** (another semantic model) to join to. The join is
-    expressed only as an equality of two **column identifiers** plus a closed
-    ``relationship`` literal — no free SQL — so the codegen renders it injection-free
-    (same defense-in-depth posture as measures/dimensions).
+    ``name`` is the **target cube** (another semantic model). The join is expressed only
+    as equalities of **column identifiers** plus a closed ``relationship`` literal — no
+    free SQL — so the codegen renders it injection-free.
+
+    Two equivalent forms are accepted: the single-key ``local_key``/``foreign_key`` (kept
+    for backward compatibility with stored models) or the composite ``local_keys``/
+    ``foreign_keys`` lists (equal length, non-empty) for multi-column joins. Use
+    ``key_pairs`` to read the normalised ``(local, foreign)`` pairs.
     """
 
     name: Identifier
     relationship: JoinRelationship
-    local_key: Identifier
-    foreign_key: Identifier
+    local_key: Identifier | None = None
+    foreign_key: Identifier | None = None
+    local_keys: list[Identifier] = Field(default_factory=list, max_length=16)
+    foreign_keys: list[Identifier] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def _validate_keys(self) -> JoinDef:
+        if self.local_keys or self.foreign_keys:
+            if not self.local_keys or len(self.local_keys) != len(self.foreign_keys):
+                raise ValueError(
+                    "local_keys and foreign_keys must be non-empty and the same length"
+                )
+        elif not (self.local_key and self.foreign_key):
+            raise ValueError(
+                "a join needs local_key+foreign_key or local_keys+foreign_keys"
+            )
+        return self
+
+    @property
+    def key_pairs(self) -> list[tuple[str, str]]:
+        """Normalised ``(local, foreign)`` equality pairs (single- or multi-column)."""
+        if self.local_keys:
+            return list(zip(self.local_keys, self.foreign_keys, strict=True))
+        assert self.local_key is not None and self.foreign_key is not None
+        return [(self.local_key, self.foreign_key)]
 
 
 class SemanticModelConfig(BaseModel):

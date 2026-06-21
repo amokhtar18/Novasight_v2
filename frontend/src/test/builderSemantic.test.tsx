@@ -41,8 +41,6 @@ function idleMutation() {
 vi.mock("@/api/hooks", () => ({
   useSemanticModels: vi.fn(),
   useSemanticQuery: vi.fn(),
-  useDatasets: vi.fn(),
-  useDatasetQuery: vi.fn(),
   useCreateChart: vi.fn(),
 }));
 
@@ -60,18 +58,10 @@ vi.mock("@/components/dashboard/AddToDashboard", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { Builder } from "@/pages/Builder";
-import {
-  useCreateChart,
-  useDatasetQuery,
-  useDatasets,
-  useSemanticModels,
-  useSemanticQuery,
-} from "@/api/hooks";
+import { useCreateChart, useSemanticModels, useSemanticQuery } from "@/api/hooks";
 
 const mockSemanticModels = vi.mocked(useSemanticModels);
 const mockSemanticQuery = vi.mocked(useSemanticQuery);
-const mockDatasets = vi.mocked(useDatasets);
-const mockDatasetQuery = vi.mocked(useDatasetQuery);
 const mockCreateChart = vi.mocked(useCreateChart);
 
 beforeEach(() => {
@@ -79,10 +69,6 @@ beforeEach(() => {
   mockSemanticModels.mockReturnValue(idleQuery([model]));
   // @ts-expect-error partial mock
   mockSemanticQuery.mockReturnValue(idleQuery(queryData));
-  // @ts-expect-error partial mock
-  mockDatasets.mockReturnValue(idleQuery([]));
-  // @ts-expect-error partial mock
-  mockDatasetQuery.mockReturnValue(idleQuery(undefined));
   // @ts-expect-error partial mock
   mockCreateChart.mockReturnValue(idleMutation());
 });
@@ -97,13 +83,9 @@ function renderBuilder() {
   );
 }
 
-describe("Builder — semantic path (default)", () => {
-  it("defaults to the semantic model source and lists governed members", () => {
+describe("Builder — semantic path (semantic-only, #8)", () => {
+  it("lists governed model/dimension/measure members", () => {
     renderBuilder();
-
-    // Source toggle defaults to "semantic".
-    const sourceSelect = screen.getByLabelText(/data source$/i) as HTMLSelectElement;
-    expect(sourceSelect.value).toBe("semantic");
 
     // Model / dimension / measure selects render with governed titles.
     expect((screen.getByLabelText(/^model$/i) as HTMLSelectElement).value).toBe("regional_sales");
@@ -127,17 +109,6 @@ describe("Builder — semantic path (default)", () => {
         dimensions: ["regional_sales.region"],
       })
     );
-    // The dataset query stays disabled (null request) while in semantic mode.
-    expect(mockDatasetQuery).toHaveBeenCalledWith(null, expect.anything());
-  });
-
-  it("switches to the dataset path via the source toggle", () => {
-    renderBuilder();
-    fireEvent.change(screen.getByLabelText(/data source$/i), {
-      target: { value: "dataset" },
-    });
-    // No datasets exist in this test → the dataset path shows its guidance.
-    expect(screen.getByText(/no datasets yet/i)).toBeInTheDocument();
   });
 
   it("rolls a time dimension up by granularity via time_dimensions", () => {

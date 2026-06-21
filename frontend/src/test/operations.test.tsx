@@ -15,6 +15,7 @@ vi.mock("@/api/hooks", () => ({
   useSchedules: vi.fn(),
   usePipelines: vi.fn(),
   useRecentRuns: vi.fn(),
+  useCreateSchedule: vi.fn(),
   useUpdateSchedule: vi.fn(),
   useDeleteSchedule: vi.fn(),
 }));
@@ -40,7 +41,7 @@ const schedule: ScheduleRead = {
   id: "sch1",
   name: "nightly",
   target_kind: "pipeline",
-  target_id: "p1",
+  pipeline_ids: ["p1"],
   cron: "0 2 * * *",
   enabled: true,
   created_at: "2026-01-01T00:00:00Z",
@@ -82,6 +83,8 @@ function setup(opts: {
   vi.mocked(hooks.usePipelines).mockReturnValue(query(opts.pipelines ?? []));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useRecentRuns).mockReturnValue(query(opts.runs ?? []));
+  // @ts-expect-error partial mock
+  vi.mocked(hooks.useCreateSchedule).mockReturnValue(mutation(vi.fn()));
   // @ts-expect-error partial mock
   vi.mocked(hooks.useUpdateSchedule).mockReturnValue(mutation(updateScheduleMutate));
   // @ts-expect-error partial mock
@@ -126,5 +129,29 @@ describe("Operations page", () => {
     render(<Operations />);
     expect(screen.queryByRole("button", { name: /pause/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete schedule/i })).not.toBeInTheDocument();
+  });
+
+  it("filters the recent-runs feed by status (#2)", () => {
+    const ok: PipelineRunSummary = { ...run, id: "r1", pipeline_name: "orders_daily", pipeline_id: "p1", status: "success" };
+    const bad: PipelineRunSummary = {
+      ...run, id: "r2", pipeline_name: "customers", pipeline_id: "p2",
+      status: "error", rows: null, error: "boom",
+    };
+    setup({ runs: [ok, bad] });
+    render(<Operations />);
+    // Both run rows show with the default "All statuses" filter (assert on row-unique
+    // content — the pipeline names also appear as <option>s in the filter dropdown).
+    expect(screen.getByText(/42 rows/)).toBeInTheDocument();
+    expect(screen.getByText("boom")).toBeInTheDocument();
+    // Narrowing to errors drops the successful run's row.
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "error" } });
+    expect(screen.queryByText(/42 rows/)).not.toBeInTheDocument();
+    expect(screen.getByText("boom")).toBeInTheDocument();
+  });
+
+  it("shows a run duration in the feed (#2)", () => {
+    setup({ runs: [run] }); // started 00:00:00 → finished 00:01:00
+    render(<Operations />);
+    expect(screen.getByText(/1m 0s/)).toBeInTheDocument();
   });
 });
