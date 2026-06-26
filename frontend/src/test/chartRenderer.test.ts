@@ -432,6 +432,15 @@ it("gauge applies angles, intervals+colors, pointer/progress", () => {
   expect(opt.series[0].axisLine.lineStyle.color[0][1]).toBe("#0f0");
 });
 
+it("gauge clamps interval stops exceeding max to 1.0", () => {
+  const opt = buildEChartsOption(
+    { version: "2", type: "gauge", query: { metric_refs: ["m"] },
+      encoding: { series: [{ field: "m" }] },
+      options: { type_options: { gauge: { max: 100, intervals: [50, 9999], interval_colors: ["#0f0", "#f00"] } } } },
+    { columns: ["m"], rows: [[42]], row_count: 1 }) as any;
+  expect(opt.series[0].axisLine.lineStyle.color[1][0]).toBe(1);
+});
+
 // ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------

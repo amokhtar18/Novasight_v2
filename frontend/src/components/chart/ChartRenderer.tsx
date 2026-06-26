@@ -269,7 +269,7 @@ export function buildEChartsOption(
     const axisLineColor: [number, string][] =
       Array.isArray(g.intervals) && g.intervals.length > 0
         ? (g.intervals as number[]).map((bound: number, i: number) => [
-            bound / maxVal,
+            Math.min(bound / maxVal, 1),
             (Array.isArray(g.interval_colors) && g.interval_colors[i] != null
               ? g.interval_colors[i]
               : palette[i] ?? theme.axisLine) as string,
