@@ -171,6 +171,6 @@ describe("DashboardDetail cross-filter wiring", () => {
       data: { columns: [], rows: [], row_count: 0 },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof useChartData>);
+    } as unknown as ReturnType<typeof useChartData>);
   });
 });
