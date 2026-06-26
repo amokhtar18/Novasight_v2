@@ -24,6 +24,7 @@ import {
   TreemapChart,
 } from "echarts/charts";
 import {
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   RadarComponent,
@@ -51,6 +52,7 @@ echarts.use([
   GaugeChart,
   RadarChart,
   TreemapChart,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   RadarComponent,
@@ -287,11 +289,13 @@ export function buildEChartsOption(
   if (spec.type === "scatter") {
     if (x === null || x === undefined) throw new Error('chart type "scatter" requires encoding.x');
     const xIdx = colIndex(x);
+    const c = t.cartesian ?? {};
     const seriesList = series.map((s) => {
       const yIdx = colIndex(s.field);
       return {
         name: seriesLabel(s),
         type: "scatter" as const,
+        symbolSize: c.marker_size ?? undefined,
         itemStyle: s.color ? { color: s.color } : undefined,
         data: rows.map((row) => [num(row[xIdx]), num(row[yIdx])]),
       };
@@ -421,74 +425,107 @@ export function buildEChartsOption(
 
   // ---- Horizontal bar. ------------------------------------------------
   if (spec.type === "hbar") {
+    const c = t.cartesian ?? {};
     const seriesList = series.map((s) => {
       const vi = colIndex(s.field);
       return {
         name: seriesLabel(s),
         type: "bar" as const,
-        stack: cartesian?.stacked ? "total" : undefined,
+        stack: c.stacked || c.percent ? "total" : undefined,
         itemStyle: s.color ? { color: s.color } : undefined,
         label: dataLabel,
         data: srows.map((row) => num(row[vi])),
       };
     });
+    if (c.percent) {
+      const totalsPerCat = categories.map((_, i) =>
+        seriesList.reduce((acc, s) => acc + (s.data[i] as number), 0) || 1);
+      for (const s of seriesList) s.data = (s.data as number[]).map((v, i) => (v / totalsPerCat[i]) * 100);
+    }
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
       title: titleBlock,
       tooltip: axisTooltip,
-      grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: 8, containLabel: true },
+      grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: c.data_zoom ? 48 : 8, containLabel: true },
       legend: legendBlock(),
-      xAxis: valueAxis(theme, cartesian, fmt, cartesian?.x_axis_label),
+      ...(c.data_zoom ? { dataZoom: [{ type: "inside" }, { type: "slider" }] } : {}),
+      xAxis: valueAxis(theme, cartesian, fmt, c.x_axis_label ?? undefined),
       yAxis: {
         type: "category",
         data: categories,
         axisLabel: { color: theme.text },
         axisLine: { lineStyle: { color: theme.axisLine } },
+        minorTick: { show: c.minor_ticks ?? false },
       },
       series: seriesList,
     });
   }
 
   // ---- Bar / line / area / combo. -------------------------------------
+  const c = t.cartesian ?? {};
   const isArea = spec.type === "area";
   const isCombo = spec.type === "combo";
-  const seriesList = series.map((s, si) => {
+
+  // sort_series: reorder series by their total (sum across all categories) asc/desc.
+  let ordered = series;
+  if (c.sort_series && c.sort_series !== "none") {
+    const totals = (s: typeof series[number]) =>
+      srows.reduce((acc, r) => acc + num(r[colIndex(s.field)]), 0);
+    ordered = [...series].sort((a, b) =>
+      c.sort_series === "asc" ? totals(a) - totals(b) : totals(b) - totals(a));
+  }
+
+  const seriesList = ordered.map((s, si) => {
     const valIdx = colIndex(s.field);
-    const type = isCombo
-      ? si === 0
-        ? "bar"
-        : "line"
-      : isArea || spec.type === "line"
-        ? "line"
-        : "bar";
+    const seriesType = isCombo
+      ? si === 0 ? "bar" : "line"
+      : isArea || spec.type === "line" ? "line" : "bar";
     return {
       name: seriesLabel(s),
-      type: type as "bar" | "line",
-      stack: cartesian?.stacked ? "total" : undefined,
-      areaStyle: isArea ? {} : undefined,
+      type: seriesType as "bar" | "line",
+      stack: c.stacked || c.percent ? "total" : undefined,
+      areaStyle: isArea ? { opacity: c.area_opacity ?? 0.5 } : undefined,
+      smooth: c.smooth || undefined,
+      showSymbol: seriesType === "line" ? (c.markers ?? false) : undefined,
+      symbolSize: c.marker_size ?? undefined,
       itemStyle: s.color ? { color: s.color } : undefined,
-      label: dataLabel,
+      label: c.only_total && si === ordered.length - 1
+        ? { show: true, position: "top", color: theme.text }
+        : dataLabel,
       data: srows.map((row) => num(row[valIdx])),
     };
   });
+
+  // percent: normalise per-category totals to 100%.
+  if (c.percent) {
+    const totalsPerCat = categories.map((_, i) =>
+      seriesList.reduce((acc, s) => acc + (s.data[i] as number), 0) || 1);
+    for (const s of seriesList) s.data = (s.data as number[]).map((v, i) => (v / totalsPerCat[i]) * 100);
+  }
 
   return toOption({
     color: palette,
     textStyle: { color: theme.text },
     title: titleBlock,
     tooltip: axisTooltip,
-    grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: 8, containLabel: true },
+    grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: c.data_zoom ? 48 : 8, containLabel: true },
     legend: legendBlock(),
+    ...(c.data_zoom ? { dataZoom: [{ type: "inside" }, { type: "slider" }] } : {}),
     xAxis: {
       type: "category",
-      name: cartesian?.x_axis_label ?? undefined,
+      name: c.x_axis_label ?? undefined,
       data: categories,
-      axisLabel: { rotate: categories.length > 6 ? 45 : 0, color: theme.text },
+      axisLabel: {
+        rotate: c.x_label_rotation ?? (categories.length > 6 ? 45 : 0),
+        interval: c.x_label_interval === "all" ? 0 : "auto",
+        color: theme.text,
+      },
       axisLine: { lineStyle: { color: theme.axisLine } },
+      minorTick: { show: c.minor_ticks ?? false },
       nameTextStyle: { color: theme.text },
     },
-    yAxis: valueAxis(theme, cartesian, fmt, cartesian?.y_axis_label),
+    yAxis: valueAxis(theme, c, fmt, c.y_axis_label),
     series: seriesList,
   });
 }

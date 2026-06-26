@@ -359,6 +359,34 @@ describe("buildEChartsOption — v2 shared chrome", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Cartesian family options (Task 5 — Slice A2)
+// ---------------------------------------------------------------------------
+
+const cartSpec = (cartesian: any, type: ChartSpec["type"] = "bar"): ChartSpec => ({
+  version: "2", type, query: { metric_refs: ["m"] },
+  encoding: { x: "c", series: [{ field: "m" }] },
+  options: { type_options: { cartesian } },
+});
+const cartData = { columns: ["c", "m"], rows: [["a", 1], ["b", 3]], row_count: 2 };
+
+it("cartesian stacked + percent normalises series to 100", () => {
+  const opt = buildEChartsOption(cartSpec({ stacked: true, percent: true }), cartData) as any;
+  expect(opt.series[0].stack).toBe("total");
+});
+it("cartesian area_opacity + smooth + markers on line", () => {
+  const opt = buildEChartsOption(cartSpec({ area_opacity: 0.3, smooth: true, markers: true }, "area"), cartData) as any;
+  expect(opt.series[0].areaStyle.opacity).toBe(0.3);
+  expect(opt.series[0].smooth).toBe(true);
+  expect(opt.series[0].showSymbol).toBe(true);
+});
+it("cartesian data_zoom adds a dataZoom block and y bounds/log come from the group", () => {
+  const opt = buildEChartsOption(cartSpec({ data_zoom: true, y_min: 0, y_max: 10, log_scale: false }), cartData) as any;
+  expect(Array.isArray(opt.dataZoom)).toBe(true);
+  expect(opt.yAxis.min).toBe(0);
+  expect(opt.yAxis.max).toBe(10);
+});
+
+// ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------
 
