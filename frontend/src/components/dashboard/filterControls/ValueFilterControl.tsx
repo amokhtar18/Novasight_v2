@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { useSemanticValues } from "@/api/hooks";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import type { NativeFilter, SemanticFilter } from "@/types/api";
 
@@ -47,7 +48,7 @@ export function ValueFilterControl({ filter, values, onChange, constraints, enab
       <div className="flex max-h-40 flex-col gap-1 overflow-auto">
         {options.map((o) => (
           <label key={o} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={values.includes(o)} onChange={() => toggle(o)} />
+            <Checkbox checked={values.includes(o)} onChange={() => toggle(o)} />
             {o}
           </label>
         ))}

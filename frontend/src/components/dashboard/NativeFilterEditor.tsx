@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import type { DashboardTileRead, NativeFilter, NativeFilterKind } from "@/types/api";
@@ -116,8 +117,7 @@ export function NativeFilterEditor({ open, onOpenChange, initial, existing, tile
             <div className="flex max-h-32 flex-col gap-1 overflow-auto rounded border p-2">
               {tiles.filter((t) => t.kind === "chart").map((t) => (
                 <label key={t.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={tileIds.includes(t.id)}
                     onChange={(e) =>
                       setTileIds(e.target.checked ? [...tileIds, t.id] : tileIds.filter((x) => x !== t.id))
@@ -143,7 +143,7 @@ export function NativeFilterEditor({ open, onOpenChange, initial, existing, tile
         )}
 
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+          <Checkbox checked={required} onChange={(e) => setRequired(e.target.checked)} />
           Required
         </label>
       </div>
