@@ -210,4 +210,4 @@ Clicking a data point on a category-axis chart emits a cross-filter pair
 Heatmap and sankey participate in cross-filtering: clicking a **heatmap cell** emits two
 filters (its x value AND its y value); clicking a **sankey node** emits one filter on that
 node's dimension. As with other charts, a cross-filter only applies to tiles whose cube
-contains the filtered member.
+contains the filtered member. Only the most recently clicked chart's filter(s) form the cross-filter overlay — clicking a new point (or cell) replaces any prior overlay rather than accumulating across charts.

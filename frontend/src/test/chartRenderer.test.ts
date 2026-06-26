@@ -712,8 +712,9 @@ describe("buildEChartsOption — sankey", () => {
     expect(option.series[0].orient).toBe("vertical");
     const nodeNames = option.series[0].data.map((n: any) => n.name);
     expect(nodeNames).toContain("West");
-    expect(nodeNames).toContain("Widget");
-    expect(option.series[0].links).toContainEqual({ source: "West", target: "Widget", value: 10 });
+    // Targets are always suffixed with U+200B to keep x/y namespaces disjoint.
+    expect(nodeNames).toContain("Widget​");
+    expect(option.series[0].links).toContainEqual({ source: "West", target: "Widget​", value: 10 });
   });
 
   it("self-cycle: appends zero-width-space to target and label formatter strips it", () => {
@@ -727,6 +728,28 @@ describe("buildEChartsOption — sankey", () => {
     expect(option.series[0].links).toContainEqual({ source: "West", target: "West​", value: 5 });
     // The label formatter must strip the suffix for display.
     expect(option.series[0].label.formatter({ name: "West​" } as any)).toBe("West");
+  });
+
+  it("disjoint namespace: same string as x-source and y-target produces four distinct nodes", () => {
+    // "North" appears as both an x-value (source) and a y-value (target) across different rows.
+    // Without the unconditional suffix, both would collapse into one node named "North".
+    const crossDimData: QueryResponse = {
+      columns: ["sales.region", "sales.product", "sales.total"],
+      rows: [
+        ["North", "South", 10],
+        ["South", "North", 5],
+      ],
+      row_count: 2,
+    };
+    const option = buildEChartsOption(sankeySpec, crossDimData) as Record<string, any>;
+    const nodeNames: string[] = option.series[0].data.map((n: any) => n.name);
+    // Sources are un-suffixed; targets carry U+200B — four distinct nodes.
+    expect(nodeNames).toContain("North");      // x-side source
+    expect(nodeNames).toContain("South");      // x-side source
+    expect(nodeNames).toContain("South​");     // y-side target (suffixed)
+    expect(nodeNames).toContain("North​");     // y-side target (suffixed)
+    // Exactly four nodes — no merging across dimensions.
+    expect(nodeNames).toHaveLength(4);
   });
 });
 

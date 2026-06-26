@@ -195,8 +195,7 @@ function buildSankeyOption(
   };
   const links = data.rows.map((r) => {
     const src = String(r[xIdx]);
-    let tgt = String(r[yIdx]);
-    if (src === tgt) tgt += "\u200B"; // zero-width suffix to break a self-cycle
+    const tgt = String(r[yIdx]) + "\u200B"; // always suffix targets \u2192 x/y namespaces never collide
     addNode(src, spec.encoding.x as string);
     addNode(tgt, (spec.encoding.breakdown ?? [])[0]);
     return { source: src, target: tgt, value: Number(r[vIdx] ?? 0) || 0 };
