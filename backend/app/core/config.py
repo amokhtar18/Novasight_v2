@@ -449,6 +449,8 @@ class Settings(BaseSettings):
     default_page_size: int = 50
     max_query_rows: int = 100_000
     max_upload_mb: int = 100
+    # Cap on distinct values returned by POST /semantic/values for a filter dropdown.
+    max_filter_values: int = 1000
     # periodiq heartbeat cron for the pipeline-schedule dispatcher (#4). A 5-field
     # cron; every minute by default — the dispatcher then checks each schedule's own
     # cron. Env: PIPELINE_DISPATCH_CRON.

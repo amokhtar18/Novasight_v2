@@ -9,16 +9,78 @@ displayed, so a dashboard always reflects current data.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.saved_chart import ChartRead
-from app.schemas.semantic import SemanticFilter
+from app.schemas.semantic import FilterOperator, RelativeDateRange, SemanticRef
 
 # What a dashboard tile holds (#10): a pinned chart, or a decoration object.
-TileKind = Literal["chart", "text", "markdown", "image", "divider", "filter"]
+# (Slice C removes the standalone "filter" slicer tile — native filters replace it.)
+TileKind = Literal["chart", "text", "markdown", "image", "divider"]
+
+# A native filter is one of three typed kinds (Slice C).
+NativeFilterKind = Literal["value", "time", "numeric"]
+
+
+class NumericRange(BaseModel):
+    """A numeric filter's [min, max] bounds (either side optional)."""
+
+    min: float | None = None
+    max: float | None = None
+
+    @model_validator(mode="after")
+    def _min_le_max(self) -> NumericRange:
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError("numeric_range min must not be greater than max")
+        return self
+
+
+class FilterScope(BaseModel):
+    """Which tiles a native filter targets. ``auto`` = every cube-compatible tile."""
+
+    mode: Literal["auto", "tiles"] = "auto"
+    tile_ids: list[uuid.UUID] = Field(default_factory=list, max_length=200)
+
+
+class NativeFilter(BaseModel):
+    """A configured dashboard filter control. Persisted with its *default* selection;
+    the live selection is client state seeded from the default."""
+
+    id: str = Field(..., min_length=1, max_length=64)
+    kind: NativeFilterKind
+    member: SemanticRef
+    label: str | None = Field(default=None, max_length=128)
+    # value-filter fields
+    operator: FilterOperator = "equals"
+    default_values: list[str] = Field(default_factory=list, max_length=100)
+    # time-filter field (reuses Slice A's relative token | absolute [from, to] model)
+    date_range: RelativeDateRange | list[str] | None = None
+    # numeric-filter field
+    numeric_range: NumericRange | None = None
+    scope: FilterScope = Field(default_factory=FilterScope)
+    parent_id: str | None = Field(default=None, max_length=64)
+    required: bool = False
+
+    @model_validator(mode="after")
+    def _validate(self) -> NativeFilter:
+        # A value filter only uses set-membership/substring operators.
+        if self.kind == "value" and self.operator in {"set", "notSet", "gt", "gte", "lt", "lte"}:
+            raise ValueError("a value filter uses equals/notEquals/contains/notContains")
+        if isinstance(self.date_range, list):
+            if len(self.date_range) != 2:
+                raise ValueError("an absolute date_range must be exactly two ISO dates")
+            try:
+                start, end = (date.fromisoformat(d) for d in self.date_range)
+            except ValueError as exc:
+                raise ValueError("date_range entries must be ISO dates (YYYY-MM-DD)") from exc
+            if start > end:
+                raise ValueError("date_range start must not be after end")
+        if self.parent_id is not None and self.parent_id == self.id:
+            raise ValueError("a filter cannot be its own parent")
+        return self
 
 
 class DashboardCreate(BaseModel):
@@ -31,15 +93,38 @@ class DashboardCreate(BaseModel):
 class DashboardUpdate(BaseModel):
     """Body for ``PATCH /dashboards/{id}`` — partial.
 
-    ``filters`` (when provided) replaces the dashboard's view-time filters. Each
-    member is shape-validated here and re-validated against the governed allow-list
-    by the semantic query path when a tile runs — persisting a filter never widens
-    data access.
+    ``native_filters`` (when provided) replaces the dashboard's native filters. Members
+    are shape-validated here and re-validated against the governed allow-list when a
+    tile runs — persisting a filter never widens data access.
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
-    filters: list[SemanticFilter] | None = Field(default=None, max_length=20)
+    native_filters: list[NativeFilter] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def _validate_filters(self) -> DashboardUpdate:
+        if self.native_filters is None:
+            return self
+        by_id = {f.id: f for f in self.native_filters}
+        if len(by_id) != len(self.native_filters):
+            raise ValueError("native_filters ids must be unique")
+        for f in self.native_filters:
+            if f.parent_id is None:
+                continue
+            parent = by_id.get(f.parent_id)
+            if parent is None:
+                raise ValueError(f"filter {f.id!r} references unknown parent {f.parent_id!r}")
+            if parent.kind != "value":
+                raise ValueError("a filter parent must be a value filter")
+            seen = {f.id}
+            cur: NativeFilter | None = parent
+            while cur is not None:
+                if cur.id in seen:
+                    raise ValueError("native_filters contain a parent cycle")
+                seen.add(cur.id)
+                cur = by_id.get(cur.parent_id) if cur.parent_id else None
+        return self
 
 
 class DashboardTileCreate(BaseModel):
@@ -134,5 +219,5 @@ class DashboardRead(BaseModel):
     owner_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
-    filters: list[SemanticFilter] = Field(default_factory=list)
+    native_filters: list[NativeFilter] = Field(default_factory=list)
     tiles: list[DashboardTileRead]
