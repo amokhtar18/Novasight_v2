@@ -39,7 +39,7 @@ import { useTheme } from "@/lib/theme";
 import { TableRenderer } from "@/components/chart/TableRenderer";
 import { NumberRenderer } from "@/components/chart/NumberRenderer";
 import { formatChartValue } from "@/lib/chartFormat";
-import type { ChartOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
+import type { CartesianOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
 
 // Register only what we use (v2 adds funnel/gauge/radar/treemap, #8).
 echarts.use([
@@ -78,18 +78,21 @@ function sortRows(rows: Row[], xIdx: number, valIdx: number, sort: ChartSort): R
   return arr;
 }
 
-/** A themed value axis honoring number format, bounds, and log scale. */
+/**
+ * A themed value axis honoring number format, bounds, and log scale.
+ * Reads from the v2 cartesian type_options group.
+ */
 function valueAxis(
   theme: ChartTheme,
-  options: ChartOptions,
+  cartesian: CartesianOptions | null | undefined,
   fmt: (v: number) => string,
   label?: string | null
 ): Record<string, unknown> {
   return {
-    type: options.log_scale ? "log" : "value",
+    type: cartesian?.log_scale ? "log" : "value",
     name: label ?? undefined,
-    min: options.log_scale ? undefined : (options.y_min ?? undefined),
-    max: options.y_max ?? undefined,
+    min: cartesian?.log_scale ? undefined : (cartesian?.y_min ?? undefined),
+    max: cartesian?.y_max ?? undefined,
     axisLabel: { color: theme.text, formatter: (v: number) => fmt(v) },
     splitLine: { lineStyle: { color: theme.axisLine, opacity: 0.5 } },
     nameTextStyle: { color: theme.text },
@@ -114,11 +117,34 @@ export function buildEChartsOption(
   const { spec, data } = applyBreakdown(rawSpec, rawData);
   const { columns, rows } = data;
   const { x, series } = spec.encoding;
-  const options = spec.options ?? {};
-  const showLegend = options.show_legend ?? true;
+  const opts = spec.options ?? {};
+
+  // ---------------------------------------------------------------------------
+  // v2 shared chrome derivations
+  // ---------------------------------------------------------------------------
+
+  // Per-family type_options accessor — Tasks 5–8 read t.cartesian, t.pie, etc.
+  const t = opts.type_options ?? {};
+
+  // Cartesian family options (bar/line/area/hbar/combo/scatter).
+  const cartesian = t.cartesian ?? null;
+
+  // Gauge family options.
+  const gauge = t.gauge ?? null;
+
+  // Legend
+  const legend = opts.legend ?? {};
+  const showLegend = legend.show ?? true;
+
+  // Labels
+  const labels = opts.labels ?? {};
+
+  // Tooltip
+  const tip = opts.tooltip ?? {};
+
   const palette =
-    options.palette && options.palette.length > 0 ? options.palette : theme.palette;
-  const fmt = (v: number): string => formatChartValue(v, options.number_format);
+    opts.palette && opts.palette.length > 0 ? opts.palette : theme.palette;
+  const fmt = (v: number): string => formatChartValue(v, opts.number_format);
   const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 
   // ECharts' option types are strict-yet-loose; build each option as a plain object
@@ -145,38 +171,57 @@ export function buildEChartsOption(
     throw new Error("number charts are rendered without ECharts (see NumberRenderer)");
   }
 
-  const titleBlock = options.title
-    ? { text: options.title, textStyle: { color: theme.text } }
+  const titleBlock = opts.title
+    ? { text: opts.title, textStyle: { color: theme.text } }
     : undefined;
+
+  // Shared legend block — reads from opts.legend.{show,position,type,margin}
   const legendBlock = (): Record<string, unknown> | undefined => {
     if (!showLegend) return undefined;
-    const pos = options.legend_position ?? "top";
-    const base = { data: series.map(seriesLabel), textStyle: { color: theme.text } };
+    const pos = legend.position ?? "top";
+    const base: Record<string, unknown> = {
+      data: series.map(seriesLabel),
+      textStyle: { color: theme.text },
+      type: legend.type === "plain" ? "plain" : "scroll",
+      ...(legend.margin != null ? { padding: legend.margin } : {}),
+    };
     if (pos === "bottom") return { ...base, bottom: 0 };
     if (pos === "left") return { ...base, orient: "vertical", left: "left" };
     if (pos === "right") return { ...base, orient: "vertical", right: "right" };
     return { ...base, top: 0 };
   };
-  const itemTooltip = {
-    trigger: "item",
-    backgroundColor: theme.tooltipBg,
-    borderColor: theme.tooltipBorder,
-    textStyle: { color: theme.text },
-  };
+
+  // Shared data label — reads from opts.labels.{show,position}
+  const dataLabel = labels.show
+    ? { show: true, color: theme.text, ...(labels.position ? { position: labels.position } : {}) }
+    : undefined;
+
+  // Tooltip trigger — item mode for single-series circular charts; axis otherwise.
+  const tooltipTrigger = tip.mode === "item" ? "item" : "axis";
+
   const axisTooltip = {
-    trigger: "axis",
+    trigger: tooltipTrigger,
     backgroundColor: theme.tooltipBg,
     borderColor: theme.tooltipBorder,
     textStyle: { color: theme.text },
     valueFormatter: (v: number | string) => fmt(Number(v)),
   };
-  const dataLabel = options.data_labels ? { show: true, color: theme.text } : undefined;
+
+  // Item tooltip used for circular chart families (pie/funnel/treemap/radar/gauge).
+  // If the caller explicitly sets tooltip.mode="axis" we still respect "item" for
+  // these families; "rich" is treated as axis-style for now (Tasks 5-8 extend this).
+  const itemTooltip = {
+    trigger: tip.mode === "axis" ? "item" : tooltipTrigger,
+    backgroundColor: theme.tooltipBg,
+    borderColor: theme.tooltipBorder,
+    textStyle: { color: theme.text },
+  };
 
   // ---- Gauge: a single KPI dial (no category axis). --------------------
   if (spec.type === "gauge") {
     const valIdx = colIndex(series[0].field);
     const total = rows.reduce((acc, row) => acc + num(row[valIdx]), 0);
-    const maxVal = options.y_max ?? Math.max(total * 1.25, 1);
+    const maxVal = gauge?.max ?? Math.max(total * 1.25, 1);
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
@@ -184,7 +229,7 @@ export function buildEChartsOption(
       series: [
         {
           type: "gauge",
-          min: options.y_min ?? 0,
+          min: gauge?.min ?? 0,
           max: maxVal,
           progress: { show: true },
           axisLine: { lineStyle: { color: [[1, theme.axisLine]] } },
@@ -215,10 +260,10 @@ export function buildEChartsOption(
       textStyle: { color: theme.text },
       title: titleBlock,
       tooltip: itemTooltip,
-      grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
+      grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: 8, containLabel: true },
       legend: legendBlock(),
-      xAxis: valueAxis(theme, options, fmt, options.x_axis_label),
-      yAxis: valueAxis(theme, options, fmt, options.y_axis_label),
+      xAxis: valueAxis(theme, cartesian, fmt, cartesian?.x_axis_label),
+      yAxis: valueAxis(theme, cartesian, fmt, cartesian?.y_axis_label),
       series: seriesList,
     });
   }
@@ -232,7 +277,7 @@ export function buildEChartsOption(
     rows,
     xIdx,
     series.length ? colIndex(series[0].field) : xIdx,
-    options.sort ?? "none"
+    opts.sort ?? "none"
   );
   const categories = srows.map((row) =>
     row[xIdx] === null || row[xIdx] === undefined ? "(null)" : String(row[xIdx])
@@ -255,7 +300,7 @@ export function buildEChartsOption(
           type: "pie",
           radius: spec.type === "donut" ? ["50%", "72%"] : ["42%", "68%"],
           itemStyle: { borderColor: theme.tooltipBg, borderWidth: 2 },
-          label: options.data_labels ? { color: theme.text } : undefined,
+          label: labels.show ? { color: theme.text } : undefined,
           data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
           emphasis: {
             itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.5)" },
@@ -340,7 +385,7 @@ export function buildEChartsOption(
       return {
         name: seriesLabel(s),
         type: "bar" as const,
-        stack: options.stacked ? "total" : undefined,
+        stack: cartesian?.stacked ? "total" : undefined,
         itemStyle: s.color ? { color: s.color } : undefined,
         label: dataLabel,
         data: srows.map((row) => num(row[vi])),
@@ -351,9 +396,9 @@ export function buildEChartsOption(
       textStyle: { color: theme.text },
       title: titleBlock,
       tooltip: axisTooltip,
-      grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
+      grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: 8, containLabel: true },
       legend: legendBlock(),
-      xAxis: valueAxis(theme, options, fmt, options.x_axis_label),
+      xAxis: valueAxis(theme, cartesian, fmt, cartesian?.x_axis_label),
       yAxis: {
         type: "category",
         data: categories,
@@ -379,7 +424,7 @@ export function buildEChartsOption(
     return {
       name: seriesLabel(s),
       type: type as "bar" | "line",
-      stack: options.stacked ? "total" : undefined,
+      stack: cartesian?.stacked ? "total" : undefined,
       areaStyle: isArea ? {} : undefined,
       itemStyle: s.color ? { color: s.color } : undefined,
       label: dataLabel,
@@ -392,17 +437,17 @@ export function buildEChartsOption(
     textStyle: { color: theme.text },
     title: titleBlock,
     tooltip: axisTooltip,
-    grid: { left: 8, right: 16, top: options.title ? 48 : 24, bottom: 8, containLabel: true },
+    grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: 8, containLabel: true },
     legend: legendBlock(),
     xAxis: {
       type: "category",
-      name: options.x_axis_label ?? undefined,
+      name: cartesian?.x_axis_label ?? undefined,
       data: categories,
       axisLabel: { rotate: categories.length > 6 ? 45 : 0, color: theme.text },
       axisLine: { lineStyle: { color: theme.axisLine } },
       nameTextStyle: { color: theme.text },
     },
-    yAxis: valueAxis(theme, options, fmt, options.y_axis_label),
+    yAxis: valueAxis(theme, cartesian, fmt, cartesian?.y_axis_label),
     series: seriesList,
   });
 }

@@ -292,6 +292,26 @@ describe("buildEChartsOption — multiple series", () => {
 });
 
 // ---------------------------------------------------------------------------
+// v2 shared chrome: legend.type and labels.show
+// ---------------------------------------------------------------------------
+
+describe("buildEChartsOption — v2 shared chrome", () => {
+  it("maps legend.type plain and labels.show", () => {
+    const opt = buildEChartsOption(
+      {
+        version: "2",
+        type: "bar",
+        query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { legend: { show: true, type: "plain" }, labels: { show: true } },
+      },
+      { columns: ["c", "m"], rows: [["a", 1]], row_count: 1 }
+    ) as any;
+    expect(opt.legend.type).toBe("plain");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------
 

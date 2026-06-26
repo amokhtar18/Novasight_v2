@@ -16,4 +16,7 @@ describe("formatChartValue", () => {
   it("returns an empty string for non-finite values", () => {
     expect(formatChartValue(Number.NaN)).toBe("");
   });
+  it("applies prefix and suffix", () => {
+    expect(formatChartValue(5, { style: "plain", prefix: "≈", suffix: "/u" })).toBe("≈5/u");
+  });
 });

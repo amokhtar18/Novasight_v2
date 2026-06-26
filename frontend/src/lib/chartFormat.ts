@@ -13,9 +13,10 @@ export function formatChartValue(value: number, nf?: NumberFormat): string {
   const decimals = nf?.decimals ?? null;
   const compact = nf?.compact ?? false;
   const body = compact ? compactNumber(value, decimals) : plainNumber(value, decimals);
-  if (style === "currency") return `${nf?.currency ?? "$"}${body}`;
-  if (style === "percent") return `${body}%`;
-  return body;
+  let out = body;
+  if (style === "currency") out = `${nf?.currency ?? "$"}${body}`;
+  else if (style === "percent") out = `${body}%`;
+  return `${nf?.prefix ?? ""}${out}${nf?.suffix ?? ""}`;
 }
 
 function plainNumber(n: number, decimals: number | null): string {
