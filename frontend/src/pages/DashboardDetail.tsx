@@ -211,7 +211,7 @@ export function DashboardDetail() {
         />
       ) : (
         <div className="flex gap-4">
-          {!editing || filters.length > 0 ? (
+          {filters.length > 0 || editing ? (
             <DashboardFilterDrawer
               filters={filters}
               selections={selections}

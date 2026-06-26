@@ -1,12 +1,16 @@
-// frontend/src/test/dashboardDetailFilters.test.tsx  (replace contents)
+// frontend/src/test/dashboardDetailFilters.test.tsx
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { DashboardDetail } from "@/pages/DashboardDetail";
 
-const board = {
+// ---------------------------------------------------------------------------
+// Shared board fixtures
+// ---------------------------------------------------------------------------
+const boardWithFilter = {
   id: "d1", name: "Board", description: null, owner_id: null,
   created_at: "", updated_at: "",
   native_filters: [{ id: "f1", kind: "value", member: "regional_sales.region", operator: "equals", label: "Region" }],
@@ -17,11 +21,22 @@ const board = {
   }],
 };
 
+const boardNoFilters = {
+  ...boardWithFilter,
+  id: "d2",
+  native_filters: [],
+};
+
+// ---------------------------------------------------------------------------
+// Mutable board reference — tests can point this at any fixture before render.
+// ---------------------------------------------------------------------------
+let activeBoard: typeof boardWithFilter = boardWithFilter;
+
 vi.mock("@/api/hooks", async () => {
   const actual = await vi.importActual<typeof import("@/api/hooks")>("@/api/hooks");
   return {
     ...actual,
-    useDashboard: () => ({ data: board, isLoading: false, isError: false }),
+    useDashboard: () => ({ data: activeBoard, isLoading: false, isError: false }),
     useUpdateDashboard: () => ({ mutate: vi.fn() }),
     useAddDashboardTile: () => ({ mutate: vi.fn() }),
     useSemanticValues: () => ({ data: { values: ["west", "east"] }, isLoading: false }),
@@ -32,20 +47,40 @@ vi.mock("@/api/hooks", async () => {
 vi.mock("@/lib/identity", () => ({ useIdentity: () => ({ canEdit: true }) }));
 vi.mock("@/lib/useChartData", () => ({ useChartData: () => ({ data: { columns: [], rows: [], row_count: 0 }, isLoading: false, isError: false }) }));
 
-function wrap() {
+// ---------------------------------------------------------------------------
+// Helper
+// ---------------------------------------------------------------------------
+function wrap(board = boardWithFilter) {
+  activeBoard = board;
   const qc = new QueryClient();
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={["/dashboards/d1"]}>
-        <Routes><Route path="/dashboards/:dashboardId" element={<DashboardDetail />} /></Routes>
+      <MemoryRouter initialEntries={[`/dashboards/${board.id}`]}>
+        <Routes>
+          <Route path="/dashboards/:dashboardId" element={<DashboardDetail />} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 describe("DashboardDetail native filters", () => {
   it("renders the native-filter drawer with the configured filter", () => {
-    wrap();
+    wrap(boardWithFilter);
     expect(screen.getByText("Region")).toBeInTheDocument();
+  });
+
+  it("shows Add filter button in edit mode even when native_filters is empty", async () => {
+    const user = userEvent.setup();
+    wrap(boardNoFilters);
+
+    // Enter edit mode via the PageHeader "Edit" button
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    // The filter drawer must now be rendered and expose "Add filter"
+    expect(screen.getByRole("button", { name: /add filter/i })).toBeInTheDocument();
   });
 });
