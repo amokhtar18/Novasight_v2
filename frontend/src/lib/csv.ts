@@ -1,13 +1,14 @@
 /**
  * CSV export for a QueryResponse. RFC-4180 escaping: a field is quoted when it
- * contains a comma, double-quote, or newline, and embedded quotes are doubled.
+ * contains a comma, double-quote, newline, or carriage return, and embedded
+ * quotes are doubled.
  */
 import type { QueryResponse } from "@/types/api";
 
 function escapeField(value: unknown): string {
   if (value === null || value === undefined) return "";
   const s = String(value);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
 
