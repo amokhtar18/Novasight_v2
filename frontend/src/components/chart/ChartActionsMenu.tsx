@@ -5,7 +5,7 @@
  * grounded *semantic* query — never SQL), Download CSV, and Download PNG (via the
  * renderer's toPng handle; hidden for non-ECharts table/number charts).
  */
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
 import {
@@ -32,7 +32,32 @@ export function ChartActionsMenu({ spec, data, chartHandle, title = "chart" }: C
   const [showTable, setShowTable] = useState(false);
   const [showQuery, setShowQuery] = useState(false);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
   const isEcharts = spec.type !== "table" && spec.type !== "number";
+
+  // Close on outside mousedown or Escape — only while open.
+  useEffect(() => {
+    if (!open) return;
+
+    function handleMouseDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   function handlePng() {
     const url = chartHandle?.current?.toPng();
@@ -47,12 +72,13 @@ export function ChartActionsMenu({ spec, data, chartHandle, title = "chart" }: C
 
   return (
     <>
-      <div className="relative">
+      <div ref={containerRef} className="relative">
         <button
           type="button"
           aria-label="Chart actions"
           aria-expanded={open}
           aria-haspopup="menu"
+          aria-controls={open ? menuId : undefined}
           onClick={() => setOpen((v) => !v)}
           className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
         >
@@ -60,6 +86,7 @@ export function ChartActionsMenu({ spec, data, chartHandle, title = "chart" }: C
         </button>
         {open && (
           <div
+            id={menuId}
             role="menu"
             className="absolute right-0 z-30 mt-1 w-44 rounded-md border bg-popover p-1 shadow-md"
           >

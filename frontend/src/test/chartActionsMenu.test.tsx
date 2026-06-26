@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import type { ChartSpec, QueryResponse } from "@/types/api";
 
@@ -34,5 +34,43 @@ describe("ChartActionsMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /chart actions/i }));
     fireEvent.click(screen.getByText(/view query/i));
     expect(screen.getByText(/metric_refs/)).toBeInTheDocument();
+  });
+
+  it("closes the menu after an action is selected", () => {
+    render(<ChartActionsMenu spec={specOfType("bar")} data={data} title="Sales" />);
+    fireEvent.click(screen.getByRole("button", { name: /chart actions/i }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/view query/i));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("closes the menu on Escape key", () => {
+    render(<ChartActionsMenu spec={specOfType("bar")} data={data} title="Sales" />);
+    fireEvent.click(screen.getByRole("button", { name: /chart actions/i }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("closes the menu on outside mousedown", () => {
+    const { container } = render(
+      <div>
+        <div data-testid="outside">outside</div>
+        <ChartActionsMenu spec={specOfType("bar")} data={data} title="Sales" />
+      </div>
+    );
+    fireEvent.click(screen.getByRole("button", { name: /chart actions/i }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByTestId("outside"));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    void container;
+  });
+
+  it("does not close the menu on mousedown inside the container", () => {
+    render(<ChartActionsMenu spec={specOfType("bar")} data={data} title="Sales" />);
+    fireEvent.click(screen.getByRole("button", { name: /chart actions/i }));
+    const menu = screen.getByRole("menu");
+    fireEvent.mouseDown(within(menu).getByText(/view as table/i));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 });
