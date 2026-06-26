@@ -4,6 +4,10 @@
  * Edits `options.type_options.gauge` via the immutable setFamily helper.
  * Covers: min/max/start_angle/end_angle/show_pointer/show_progress/round_cap/
  * show_axis_tick/show_split_line/split_number/font_size/animation.
+ *
+ * Not exposed: `intervals` / `interval_colors` — these are paired arrays that
+ * require a dynamic row-editor UI (the renderer already supports them; deferred
+ * to a follow-up panel, similar to RadarControls' `metric_bounds` deferral).
  */
 
 import type { ChartOptions, GaugeOptions } from "@/types/api";

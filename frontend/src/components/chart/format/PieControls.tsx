@@ -110,7 +110,7 @@ export function PieControls({ options, setOptions }: Props) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pc-group-others">Group others threshold</Label>
+            <Label htmlFor="pc-group-others-threshold">Group others threshold</Label>
             <Input
               id="pc-group-others-threshold"
               value={po.group_others_threshold != null ? String(po.group_others_threshold) : ""}
