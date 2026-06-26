@@ -51,7 +51,7 @@ FieldName = Annotated[
 #   bar/line/area/scatter — as before;          hbar — horizontal bar;
 #   pie/donut — share-of-total;                  combo — first series bar, rest line;
 #   funnel/treemap — labelled magnitudes;        radar — series as polygons over x;
-#   gauge — a single KPI dial.
+#   gauge — a single KPI dial;                   heatmap/sankey — 2-dim x 1-measure.
 ChartType = Literal[
     "bar",
     "hbar",
@@ -65,6 +65,8 @@ ChartType = Literal[
     "treemap",
     "radar",
     "gauge",
+    "heatmap",
+    "sankey",
     "table",
     "number",
 ]
@@ -296,6 +298,38 @@ class TreemapOptions(BaseModel):
     label_type: Literal["key", "value", "key_value"] = "key"
 
 
+class HeatmapOptions(BaseModel):
+    """Per-chart-family display options for heatmap (a density matrix).
+
+    The measure (``series[0]``) is mapped to cell colour via an ECharts ``visualMap``
+    over the x (``encoding.x``) x y (``encoding.breakdown[0]``) grid.
+    """
+
+    show_values: bool = False
+    min_color: HexColor | None = None
+    max_color: HexColor | None = None
+    # Manual visualMap bounds; the renderer auto-derives from the data when unset.
+    value_min: float | None = None
+    value_max: float | None = None
+    show_visual_map: bool = True
+    cell_border: bool = False
+
+
+class SankeyOptions(BaseModel):
+    """Per-chart-family display options for sankey (a flow diagram).
+
+    Links flow from the x (``encoding.x``) value to the y (``encoding.breakdown[0]``)
+    value, weighted by the measure (``series[0]``).
+    """
+
+    orient: Literal["horizontal", "vertical"] = "horizontal"
+    node_align: Literal["left", "right", "justify"] = "justify"
+    node_width: int | None = Field(default=None, ge=1, le=100)
+    node_gap: int | None = Field(default=None, ge=1, le=100)
+    link_color: Literal["source", "target", "gradient"] = "gradient"
+    show_labels: bool = True
+
+
 class NumberOptions(BaseModel):
     """Per-chart-family display options for number (KPI tile)."""
 
@@ -314,6 +348,8 @@ class TypeOptions(BaseModel):
     funnel: FunnelOptions | None = None
     radar: RadarOptions | None = None
     treemap: TreemapOptions | None = None
+    heatmap: HeatmapOptions | None = None
+    sankey: SankeyOptions | None = None
     number: NumberOptions | None = None
 
 
@@ -354,6 +390,23 @@ class ChartSpec(BaseModel):
         # raw table without an axis, so they may omit ``x``.
         if self.type not in ("table", "number", "gauge") and self.encoding.x is None:
             raise ValueError(f"chart type '{self.type}' requires encoding.x")
+        return self
+
+    @model_validator(mode="after")
+    def _require_two_dims_for_matrix_charts(self) -> ChartSpec:
+        # heatmap/sankey are 2-dimension x 1-measure: x (dim 1), breakdown[0] (dim 2),
+        # and exactly one series (the measure mapped to colour / flow weight).
+        if self.type in ("heatmap", "sankey"):
+            if self.encoding.x is None:
+                raise ValueError(f"chart type '{self.type}' requires encoding.x")
+            if not self.encoding.breakdown:
+                raise ValueError(
+                    f"chart type '{self.type}' requires a second dimension in encoding.breakdown"
+                )
+            if len(self.encoding.series) != 1:
+                raise ValueError(
+                    f"chart type '{self.type}' requires exactly one series (the measure)"
+                )
         return self
 
 

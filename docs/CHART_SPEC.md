@@ -225,6 +225,8 @@ The family is determined by the chart type:
 | `funnel` | `funnel` |
 | `radar` | `radar` |
 | `treemap` | `treemap` |
+| `heatmap` | `heatmap` |
+| `sankey` | `sankey` |
 | `number` | `number` |
 | `table` | *(no per-family options)* |
 
@@ -269,13 +271,29 @@ by **x-category name** (the dimension value, e.g. `"Sales"`, not the field path)
 
 `subheader`, `subtitle`, `header_font_size`, `subheader_font_size`.
 
+### heatmap / sankey (2-dimension × 1-measure)
+
+Both read **two governed dimensions and one measure**: dimension 1 → `encoding.x`,
+dimension 2 → `encoding.breakdown[0]`, measure → `encoding.series[0].field`
+(`query.dimensions = [dim1, dim2]`, `query.metric_refs = [measure]`). The spec
+validator rejects either type without `x`, without a `breakdown` entry, or with
+more than one series.
+
+- **heatmap** — a density matrix; the measure colours each x×y cell via a `visualMap`.
+  Options (`type_options.heatmap`): `show_values`, `min_color`/`max_color`,
+  `value_min`/`value_max` (manual scale), `show_visual_map`, `cell_border`.
+- **sankey** — a flow diagram; links go from each x value to each y value weighted by
+  the measure. Options (`type_options.sankey`): `orient`, `node_align`, `node_width`,
+  `node_gap`, `link_color`, `show_labels`.
+
 ## Validation invariants
 
 The Pydantic schema enforces (and the frontend type mirrors):
 
 - a `ChartQuery` must have an inline `query` **or** at least one `metric_refs` entry;
 - `encoding.series` has at least one entry;
-- `encoding.x` is required for every type except `table` and `number`;
+- `encoding.x` is required for every type except `table`, `number`, and `gauge`;
+- `heatmap` and `sankey` additionally require `encoding.x`, a non-empty `encoding.breakdown`, and exactly one series;
 - `field`/`x`/`metric_refs` match the bounded field-name pattern above.
 
 ## Round-trip guarantee

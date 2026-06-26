@@ -421,3 +421,57 @@ def test_radar_metric_bounds_and_treemap_and_number() -> None:
     )
     assert spec_number.options.type_options.number.subheader == "vs last month"
     assert spec_number.options.type_options.number.header_font_size == 48
+
+
+def _heatmap_raw(series: list | None = None, breakdown: list | None = None) -> dict:
+    return {
+        "type": "heatmap",
+        "query": {"metric_refs": ["sales.total"], "dimensions": ["sales.region", "sales.month"]},
+        "encoding": {
+            "x": "sales.region",
+            "series": series if series is not None else [{"field": "sales.total"}],
+            "breakdown": breakdown if breakdown is not None else ["sales.month"],
+        },
+        "options": {"type_options": {"heatmap": {"show_values": True, "max_color": "#ef4444"}}},
+    }
+
+
+def test_heatmap_spec_round_trips() -> None:
+    spec = ChartSpec.model_validate(_heatmap_raw())
+    assert spec.type == "heatmap"
+    assert spec.encoding.breakdown == ["sales.month"]
+    assert spec.options.type_options is not None
+    assert spec.options.type_options.heatmap is not None
+    assert spec.options.type_options.heatmap.show_values is True
+
+
+def test_sankey_spec_round_trips() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "sankey",
+            "query": {
+                "metric_refs": ["sales.total"],
+                "dimensions": ["sales.region", "sales.product"],
+            },
+            "encoding": {
+                "x": "sales.region",
+                "series": [{"field": "sales.total"}],
+                "breakdown": ["sales.product"],
+            },
+            "options": {"type_options": {"sankey": {"orient": "vertical", "node_align": "left"}}},
+        }
+    )
+    assert spec.type == "sankey"
+    assert spec.options.type_options.sankey.orient == "vertical"
+
+
+def test_matrix_chart_requires_breakdown() -> None:
+    with pytest.raises(ValidationError, match="requires a second dimension"):
+        ChartSpec.model_validate(_heatmap_raw(breakdown=[]))
+
+
+def test_matrix_chart_requires_single_series() -> None:
+    with pytest.raises(ValidationError, match="exactly one series"):
+        ChartSpec.model_validate(
+            _heatmap_raw(series=[{"field": "sales.total"}, {"field": "sales.count"}])
+        )
