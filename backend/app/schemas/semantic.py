@@ -208,3 +208,23 @@ class SemanticQueryRequest(BaseModel):
                 "a semantic query needs at least one measure, dimension, or time dimension"
             )
         return self
+
+
+class SemanticValuesRequest(BaseModel):
+    """Request distinct values for a governed dimension (filter dropdown / cascading).
+
+    ``member`` must be a governed dimension. ``search`` is an optional substring
+    (server-side typeahead → a ``contains`` filter). ``constraints`` are parent-filter
+    selections (cascading). ``limit`` is clamped to ``settings.max_filter_values``.
+    """
+
+    member: SemanticRef
+    search: str | None = Field(default=None, max_length=128)
+    constraints: list[SemanticFilter] = Field(default_factory=list, max_length=20)
+    limit: int | None = Field(default=None, ge=1)
+
+
+class SemanticValuesResponse(BaseModel):
+    """Distinct values for a dimension (deduped, capped, ordered)."""
+
+    values: list[str] = Field(default_factory=list)

@@ -26,7 +26,13 @@ from fastapi import Depends
 from app.ai.semantic.client import SemanticLayerClient, get_semantic_layer_client
 from app.core.config import Settings, get_settings
 from app.schemas.query import QueryResponse
-from app.schemas.semantic import SemanticField, SemanticModelRead, SemanticQueryRequest
+from app.schemas.semantic import (
+    SemanticField,
+    SemanticModelRead,
+    SemanticQueryRequest,
+    SemanticValuesRequest,
+    SemanticValuesResponse,
+)
 from app.tenancy.context import TenantContext
 
 logger = logging.getLogger(__name__)
@@ -120,6 +126,58 @@ class SemanticService:
             len(rows),
         )
         return QueryResponse(columns=columns, rows=rows, row_count=len(rows))
+
+    # ------------------------------------------------------------------
+    # Distinct values (filter dropdowns / cascading)
+    # ------------------------------------------------------------------
+
+    async def distinct_values(
+        self, ctx: TenantContext, req: SemanticValuesRequest
+    ) -> SemanticValuesResponse:
+        """Return grounded distinct values for a governed dimension (fail closed)."""
+        meta = await self._client.meta(ctx)
+        allowed_measures, allowed_dimensions = self._allow_lists(meta)
+        if req.member not in allowed_dimensions:
+            raise SemanticValidationError(f"Unknown dimension: {req.member}")
+        allowed_members = allowed_measures | allowed_dimensions
+        bad = [c.member for c in req.constraints if c.member not in allowed_members]
+        if bad:
+            raise SemanticValidationError(
+                f"Cannot filter by unknown field(s): {', '.join(sorted(set(bad)))}"
+            )
+        cube_filters: list[dict[str, Any]] = [
+            {"member": c.member, "operator": c.operator, "values": list(c.values)}
+            for c in req.constraints
+        ]
+        if req.search:
+            cube_filters.append(
+                {"member": req.member, "operator": "contains", "values": [req.search]}
+            )
+        cap = self._settings.max_filter_values
+        limit = min(req.limit, cap) if req.limit is not None else cap
+        rows = await self._client.query(
+            ctx,
+            measures=[],
+            dimensions=[req.member],
+            order={req.member: "asc"},
+            limit=limit,
+            filters=cube_filters or None,
+        )
+        seen: list[str] = []
+        seen_set: set[str] = set()
+        for row in rows:
+            raw = row.get(req.member)
+            if raw is None or raw == "":
+                continue
+            value = str(raw)
+            if value not in seen_set:
+                seen_set.add(value)
+                seen.append(value)
+        logger.info(
+            "Semantic values: tenant_id=%r member=%r returned %d value(s)",
+            ctx.tenant_id, req.member, len(seen),
+        )
+        return SemanticValuesResponse(values=seen)
 
     # ------------------------------------------------------------------
     # Internals

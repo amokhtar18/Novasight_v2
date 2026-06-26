@@ -17,7 +17,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.ai.semantic.client import CubeAuthError, CubeQueryError
 from app.schemas.query import QueryResponse
-from app.schemas.semantic import SemanticModelRead, SemanticQueryRequest
+from app.schemas.semantic import (
+    SemanticModelRead,
+    SemanticQueryRequest,
+    SemanticValuesRequest,
+    SemanticValuesResponse,
+)
 from app.services.semantic import (
     SemanticService,
     SemanticValidationError,
@@ -89,6 +94,40 @@ async def query_semantic(
         ) from exc
     except CubeQueryError as exc:
         logger.error("Semantic query Cube query error: tenant_id=%r", ctx.tenant_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer returned an error. Please try again.",
+        ) from exc
+
+
+@router.post(
+    "/values",
+    response_model=SemanticValuesResponse,
+    responses={
+        422: {"description": "The dimension/constraint is not in the governed allow-list"},
+        503: {"description": "Semantic layer temporarily unavailable"},
+    },
+    summary="List grounded distinct values for a governed dimension",
+)
+async def semantic_values(
+    payload: SemanticValuesRequest,
+    ctx: TenantContext = Depends(get_tenant_context),  # noqa: B008
+    svc: SemanticService = Depends(get_semantic_service),  # noqa: B008
+) -> SemanticValuesResponse:
+    """Return distinct values for a filter dropdown (grounded, tenant-scoped)."""
+    try:
+        return await svc.distinct_values(ctx, payload)
+    except SemanticValidationError as exc:
+        logger.info("Semantic values rejected: tenant_id=%r reason=%r", ctx.tenant_id, exc.reason)
+        raise HTTPException(status_code=422, detail=exc.reason) from exc
+    except CubeAuthError as exc:
+        logger.warning("Semantic values Cube auth error: tenant_id=%r", ctx.tenant_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer is temporarily unavailable. Please try again.",
+        ) from exc
+    except CubeQueryError as exc:
+        logger.error("Semantic values Cube query error: tenant_id=%r", ctx.tenant_id)
         raise HTTPException(
             status_code=503,
             detail="Semantic layer returned an error. Please try again.",
