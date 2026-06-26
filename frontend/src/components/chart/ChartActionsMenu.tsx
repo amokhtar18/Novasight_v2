@@ -25,9 +25,13 @@ interface ChartActionsMenuProps {
   /** Ref to the rendered chart for PNG export; omit for table/number tiles. */
   chartHandle?: React.RefObject<ChartRendererHandle | null>;
   title?: string;
+  /** Called when the user selects "Drill by…"; only shown for semantic, non-number/table charts. */
+  onDrillBy?: () => void;
+  /** Called when the user selects "Drill to detail…"; only shown for semantic charts. */
+  onDrillToDetail?: () => void;
 }
 
-export function ChartActionsMenu({ spec, data, chartHandle, title = "chart" }: ChartActionsMenuProps) {
+export function ChartActionsMenu({ spec, data, chartHandle, title = "chart", onDrillBy, onDrillToDetail }: ChartActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showQuery, setShowQuery] = useState(false);
@@ -36,6 +40,7 @@ export function ChartActionsMenu({ spec, data, chartHandle, title = "chart" }: C
   const menuId = useId();
 
   const isEcharts = spec.type !== "table" && spec.type !== "number";
+  const isSemantic = (spec.query.metric_refs ?? []).length > 0;
 
   // Close on outside mousedown or Escape — only while open.
   useEffect(() => {
@@ -95,6 +100,12 @@ export function ChartActionsMenu({ spec, data, chartHandle, title = "chart" }: C
             <MenuItem onClick={() => { downloadCsv(data, title); setOpen(false); }}>Download CSV</MenuItem>
             {isEcharts && (
               <MenuItem onClick={() => { handlePng(); setOpen(false); }}>Download PNG</MenuItem>
+            )}
+            {isSemantic && onDrillBy && spec.type !== "number" && spec.type !== "table" && (
+              <MenuItem onClick={() => { onDrillBy(); setOpen(false); }}>Drill by…</MenuItem>
+            )}
+            {isSemantic && onDrillToDetail && (
+              <MenuItem onClick={() => { onDrillToDetail(); setOpen(false); }}>Drill to detail…</MenuItem>
             )}
           </div>
         )}
