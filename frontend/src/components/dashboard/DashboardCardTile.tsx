@@ -7,12 +7,13 @@
  * edit mode every tile exposes a drag handle (dnd-kit), a size control, and remove.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 
-import { ChartRenderer } from "@/components/chart/ChartRenderer";
+import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/ChartRenderer";
+import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
@@ -258,6 +259,8 @@ function ChartTileBody({
 
   const { data, isLoading, isError } = useChartData(spec ?? null, appliedFilters);
 
+  const chartHandle = useRef<ChartRendererHandle>(null);
+
   if (!spec) {
     return <EmptyState title="Chart unavailable" description="This chart was removed." />;
   }
@@ -274,13 +277,21 @@ function ChartTileBody({
           <Spinner label="Loading chart" />
         </div>
       ) : data && data.row_count > 0 ? (
-        <ChartRenderer
-          spec={spec}
-          data={data}
-          title={title}
-          className="h-64"
-          onSelectCategory={editing ? undefined : onSelectCategory}
-        />
+        <div className="relative h-full">
+          {!editing && (
+            <div className="absolute right-0 top-0 z-10">
+              <ChartActionsMenu spec={spec} data={data} chartHandle={chartHandle} title={title} />
+            </div>
+          )}
+          <ChartRenderer
+            ref={chartHandle}
+            spec={spec}
+            data={data}
+            title={title}
+            className="h-64"
+            onSelectCategory={editing ? undefined : onSelectCategory}
+          />
+        </div>
       ) : isError ? (
         <EmptyState title="Couldn't load data" description="This tile's query failed to run." />
       ) : (

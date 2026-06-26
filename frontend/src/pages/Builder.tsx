@@ -15,7 +15,8 @@ import { BarChart3, Layers, SlidersHorizontal } from "lucide-react";
 
 import { useSemanticModels, useSemanticQuery } from "@/api/hooks";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { ChartRenderer } from "@/components/chart/ChartRenderer";
+import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/ChartRenderer";
+import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import { NLChartPanel } from "@/components/chart/NLChartPanel";
 import { SaveChartButton } from "@/components/chart/SaveChartButton";
 import { SemanticQueryBuilder } from "@/components/chart/SemanticQueryBuilder";
@@ -515,12 +516,15 @@ function SemanticPreview({ s }: { s: SemanticBuilder }) {
   const hasData = !!data && data.row_count > 0;
   const noModels = !s.modelsLoading && (!s.models || s.models.length === 0);
 
+  const chartHandle = useRef<ChartRendererHandle>(null);
+
   return (
     <Card className="bg-card/70">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base">Preview</CardTitle>
         {s.ready && hasData && (
           <div className="flex flex-wrap gap-2">
+            <ChartActionsMenu spec={s.spec} data={data} chartHandle={chartHandle} title={s.spec.options?.title ?? "Chart"} />
             <SaveChartButton
               spec={s.spec}
               defaultName={s.spec.options?.title ?? "Chart"}
@@ -557,6 +561,7 @@ function SemanticPreview({ s }: { s: SemanticBuilder }) {
           </Alert>
         ) : hasData ? (
           <ChartRenderer
+            ref={chartHandle}
             spec={s.spec}
             data={data}
             title={s.spec.options?.title ?? undefined}
