@@ -76,7 +76,7 @@ const SHELF_ACCEPTS: Record<string, FieldKind> = {
 /** Append a default `equals` filter for a member, unless it is already filtered. */
 export function filtersAfterDrop(filters: SemanticFilter[], member: string): SemanticFilter[] {
   if (filters.some((f) => f.member === member)) return filters;
-  return [...filters, { member, operator: "equals" as SemanticFilterOperator, values: [] }];
+  return [...filters, { member, operator: "equals", values: [] }];
 }
 
 /** Split a comma-separated values string into trimmed, non-empty values. */

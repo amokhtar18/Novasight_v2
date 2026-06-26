@@ -221,6 +221,8 @@ class SemanticValuesRequest(BaseModel):
     member: SemanticRef
     search: str | None = Field(default=None, max_length=128)
     constraints: list[SemanticFilter] = Field(default_factory=list, max_length=20)
+    # Per-request value cap; the service clamps it to ``settings.max_filter_values`` so a
+    # caller can never exceed the platform limit (mirrors SemanticQueryRequest.limit).
     limit: int | None = Field(default=None, ge=1)
 
 

@@ -141,7 +141,8 @@ async def test_filters_persist_and_round_trip(
         "/api/v1/dashboards", headers=_auth(), json={"name": "Sales"}
     ).json()["id"]
     # A new dashboard has no native_filters.
-    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["native_filters"] == []
+    fresh = client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()
+    assert fresh["native_filters"] == []
 
     nf = {
         "id": "f1", "kind": "value", "member": "regional_sales.region",
@@ -161,7 +162,8 @@ async def test_filters_persist_and_round_trip(
 
     # Native filters can be cleared with an empty list.
     client_with_db.patch(f"/api/v1/dashboards/{did}", headers=_auth(), json={"native_filters": []})
-    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["native_filters"] == []
+    cleared = client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()
+    assert cleared["native_filters"] == []
 
 
 @pytest.mark.asyncio

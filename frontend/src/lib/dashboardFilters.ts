@@ -22,7 +22,11 @@ export function cubeOf(member: string | undefined): string | undefined {
   return member?.includes(".") ? member.split(".")[0] : undefined;
 }
 
-/** The cubes a chart tile reads (from its metric refs). */
+/**
+ * The cubes a chart tile reads. Derived from the spec's `metric_refs` only — every
+ * tile has at least one metric, and a measure's cube is the tile's governing cube, so
+ * this is sufficient for the cube-compatibility check without inspecting dimensions.
+ */
 function tileCubes(tile: DashboardTileRead): Set<string> {
   const cubes = new Set<string>();
   for (const m of tile.chart?.spec.query?.metric_refs ?? []) {
@@ -64,6 +68,8 @@ export function resolveTileFilters(
     if (!filterAppliesToTile(f, tile)) continue;
     const sel = selections[f.id] ?? defaultSelection(f);
     if (sel.kind === "value" && sel.values.length > 0) {
+      // `operator` is optional on the config; a value filter without one defaults to
+      // `equals` (the editor's default), matching the backend's value-filter contract.
       out.push({ member: f.member, operator: f.operator ?? "equals", values: sel.values });
     } else if (sel.kind === "numeric") {
       if (sel.min !== null) out.push({ member: f.member, operator: "gte", values: [String(sel.min)] });

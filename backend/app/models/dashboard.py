@@ -74,7 +74,7 @@ class DashboardTile(TimestampMixin, Base):
     chart_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("charts.id", ondelete="CASCADE"), nullable=True
     )
-    # Payload for non-chart tiles (text/markdown body, image url, filter member, …).
+    # Payload for non-chart tiles (text/markdown body, image url, divider label, …).
     content: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # Optional per-tile title override (defaults to the chart's name for chart tiles).
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)

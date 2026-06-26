@@ -84,7 +84,7 @@ export function NativeFilterEditor({ open, onOpenChange, initial, existing, tile
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="nf-kind">Kind</Label>
-          <Select id="nf-kind" value={kind} onChange={(e) => { setKind(e.target.value as NativeFilterKind); setMember(""); }}>
+          <Select id="nf-kind" value={kind} onChange={(e) => { setKind(e.target.value as NativeFilterKind); setMember(""); setParentId(""); }}>
             <option value="value">Value</option>
             <option value="time">Time range</option>
             <option value="numeric">Numeric range</option>
@@ -103,7 +103,7 @@ export function NativeFilterEditor({ open, onOpenChange, initial, existing, tile
 
         <div className="space-y-1.5">
           <Label htmlFor="nf-label">Label (optional)</Label>
-          <Input id="nf-label" value={label ?? ""} onChange={(e) => setLabel(e.target.value)} />
+          <Input id="nf-label" value={label} onChange={(e) => setLabel(e.target.value)} />
         </div>
 
         <div className="space-y-1.5">

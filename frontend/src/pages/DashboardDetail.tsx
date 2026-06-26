@@ -85,6 +85,12 @@ export function DashboardDetail() {
   }
   function removeFilter(id: string) {
     persistFilters(filters.filter((x) => x.id !== id));
+    // Drop the orphaned live selection so it can't linger in session state.
+    setSelections((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
   /** Cross-filter: a clicked point becomes a transient session value overlay. */
   function handleCrossFilter(member: string, value: string) {

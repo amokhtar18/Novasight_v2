@@ -3,7 +3,7 @@
  * ValueFilterControl — multi-select for a value native filter, fed by grounded
  * /semantic/values. `constraints` carry the parent selection for cascading.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useSemanticValues } from "@/api/hooks";
 import { Input } from "@/components/ui/input";
@@ -20,8 +20,15 @@ interface Props {
 
 export function ValueFilterControl({ filter, values, onChange, constraints, enabled = true }: Props) {
   const [search, setSearch] = useState("");
+  // Debounce typeahead so each keystroke doesn't fire its own /semantic/values request.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const { data } = useSemanticValues(
-    enabled ? { member: filter.member, search: search || null, constraints } : null
+    enabled ? { member: filter.member, search: debouncedSearch || null, constraints } : null
   );
   const options = data?.values ?? [];
 
@@ -49,7 +56,21 @@ export function ValueFilterControl({ filter, values, onChange, constraints, enab
       {values.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {values.map((v) => (
-            <Badge key={v} variant="secondary" className="cursor-pointer" onClick={() => toggle(v)}>
+            <Badge
+              key={v}
+              variant="secondary"
+              role="button"
+              tabIndex={0}
+              aria-label={`Remove ${v}`}
+              className="cursor-pointer"
+              onClick={() => toggle(v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggle(v);
+                }
+              }}
+            >
               {v} ✕
             </Badge>
           ))}

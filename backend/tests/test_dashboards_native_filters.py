@@ -67,7 +67,9 @@ def _auth(tenant: str = "local") -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_round_trips_native_filters(client_with_db: TestClient, make_tenant: Any) -> None:
+async def test_dashboard_round_trips_native_filters(
+    client_with_db: TestClient, make_tenant: Any
+) -> None:
     await make_tenant("local")
     created = client_with_db.post("/api/v1/dashboards", headers=_auth(), json={"name": "D"})
     assert created.status_code == 201, created.text
@@ -90,7 +92,8 @@ async def test_dashboard_round_trips_native_filters(client_with_db: TestClient, 
 @pytest.mark.asyncio
 async def test_filter_tile_kind_is_rejected(client_with_db: TestClient, make_tenant: Any) -> None:
     await make_tenant("local")
-    did = client_with_db.post("/api/v1/dashboards", headers=_auth(), json={"name": "D"}).json()["id"]
+    created = client_with_db.post("/api/v1/dashboards", headers=_auth(), json={"name": "D"})
+    did = created.json()["id"]
     resp = client_with_db.post(
         f"/api/v1/dashboards/{did}/tiles", headers=_auth(),
         json={"kind": "filter", "content": {"member": "regional_sales.region"}},
