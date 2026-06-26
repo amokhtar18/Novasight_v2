@@ -88,12 +88,14 @@ class SemanticService:
             {"member": f.member, "operator": f.operator, "values": list(f.values)}
             for f in req.filters
         ]
-        cube_time_dims = [
-            {"dimension": td.dimension}
-            if td.granularity is None
-            else {"dimension": td.dimension, "granularity": td.granularity}
-            for td in req.time_dimensions
-        ]
+        cube_time_dims: list[dict[str, Any]] = []
+        for td in req.time_dimensions:
+            entry: dict[str, Any] = {"dimension": td.dimension}
+            if td.granularity is not None:
+                entry["granularity"] = td.granularity
+            if td.cube_date_range is not None:
+                entry["dateRange"] = td.cube_date_range
+            cube_time_dims.append(entry)
         cube_rows = await self._client.query(
             ctx,
             measures=req.measures,

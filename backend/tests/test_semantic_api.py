@@ -329,6 +329,64 @@ async def test_query_requires_a_field(client_with_db: TestClient, make_tenant: A
 
 
 @pytest.mark.asyncio
+async def test_query_forwards_relative_date_range_to_cube(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
+) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "time_dimensions": [
+                {
+                    "dimension": "regional_sales.region",
+                    "granularity": "month",
+                    "date_range": "last_30_days",
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert fake_cube.seen_time_dims[-1] == [
+        {
+            "dimension": "regional_sales.region",
+            "granularity": "month",
+            "dateRange": "last 30 days",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_forwards_absolute_date_range_to_cube(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
+) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "time_dimensions": [
+                {
+                    "dimension": "regional_sales.region",
+                    "granularity": "day",
+                    "date_range": ["2024-01-01", "2024-03-31"],
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert fake_cube.seen_time_dims[-1] == [
+        {
+            "dimension": "regional_sales.region",
+            "granularity": "day",
+            "dateRange": ["2024-01-01", "2024-03-31"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_query_is_tenant_scoped(
     client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
 ) -> None:
