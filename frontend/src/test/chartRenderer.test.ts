@@ -767,4 +767,14 @@ describe("selectionPairsFromClick", () => {
   it("ignores a sankey edge click", () => {
     expect(selectionPairsFromClick(sankeySpec, { seriesType: "sankey", dataType: "edge" } as any)).toEqual([]);
   });
+
+  it("resolves the tagged $member from buildSankeyOption (primary path)", () => {
+    // buildSankeyOption attaches $member to each node; verify that selectionPairsFromClick
+    // reads it directly rather than falling back to breakdown[0].
+    const pairs = selectionPairsFromClick(sankeySpec, {
+      seriesType: "sankey", dataType: "node", name: "West",
+      data: { $member: "sales.region" },
+    } as any);
+    expect(pairs).toEqual([{ member: "sales.region", value: "West" }]);
+  });
 });

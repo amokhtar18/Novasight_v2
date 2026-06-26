@@ -961,7 +961,7 @@ export function selectionPairsFromClick(
     // membership: a value present in the x column is an x node, otherwise a y node. The
     // renderer attaches the side via the node's `$member` (set in buildSankeyOption).
     const member = (params.data as { $member?: string } | undefined)?.$member ?? yMember;
-    return name ? [{ member, value: name }] : [];
+    return name && member ? [{ member, value: name }] : [];
   }
   const name = params.name as string | undefined;
   if (name && spec.encoding.x) {
