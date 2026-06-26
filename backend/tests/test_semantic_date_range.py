@@ -8,7 +8,9 @@ from app.schemas.semantic import SemanticTimeDimension
 
 
 def test_relative_token_maps_to_cube_string() -> None:
-    td = SemanticTimeDimension(dimension="s.created", granularity="month", date_range="last_30_days")
+    td = SemanticTimeDimension(
+        dimension="s.created", granularity="month", date_range="last_30_days"
+    )
     assert td.cube_date_range == "last 30 days"
 
 

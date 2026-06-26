@@ -252,7 +252,11 @@ def test_chart_query_time_dimension_date_range_round_trips() -> None:
             "query": {
                 "metric_refs": ["sales.total"],
                 "time_dimensions": [
-                    {"dimension": "sales.created", "granularity": "month", "date_range": "last_90_days"}
+                    {
+                        "dimension": "sales.created",
+                        "granularity": "month",
+                        "date_range": "last_90_days",
+                    }
                 ],
             },
             "encoding": {"x": "sales.created.month", "series": [{"field": "sales.total"}]},
