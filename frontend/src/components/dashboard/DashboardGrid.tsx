@@ -26,7 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys, useSetDashboardLayout } from "@/api/hooks";
 import { DashboardCardTile } from "./DashboardCardTile";
 import type { FilterSelections } from "@/lib/dashboardFilters";
-import type { DashboardRead, DashboardTileRead, NativeFilter, SemanticFilter } from "@/types/api";
+import type { DashboardRead, DashboardTileRead, NativeFilter, SemanticFilter, SelectionPair } from "@/types/api";
 
 interface DashboardGridProps {
   tiles: DashboardTileRead[];
@@ -36,10 +36,10 @@ interface DashboardGridProps {
   filters: NativeFilter[];
   /** Live per-filter selections (session state). */
   selections: FilterSelections;
-  /** Transient cross-filter session overlay; null while editing. */
-  crossFilter: SemanticFilter | null;
+  /** Transient cross-filter session overlays; empty list while editing. */
+  crossFilter: SemanticFilter[];
   /** Cross-filtering: set from a clicked chart point. */
-  onCrossFilter?: (member: string, value: string) => void;
+  onCrossFilter?: (pairs: SelectionPair[]) => void;
 }
 
 export function DashboardGrid({

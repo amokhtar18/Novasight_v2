@@ -398,6 +398,12 @@ export interface SemanticFilter {
   values: string[];
 }
 
+/** One (governed member, value) pair emitted by a chart click for cross-filtering. */
+export interface SelectionPair {
+  member: string;
+  value: string;
+}
+
 /** Cube time-dimension granularities (mirrors schemas/semantic.py). */
 export type SemanticGranularity =
   | "second"

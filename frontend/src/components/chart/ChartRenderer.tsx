@@ -44,7 +44,7 @@ import { TableRenderer } from "@/components/chart/TableRenderer";
 import { NumberRenderer } from "@/components/chart/NumberRenderer";
 import { formatChartValue } from "@/lib/chartFormat";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
-import type { CartesianOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
+import type { CartesianOptions, ChartSpec, ChartSort, QueryResponse, SelectionPair } from "@/types/api";
 
 // Register only what we use (v2 adds funnel/gauge/radar/treemap, #8; Slice D adds heatmap + sankey).
 echarts.use([
@@ -936,6 +936,18 @@ export function buildEChartsOption(
 // React component
 // ---------------------------------------------------------------------------
 
+/** Map an ECharts click to cross-filter pairs. Category charts emit one pair on `x`. */
+function selectionPairsFromClick(
+  spec: ChartSpec,
+  params: Record<string, unknown>
+): SelectionPair[] {
+  const name = params.name as string | undefined;
+  if (name && spec.encoding.x) {
+    return [{ member: spec.encoding.x, value: String(name) }];
+  }
+  return [];
+}
+
 export interface ChartRendererHandle {
   /** PNG data URL of the current chart, or null for non-ECharts renders. */
   toPng: () => string | null;
@@ -948,11 +960,11 @@ interface ChartRendererProps {
   title?: string;
   className?: string;
   /**
-   * Called with the clicked category when the user clicks a data point on a
+   * Called with (member, value) pairs when the user clicks a data point on a
    * category-axis chart (bar/line/area/pie). Used for dashboard cross-filtering.
    * Never fires for value-axis (scatter) or non-ECharts (table/number) renders.
    */
-  onSelectCategory?: (category: string) => void;
+  onSelectPoints?: (pairs: SelectionPair[]) => void;
 }
 
 /**
@@ -960,7 +972,7 @@ interface ChartRendererProps {
  * The chart is responsive: it listens to container resize via ResizeObserver.
  */
 export const ChartRenderer = forwardRef<ChartRendererHandle, ChartRendererProps>(function ChartRenderer(
-  { spec, data, title, className = "", onSelectCategory },
+  { spec, data, title, className = "", onSelectPoints },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -968,9 +980,15 @@ export const ChartRenderer = forwardRef<ChartRendererHandle, ChartRendererProps>
   // Latest select handler, read by the (once-attached) click listener so it never
   // goes stale without re-binding the listener. Updated in an effect (not during
   // render) per react-hooks rules.
-  const onSelectRef = useRef(onSelectCategory);
+  const onSelectRef = useRef(onSelectPoints);
   useEffect(() => {
-    onSelectRef.current = onSelectCategory;
+    onSelectRef.current = onSelectPoints;
+  });
+  // specRef: keeps the current spec for the click handler (attached once in the
+  // mount effect; must read the latest spec without re-disposing the instance).
+  const specRef = useRef(spec);
+  useEffect(() => {
+    specRef.current = spec;
   });
   // Re-theme charts when the user flips light/dark.
   const { resolvedTheme } = useTheme();
@@ -995,11 +1013,11 @@ export const ChartRenderer = forwardRef<ChartRendererHandle, ChartRendererProps>
     const instance = echarts.init(containerRef.current);
     chartRef.current = instance;
 
-    // Cross-filtering: a click on a category-axis point reports its category. Pie
-    // slices and bar/line/area categories carry a `name`; scatter points don't.
+    // Cross-filtering: a click on a category-axis point emits governed (member, value)
+    // pairs. Reads specRef.current so tile spec changes don't require re-init.
     instance.on("click", (params) => {
-      const name = (params as { name?: string }).name;
-      if (name && onSelectRef.current) onSelectRef.current(String(name));
+      const pairs = selectionPairsFromClick(specRef.current, params as Record<string, unknown>);
+      if (pairs.length > 0) onSelectRef.current?.(pairs);
     });
 
     const observer = new ResizeObserver(() => {

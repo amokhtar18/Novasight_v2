@@ -41,14 +41,14 @@ vi.mock("@dnd-kit/utilities", () => ({ CSS: { Transform: { toString: () => "" } 
 vi.mock("@/components/chart/ChartRenderer", () => ({
   ChartRenderer: ({
     title,
-    onSelectCategory,
+    onSelectPoints,
   }: {
     title?: string;
-    onSelectCategory?: (c: string) => void;
+    onSelectPoints?: (pairs: { member: string; value: string }[]) => void;
   }) => (
     <div role="img" aria-label={title ?? "chart"} data-testid="chart-renderer">
-      {onSelectCategory && (
-        <button type="button" onClick={() => onSelectCategory("west")}>
+      {onSelectPoints && (
+        <button type="button" onClick={() => onSelectPoints([{ member: "regional_sales.region", value: "west" }])}>
           point
         </button>
       )}
@@ -186,18 +186,13 @@ describe("DashboardCardTile", () => {
     expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
   });
 
-  it("cross-filters from a clicked category using the tile's dimension", () => {
+  it("cross-filters from a clicked point using member+value pairs", () => {
     const onCrossFilter = vi.fn();
     render(
-      <DashboardCardTile
-        tile={tile}
-        dashboardId="dash-1"
-        editing={false}
-        onCrossFilter={onCrossFilter}
-      />
+      <DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} onCrossFilter={onCrossFilter} />
     );
     fireEvent.click(screen.getByRole("button", { name: "point" }));
-    expect(onCrossFilter).toHaveBeenCalledWith("regional_sales.region", "west");
+    expect(onCrossFilter).toHaveBeenCalledWith([{ member: "regional_sales.region", value: "west" }]);
   });
 
   it("does not wire cross-filtering while editing", () => {
@@ -215,12 +210,7 @@ describe("DashboardCardTile", () => {
 
   it("applies a cross-filter overlay when cube matches", () => {
     render(
-      <DashboardCardTile
-        tile={tile}
-        dashboardId="dash-1"
-        editing={false}
-        crossFilter={crossFilterSameCube}
-      />
+      <DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} crossFilter={[crossFilterSameCube]} />
     );
     expect(mockUseChartData).toHaveBeenCalledWith(spec, [crossFilterSameCube], undefined);
     expect(screen.getByText(/filtered/i)).toBeInTheDocument();

@@ -30,7 +30,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { cn } from "@/lib/cn";
 import { resolveTileFilters, cubeOf } from "@/lib/dashboardFilters";
 import type { FilterSelections } from "@/lib/dashboardFilters";
-import type { DashboardTileRead, NativeFilter, SemanticFilter } from "@/types/api";
+import type { DashboardTileRead, NativeFilter, SemanticFilter, SelectionPair } from "@/types/api";
 
 type TileSize = "sm" | "md" | "lg";
 
@@ -63,9 +63,9 @@ interface TileProps {
   filters?: NativeFilter[];
   /** Live per-filter selections (session state). */
   selections?: FilterSelections;
-  /** Transient cross-filter session overlay. */
-  crossFilter?: SemanticFilter | null;
-  onCrossFilter?: (member: string, value: string) => void;
+  /** Transient cross-filter session overlays (empty list = no overlay). */
+  crossFilter?: SemanticFilter[];
+  onCrossFilter?: (pairs: SelectionPair[]) => void;
 }
 
 export function DashboardCardTile({
@@ -74,7 +74,7 @@ export function DashboardCardTile({
   editing,
   filters = [],
   selections = {},
-  crossFilter = null,
+  crossFilter = [],
   onCrossFilter,
 }: TileProps) {
   const updateTile = useUpdateDashboardTile(dashboardId);
@@ -179,8 +179,8 @@ function TileBody({
   editing: boolean;
   filters: NativeFilter[];
   selections: FilterSelections;
-  crossFilter: SemanticFilter | null;
-  onCrossFilter?: (member: string, value: string) => void;
+  crossFilter: SemanticFilter[];
+  onCrossFilter?: (pairs: SelectionPair[]) => void;
   title: string;
 }) {
   const content = tile.content ?? {};
@@ -257,8 +257,8 @@ function ChartTileBody({
   editing: boolean;
   filters: NativeFilter[];
   selections: FilterSelections;
-  crossFilter: SemanticFilter | null;
-  onCrossFilter?: (member: string, value: string) => void;
+  crossFilter: SemanticFilter[];
+  onCrossFilter?: (pairs: SelectionPair[]) => void;
   title: string;
 }) {
   const spec = tile.chart?.spec;
@@ -268,10 +268,9 @@ function ChartTileBody({
   const isSemantic = (spec?.query.metric_refs ?? []).length > 0;
 
   const { filters: resolved, dateRanges } = resolveTileFilters(filters, selections, tile);
-  // Cross-filter overlays on top, only when its cube matches this tile.
   const tileCube = cubeOf((spec?.query.metric_refs ?? [])[0]);
-  const crossApplies = !!crossFilter && !!tileCube && cubeOf(crossFilter.member) === tileCube;
-  const appliedFilters: SemanticFilter[] = crossApplies ? [...resolved, crossFilter as SemanticFilter] : resolved;
+  const crossMatching = crossFilter.filter((cf) => !!tileCube && cubeOf(cf.member) === tileCube);
+  const appliedFilters: SemanticFilter[] = [...resolved, ...crossMatching];
   const hasOverride = Object.keys(dateRanges).length > 0;
 
   const { data, isLoading, isError } = useChartData(
@@ -280,12 +279,6 @@ function ChartTileBody({
     hasOverride ? dateRanges : undefined
   );
   const filterApplies = appliedFilters.length > 0 || hasOverride;
-
-  const crossDimension = tileCube && spec?.encoding.x ? spec.encoding.x : undefined;
-  const onSelectCategory =
-    onCrossFilter && crossDimension
-      ? (value: string) => onCrossFilter(crossDimension, value)
-      : undefined;
 
   const chartHandle = useRef<ChartRendererHandle>(null);
 
@@ -321,7 +314,7 @@ function ChartTileBody({
             data={data}
             title={title}
             className="h-64"
-            onSelectCategory={editing ? undefined : onSelectCategory}
+            onSelectPoints={editing ? undefined : onCrossFilter}
           />
         </div>
       ) : isError ? (

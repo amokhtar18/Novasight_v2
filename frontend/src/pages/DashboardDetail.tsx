@@ -36,7 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { DashboardTileCreate, NativeFilter, SemanticFilter, TileKind } from "@/types/api";
+import type { DashboardTileCreate, NativeFilter, SemanticFilter, SelectionPair, TileKind } from "@/types/api";
 
 export function DashboardDetail() {
   const { dashboardId = "" } = useParams();
@@ -51,7 +51,7 @@ export function DashboardDetail() {
   // --- Native filter state ---
   const filters: NativeFilter[] = board?.native_filters ?? [];
   const [selections, setSelections] = useState<FilterSelections>({});
-  const [crossFilter, setCrossFilter] = useState<SemanticFilter | null>(null);
+  const [crossFilter, setCrossFilter] = useState<SemanticFilter[]>([]);
   const [editorFor, setEditorFor] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
 
   // Seed live selections from the persisted defaults once per dashboard (adjust-during-render).
@@ -61,7 +61,7 @@ export function DashboardDetail() {
     const seeded: FilterSelections = {};
     for (const f of board.native_filters ?? []) seeded[f.id] = defaultSelection(f);
     setSelections(seeded);
-    setCrossFilter(null);
+    setCrossFilter([]);
   }
 
   function onSelectionChange(id: string, sel: FilterSelection) {
@@ -71,7 +71,7 @@ export function DashboardDetail() {
     const reset: FilterSelections = {};
     for (const f of filters) reset[f.id] = defaultSelection(f);
     setSelections(reset);
-    setCrossFilter(null);
+    setCrossFilter([]);
   }
   function persistFilters(next: NativeFilter[]) {
     if (board && canEdit) updateDashboard.mutate({ id: board.id, patch: { native_filters: next } });
@@ -92,9 +92,9 @@ export function DashboardDetail() {
       return next;
     });
   }
-  /** Cross-filter: a clicked point becomes a transient session value overlay. */
-  function handleCrossFilter(member: string, value: string) {
-    setCrossFilter({ member, operator: "equals", values: [value] });
+  /** Cross-filter: clicked points become a transient session value overlay list. */
+  function handleCrossFilter(pairs: SelectionPair[]) {
+    setCrossFilter(pairs.map((p) => ({ member: p.member, operator: "equals", values: [p.value] })));
   }
 
   function commitRename() {
@@ -235,7 +235,7 @@ export function DashboardDetail() {
               editing={editing}
               filters={filters}
               selections={selections}
-              crossFilter={editing ? null : crossFilter}
+              crossFilter={editing ? [] : crossFilter}
               onCrossFilter={editing ? undefined : handleCrossFilter}
             />
           </div>
