@@ -19,6 +19,7 @@ import { useDatasetQuery, useSemanticQuery } from "@/api/hooks";
 import type {
   ChartSpec,
   QueryRequest,
+  RelativeDateRange,
   SemanticFilter,
   SemanticQueryRequest,
 } from "@/types/api";
@@ -33,12 +34,19 @@ const DEFAULT_LIMIT = 200;
  */
 export function buildSemanticRequest(
   spec: ChartSpec | null,
-  viewFilters?: SemanticFilter[]
+  viewFilters?: SemanticFilter[],
+  dateRangeOverrides?: Record<string, RelativeDateRange | string[]>
 ): SemanticQueryRequest | null {
   const metricRefs = spec?.query.metric_refs ?? [];
   if (!spec || metricRefs.length === 0) return null;
 
-  const timeDimensions = spec.query.time_dimensions ?? [];
+  const rawTimeDimensions = spec.query.time_dimensions ?? [];
+  // Apply any view-time date_range override to the matching time dimension (by member).
+  const timeDimensions = rawTimeDimensions.map((td) =>
+    dateRangeOverrides && dateRangeOverrides[td.dimension] !== undefined
+      ? { ...td, date_range: dateRangeOverrides[td.dimension] }
+      : td
+  );
   const hasTimeDim = timeDimensions.length > 0;
   const plainDimensions =
     spec.query.dimensions && spec.query.dimensions.length > 0
@@ -62,10 +70,14 @@ export function buildSemanticRequest(
   };
 }
 
-export function useChartData(spec: ChartSpec | null, filters?: SemanticFilter[]) {
+export function useChartData(
+  spec: ChartSpec | null,
+  filters?: SemanticFilter[],
+  dateRangeOverrides?: Record<string, RelativeDateRange | string[]>
+) {
   const isSemantic = (spec?.query.metric_refs ?? []).length > 0;
 
-  const semanticRequest = buildSemanticRequest(spec, filters);
+  const semanticRequest = buildSemanticRequest(spec, filters, dateRangeOverrides);
 
   const datasetId =
     !isSemantic && spec?.query.dataset_id && spec.query.query ? spec.query.dataset_id : null;

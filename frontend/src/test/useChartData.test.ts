@@ -35,3 +35,31 @@ describe("buildSemanticRequest", () => {
     expect(buildSemanticRequest(spec)).toBeNull();
   });
 });
+
+const spec: ChartSpec = {
+  type: "line",
+  query: {
+    metric_refs: ["regional_sales.total_amount"],
+    time_dimensions: [{ dimension: "regional_sales.order_date", granularity: "month" }],
+  },
+  encoding: { x: "regional_sales.order_date.month", series: [{ field: "regional_sales.total_amount" }] },
+};
+
+describe("buildSemanticRequest date_range override", () => {
+  it("injects a view-time date_range onto the matching time dimension", () => {
+    const req = buildSemanticRequest(spec, undefined, { "regional_sales.order_date": "last_30_days" });
+    expect(req?.time_dimensions?.[0].date_range).toBe("last_30_days");
+  });
+
+  it("leaves time dimensions unchanged when no override matches", () => {
+    const req = buildSemanticRequest(spec, undefined, { "other.dim": "last_7_days" });
+    expect(req?.time_dimensions?.[0].date_range).toBeUndefined();
+  });
+
+  it("merges spec + view-time filters (spec first)", () => {
+    const withFilter: ChartSpec = { ...spec, query: { ...spec.query, filters: [{ member: "regional_sales.region", operator: "equals", values: ["west"] }] } };
+    const req = buildSemanticRequest(withFilter, [{ member: "regional_sales.region", operator: "equals", values: ["east"] }]);
+    expect(req?.filters).toHaveLength(2);
+    expect(req?.filters?.[0].values).toEqual(["west"]);
+  });
+});
