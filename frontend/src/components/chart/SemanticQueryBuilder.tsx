@@ -50,6 +50,8 @@ const CHART_TYPES: ChartType[] = [
   "treemap",
   "radar",
   "gauge",
+  "heatmap",
+  "sankey",
   "table",
   "number",
 ];
@@ -404,6 +406,13 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
               </option>
             ))}
           </Select>
+          {(s.chartType === "heatmap" || s.chartType === "sankey") && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {s.chartType === "heatmap"
+                ? "Add two dimensions (X, Y) and one measure — the measure colours each cell."
+                : "Add two dimensions (Source, Target) and one measure — the measure is the flow weight."}
+            </p>
+          )}
         </div>
       </div>
 
