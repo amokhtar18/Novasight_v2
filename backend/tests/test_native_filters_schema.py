@@ -71,3 +71,22 @@ def test_dashboard_update_rejects_non_value_parent() -> None:
 def test_dashboard_update_rejects_unknown_parent() -> None:
     with pytest.raises(ValidationError):
         DashboardUpdate(native_filters=[NativeFilter(**_value_filter(id="c", parent_id="missing"))])  # type: ignore[arg-type]
+
+
+def test_time_filter_rejects_one_element_date_range() -> None:
+    """A date_range list must have exactly two entries; one element must fail."""
+    with pytest.raises(ValidationError):
+        NativeFilter(
+            id="t2", kind="time", member="regional_sales.region",
+            date_range=["2024-01-01"],
+        )
+
+
+def test_numeric_range_equal_bounds_accepted() -> None:
+    """min == max is a valid degenerate range (single value)."""
+    f = NativeFilter(
+        id="n2", kind="numeric", member="regional_sales.sales_rank",
+        numeric_range={"min": 5, "max": 5},
+    )
+    assert f.numeric_range is not None
+    assert f.numeric_range.min == f.numeric_range.max == 5.0

@@ -24,6 +24,12 @@ TileKind = Literal["chart", "text", "markdown", "image", "divider"]
 # A native filter is one of three typed kinds (Slice C).
 NativeFilterKind = Literal["value", "time", "numeric"]
 
+# Explicit allowlist: new operators must be added here deliberately before they can
+# be used in a value filter (blocklist would silently permit future additions).
+_VALUE_FILTER_OPERATORS: frozenset[str] = frozenset(
+    {"equals", "notEquals", "contains", "notContains"}
+)
+
 
 class NumericRange(BaseModel):
     """A numeric filter's [min, max] bounds (either side optional)."""
@@ -67,7 +73,7 @@ class NativeFilter(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> NativeFilter:
         # A value filter only uses set-membership/substring operators.
-        if self.kind == "value" and self.operator in {"set", "notSet", "gt", "gte", "lt", "lte"}:
+        if self.kind == "value" and self.operator not in _VALUE_FILTER_OPERATORS:
             raise ValueError("a value filter uses equals/notEquals/contains/notContains")
         if isinstance(self.date_range, list):
             if len(self.date_range) != 2:
