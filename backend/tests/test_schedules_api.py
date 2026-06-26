@@ -6,11 +6,9 @@ creates + enqueues a queued run for a due schedule and skips a disabled pipeline
 """
 from __future__ import annotations
 
-import time
 from datetime import UTC, datetime
 from typing import Any
 
-import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,76 +17,16 @@ from app.models.pipeline import Pipeline
 from app.models.schedule import Schedule
 from app.models.schedule_pipeline import SchedulePipeline
 from app.services.schedules import ScheduleService
+from tests.conftest import FAKE_ENV
+from tests.conftest import auth_headers as _auth
 
-_SESSION_SECRET = "test-session-secret-do-not-use-in-production-0123456789"
 SU = ["superuser"]
-
-_FAKE_ENV: dict[str, str] = {
-    "ENVIRONMENT": "test",
-    "POSTGRES__HOST": "localhost",
-    "POSTGRES__USER": "test",
-    "POSTGRES__PASSWORD": "test",
-    "POSTGRES__DB": "test",
-    "REDIS__HOST": "localhost",
-    "OBJECT_STORE__ENDPOINT_URL": "http://localhost:9000",
-    "OBJECT_STORE__ACCESS_KEY": "test",
-    "OBJECT_STORE__SECRET_KEY": "test",
-    "OBJECT_STORE__BUCKET": "test",
-    "ICEBERG__CATALOG_URI": "http://localhost:8181",
-    "ICEBERG__WAREHOUSE": "s3://test/",
-    "CLICKHOUSE__HOST": "localhost",
-    "CLICKHOUSE__PASSWORD": "test",
-    "AI__PROVIDER": "openai",
-    "AI__MODEL": "gpt-4o",
-    "AI__API_KEY": "test",
-    "AI__PROMPT_TEMPLATE_DIR": "prompts",
-    "CUBE__BASE_URL": "http://cube:4000",
-    "CUBE__API_SECRET": "test-cube-secret-at-least-32-chars!",
-    "AUTH__SESSION_SECRET": _SESSION_SECRET,
-    "AUTH__TENANT_CLAIM": "tenant",
-    "SEED_TENANT__SLUG": "local",
-    "SEED_TENANT__NAME": "Local Tenant",
-    "SEED_TENANT__ADMIN_EMAIL": "admin@local.test",
-}
 
 
 @pytest.fixture(autouse=True)
 def _patch_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key, value in _FAKE_ENV.items():
+    for key, value in FAKE_ENV.items():
         monkeypatch.setenv(key, value)
-
-
-@pytest.fixture()
-def client_with_db(session: AsyncSession) -> TestClient:  # type: ignore[return]
-    from app.core.config import get_settings
-    from app.core.db import get_db
-    from app.main import app
-    from app.tenancy.registry import TenantRegistry, get_tenant_registry
-
-    get_settings.cache_clear()
-
-    async def _fake_db() -> Any:
-        yield session
-
-    async def _fake_registry() -> Any:
-        return TenantRegistry(session)
-
-    app.dependency_overrides[get_db] = _fake_db
-    app.dependency_overrides[get_tenant_registry] = _fake_registry
-
-    with TestClient(app, raise_server_exceptions=True) as c:
-        yield c  # type: ignore[misc]
-
-    app.dependency_overrides.clear()
-    get_settings.cache_clear()
-
-
-def _auth(tenant: str = "local", roles: list[str] | None = None) -> dict[str, str]:
-    payload = {
-        "sub": "caller", "email": "c@x", "tenant": tenant,
-        "roles": roles or [], "typ": "access", "exp": int(time.time()) + 3600,
-    }
-    return {"Authorization": f"Bearer {jwt.encode(payload, _SESSION_SECRET, algorithm='HS256')}"}
 
 
 async def _make_pipeline(session: AsyncSession, tenant: Any, *, enabled: bool = True) -> Pipeline:
