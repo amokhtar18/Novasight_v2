@@ -1,147 +1,51 @@
-/**
- * Tests for DashboardDetail's filter persistence wiring (dashboard filters slice 3).
- *
- * useDashboard/useUpdateDashboard and the grid + filter bar are mocked so the test
- * focuses on: the active filter initialises from the dashboard's persisted filters,
- * and changing it persists via updateDashboard (patch.filters).
- */
-
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-
-import type { DashboardRead } from "@/types/api";
-
-vi.mock("react-router-dom", () => ({
-  useParams: () => ({ dashboardId: "dash-1" }),
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
-}));
-vi.mock("@/api/hooks", () => ({
-  useDashboard: vi.fn(),
-  useUpdateDashboard: vi.fn(),
-  useAddDashboardTile: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-}));
-vi.mock("@/components/dashboard/DashboardGrid", () => ({
-  DashboardGrid: ({
-    onCrossFilter,
-  }: {
-    onCrossFilter?: (member: string, value: string) => void;
-  }) => (
-    <div data-testid="grid">
-      {onCrossFilter && (
-        <button onClick={() => onCrossFilter("regional_sales.region", "west")}>cross</button>
-      )}
-    </div>
-  ),
-}));
-vi.mock("@/components/dashboard/DashboardFilterBar", () => ({
-  DashboardFilterBar: ({
-    value,
-    onChange,
-  }: {
-    value: { member: string } | null;
-    onChange: (f: unknown) => void;
-  }) => (
-    <div>
-      <span data-testid="active-member">{value?.member ?? "none"}</span>
-      <button
-        onClick={() =>
-          onChange({ member: "regional_sales.region", operator: "equals", values: ["west"] })
-        }
-      >
-        set-filter
-      </button>
-      <button onClick={() => onChange(null)}>clear-filter</button>
-    </div>
-  ),
-}));
+// frontend/src/test/dashboardDetailFilters.test.tsx  (replace contents)
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { DashboardDetail } from "@/pages/DashboardDetail";
-import { useDashboard, useUpdateDashboard } from "@/api/hooks";
 
-const tile = {
-  id: "t1",
-  chart_id: "c1",
-  title: "T",
-  position: 0,
-  x: 0,
-  y: 0,
-  w: 6,
-  h: 4,
-  chart: {
-    id: "c1",
-    name: "Chart",
-    spec: { version: "1", type: "bar", query: {}, encoding: { series: [{ field: "x" }] } },
-    source_kind: "semantic",
-    source_ref: "regional_sales",
-    owner_id: null,
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
-  },
-} as unknown as DashboardRead["tiles"][number];
+const board = {
+  id: "d1", name: "Board", description: null, owner_id: null,
+  created_at: "", updated_at: "",
+  native_filters: [{ id: "f1", kind: "value", member: "regional_sales.region", operator: "equals", label: "Region" }],
+  tiles: [{
+    id: "t1", kind: "chart", chart_id: "c", content: null, title: "Sales", position: 0, x: 0, y: 0, w: 6, h: 4,
+    chart: { id: "c", name: "Sales", source_kind: "semantic", source_ref: null, owner_id: null, created_at: "", updated_at: "",
+      spec: { type: "bar", query: { metric_refs: ["regional_sales.total_amount"] }, encoding: { x: "regional_sales.region", series: [{ field: "regional_sales.total_amount" }] } } },
+  }],
+};
 
-function board(filters: DashboardRead["filters"] = []): DashboardRead {
+vi.mock("@/api/hooks", async () => {
+  const actual = await vi.importActual<typeof import("@/api/hooks")>("@/api/hooks");
   return {
-    id: "dash-1",
-    name: "Sales",
-    description: null,
-    owner_id: null,
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
-    filters,
-    tiles: [tile],
+    ...actual,
+    useDashboard: () => ({ data: board, isLoading: false, isError: false }),
+    useUpdateDashboard: () => ({ mutate: vi.fn() }),
+    useAddDashboardTile: () => ({ mutate: vi.fn() }),
+    useSemanticValues: () => ({ data: { values: ["west", "east"] }, isLoading: false }),
+    useDeleteDashboardTile: () => ({ mutate: vi.fn() }),
+    useUpdateDashboardTile: () => ({ mutate: vi.fn() }),
   };
+});
+vi.mock("@/lib/identity", () => ({ useIdentity: () => ({ canEdit: true }) }));
+vi.mock("@/lib/useChartData", () => ({ useChartData: () => ({ data: { columns: [], rows: [], row_count: 0 }, isLoading: false, isError: false }) }));
+
+function wrap() {
+  const qc = new QueryClient();
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={["/dashboards/d1"]}>
+        <Routes><Route path="/dashboards/:dashboardId" element={<DashboardDetail />} /></Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
 }
 
-let mutate: ReturnType<typeof vi.fn>;
-
-beforeEach(() => {
-  mutate = vi.fn();
-  // @ts-expect-error partial mock
-  vi.mocked(useUpdateDashboard).mockReturnValue({ mutate });
-});
-
-afterEach(() => vi.clearAllMocks());
-
-describe("DashboardDetail filter persistence", () => {
-  it("initialises the active filter from the dashboard's persisted filters", () => {
-    // @ts-expect-error partial mock
-    vi.mocked(useDashboard).mockReturnValue({
-      data: board([{ member: "regional_sales.region", operator: "equals", values: ["west"] }]),
-      isLoading: false,
-      isError: false,
-    });
-    render(<DashboardDetail />);
-    expect(screen.getByTestId("active-member")).toHaveTextContent("regional_sales.region");
-  });
-
-  it("persists a filter change via updateDashboard", () => {
-    // @ts-expect-error partial mock
-    vi.mocked(useDashboard).mockReturnValue({ data: board(), isLoading: false, isError: false });
-    render(<DashboardDetail />);
-
-    fireEvent.click(screen.getByText("set-filter"));
-    expect(mutate).toHaveBeenCalledWith({
-      id: "dash-1",
-      patch: {
-        filters: [{ member: "regional_sales.region", operator: "equals", values: ["west"] }],
-      },
-    });
-
-    fireEvent.click(screen.getByText("clear-filter"));
-    expect(mutate).toHaveBeenLastCalledWith({ id: "dash-1", patch: { filters: [] } });
-  });
-
-  it("persists a cross-filter from a clicked chart point", () => {
-    // @ts-expect-error partial mock
-    vi.mocked(useDashboard).mockReturnValue({ data: board(), isLoading: false, isError: false });
-    render(<DashboardDetail />);
-
-    fireEvent.click(screen.getByText("cross"));
-    expect(mutate).toHaveBeenLastCalledWith({
-      id: "dash-1",
-      patch: {
-        filters: [{ member: "regional_sales.region", operator: "equals", values: ["west"] }],
-      },
-    });
+describe("DashboardDetail native filters", () => {
+  it("renders the native-filter drawer with the configured filter", () => {
+    wrap();
+    expect(screen.getByText("Region")).toBeInTheDocument();
   });
 });

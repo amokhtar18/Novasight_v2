@@ -4,6 +4,10 @@
  * useChartData, the tile mutation hooks, dnd-kit, and ChartRenderer are mocked so
  * the test focuses on the tile wiring: it resolves the embedded chart's spec via
  * useChartData and renders the chart with the tile's title.
+ *
+ * Native filters (Slice C): filters/selections are passed as NativeFilter[] +
+ * FilterSelections; resolveTileFilters builds the appliedFilters forwarded to
+ * useChartData. Cross-filter is a SemanticFilter overlay.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -12,9 +16,11 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import type {
   ChartSpec,
   DashboardTileRead,
+  NativeFilter,
   QueryResponse,
   SemanticFilter,
 } from "@/types/api";
+import type { FilterSelections } from "@/lib/dashboardFilters";
 
 vi.mock("@/lib/useChartData", () => ({ useChartData: vi.fn() }));
 vi.mock("@/api/hooks", () => ({
@@ -102,22 +108,42 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
-const sameCubeFilter: SemanticFilter = {
+/** A NativeFilter that targets the same cube as the tile. */
+const sameCubeFilter: NativeFilter = {
+  id: "f1",
+  kind: "value",
   member: "regional_sales.region",
   operator: "equals",
-  values: ["west"],
+  default_values: ["west"],
 };
-const otherCubeFilter: SemanticFilter = {
+const sameCubeSelections: FilterSelections = {
+  f1: { kind: "value", values: ["west"] },
+};
+
+/** A NativeFilter on a different cube — must not be applied. */
+const otherCubeFilter: NativeFilter = {
+  id: "f2",
+  kind: "value",
   member: "orders.status",
   operator: "equals",
-  values: ["paid"],
+  default_values: ["paid"],
+};
+const otherCubeSelections: FilterSelections = {
+  f2: { kind: "value", values: ["paid"] },
+};
+
+/** A SemanticFilter for cross-filter tests. */
+const crossFilterSameCube: SemanticFilter = {
+  member: "regional_sales.region",
+  operator: "equals",
+  values: ["east"],
 };
 
 describe("DashboardCardTile", () => {
   it("re-runs the chart's query and renders it with the tile title", () => {
     render(<DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} />);
 
-    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined);
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined, undefined);
     expect(screen.getByRole("img", { name: /region totals/i })).toBeInTheDocument();
   });
 
@@ -133,10 +159,16 @@ describe("DashboardCardTile", () => {
         tile={tile}
         dashboardId="dash-1"
         editing={false}
-        activeFilter={sameCubeFilter}
+        filters={[sameCubeFilter]}
+        selections={sameCubeSelections}
       />
     );
-    expect(mockUseChartData).toHaveBeenCalledWith(spec, [sameCubeFilter]);
+    const expectedFilter: SemanticFilter = {
+      member: "regional_sales.region",
+      operator: "equals",
+      values: ["west"],
+    };
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, [expectedFilter], undefined);
     expect(screen.getByText(/filtered/i)).toBeInTheDocument();
   });
 
@@ -146,10 +178,11 @@ describe("DashboardCardTile", () => {
         tile={tile}
         dashboardId="dash-1"
         editing={false}
-        activeFilter={otherCubeFilter}
+        filters={[otherCubeFilter]}
+        selections={otherCubeSelections}
       />
     );
-    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined);
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined, undefined);
     expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
   });
 
@@ -178,5 +211,18 @@ describe("DashboardCardTile", () => {
       />
     );
     expect(screen.queryByRole("button", { name: "point" })).not.toBeInTheDocument();
+  });
+
+  it("applies a cross-filter overlay when cube matches", () => {
+    render(
+      <DashboardCardTile
+        tile={tile}
+        dashboardId="dash-1"
+        editing={false}
+        crossFilter={crossFilterSameCube}
+      />
+    );
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, [crossFilterSameCube], undefined);
+    expect(screen.getByText(/filtered/i)).toBeInTheDocument();
   });
 });

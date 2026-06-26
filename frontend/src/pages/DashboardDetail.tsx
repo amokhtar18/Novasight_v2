@@ -2,9 +2,13 @@
  * DashboardDetail — view and edit a single dashboard. Toggle edit mode to
  * reorder tiles (dnd-kit), resize them, or remove them. Each tile re-runs its
  * saved chart's grounded query, so the dashboard always reflects current data.
+ *
+ * Native filters (Slice C): the dashboard persists a `native_filters` config;
+ * at view time each filter's live selection is held in session state and
+ * resolved per-tile. A transient cross-filter overlay is also session-only.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, LayoutDashboard, Pencil, Plus } from "lucide-react";
 
@@ -12,9 +16,12 @@ import { toast } from "sonner";
 
 import { useAddDashboardTile, useDashboard, useUpdateDashboard } from "@/api/hooks";
 import { useIdentity } from "@/lib/identity";
+import { defaultSelection } from "@/lib/dashboardFilters";
+import type { FilterSelection, FilterSelections } from "@/lib/dashboardFilters";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
-import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
+import { DashboardFilterDrawer } from "@/components/dashboard/DashboardFilterDrawer";
+import { NativeFilterEditor } from "@/components/dashboard/NativeFilterEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { DashboardTileCreate, SemanticFilter, TileKind } from "@/types/api";
+import type { DashboardTileCreate, NativeFilter, SemanticFilter, TileKind } from "@/types/api";
 
 export function DashboardDetail() {
   const { dashboardId = "" } = useParams();
@@ -40,48 +47,54 @@ export function DashboardDetail() {
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<SemanticFilter | null>(null);
-  // Track which dashboard the active filter was initialised from, so we seed it from
-  // the persisted filters once per dashboard without an effect (and without clobbering
-  // an in-session edit on a background refetch). This is React's "adjust state during
-  // render" pattern.
-  const [filterInitFor, setFilterInitFor] = useState<string | null>(null);
-  if (board && filterInitFor !== board.id) {
-    setFilterInitFor(board.id);
-    setActiveFilter(board.filters?.[0] ?? null);
+
+  // --- Native filter state ---
+  const filters: NativeFilter[] = board?.native_filters ?? [];
+  const [selections, setSelections] = useState<FilterSelections>({});
+  const [crossFilter, setCrossFilter] = useState<SemanticFilter | null>(null);
+  const [editorFor, setEditorFor] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+
+  // Seed live selections from the persisted defaults once per dashboard (adjust-during-render).
+  const [seedFor, setSeedFor] = useState<string | null>(null);
+  if (board && seedFor !== board.id) {
+    setSeedFor(board.id);
+    const seeded: FilterSelections = {};
+    for (const f of board.native_filters ?? []) seeded[f.id] = defaultSelection(f);
+    setSelections(seeded);
+    setCrossFilter(null);
+  }
+
+  function onSelectionChange(id: string, sel: FilterSelection) {
+    setSelections((prev) => ({ ...prev, [id]: sel }));
+  }
+  function onClearAll() {
+    const reset: FilterSelections = {};
+    for (const f of filters) reset[f.id] = defaultSelection(f);
+    setSelections(reset);
+    setCrossFilter(null);
+  }
+  function persistFilters(next: NativeFilter[]) {
+    if (board && canEdit) updateDashboard.mutate({ id: board.id, patch: { native_filters: next } });
+  }
+  function saveFilter(f: NativeFilter) {
+    const next = filters.some((x) => x.id === f.id)
+      ? filters.map((x) => (x.id === f.id ? f : x))
+      : [...filters, f];
+    persistFilters(next);
+    setSelections((prev) => ({ ...prev, [f.id]: defaultSelection(f) }));
+  }
+  function removeFilter(id: string) {
+    persistFilters(filters.filter((x) => x.id !== id));
+  }
+  /** Cross-filter: a clicked point becomes a transient session value overlay. */
+  function handleCrossFilter(member: string, value: string) {
+    setCrossFilter({ member, operator: "equals", values: [value] });
   }
 
   function commitRename() {
     if (board && nameDraft.trim() && nameDraft !== board.name) {
       updateDashboard.mutate({ id: board.id, patch: { name: nameDraft.trim() } });
     }
-  }
-
-  // The cubes the dashboard's semantic tiles use — so the filter bar only offers
-  // dimensions that can actually affect a tile.
-  const tileCubes = useMemo(() => {
-    const cubes = new Set<string>();
-    for (const tile of board?.tiles ?? []) {
-      const member = (tile.chart?.spec.query.metric_refs ?? [])[0];
-      if (member && member.includes(".")) cubes.add(member.split(".")[0]);
-    }
-    return cubes;
-  }, [board?.tiles]);
-
-  /**
-   * Apply a filter. An editor persists it on the dashboard (survives reload/sharing);
-   * a read-only viewer filters locally only (the backend would reject the write).
-   */
-  function handleFilterChange(filter: SemanticFilter | null) {
-    setActiveFilter(filter);
-    if (board && canEdit) {
-      updateDashboard.mutate({ id: board.id, patch: { filters: filter ? [filter] : [] } });
-    }
-  }
-
-  /** Cross-filtering: a clicked chart point sets the dashboard filter to that value. */
-  function handleCrossFilter(member: string, value: string) {
-    handleFilterChange({ member, operator: "equals", values: [value] });
   }
 
   const backLink = (
@@ -197,32 +210,52 @@ export function DashboardDetail() {
           }
         />
       ) : (
-        <>
-          {!editing && (
-            <DashboardFilterBar
-              value={activeFilter}
-              onChange={handleFilterChange}
-              cubes={tileCubes}
+        <div className="flex gap-4">
+          {!editing || filters.length > 0 ? (
+            <DashboardFilterDrawer
+              filters={filters}
+              selections={selections}
+              onSelectionChange={onSelectionChange}
+              onClearAll={onClearAll}
+              editing={editing}
+              onAddFilter={() => setEditorFor({ open: true, id: null })}
+              onEditFilter={(id) => setEditorFor({ open: true, id })}
             />
-          )}
-          <DashboardGrid
-            tiles={board.tiles}
-            dashboardId={board.id}
-            editing={editing}
-            activeFilter={editing ? null : activeFilter}
-            onCrossFilter={editing ? undefined : handleCrossFilter}
-          />
-        </>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <DashboardGrid
+              tiles={board.tiles}
+              dashboardId={board.id}
+              editing={editing}
+              filters={filters}
+              selections={selections}
+              crossFilter={editing ? null : crossFilter}
+              onCrossFilter={editing ? undefined : handleCrossFilter}
+            />
+          </div>
+        </div>
       )}
 
       <AddObjectDialog open={addOpen} onOpenChange={setAddOpen} dashboardId={board.id} />
+
+      {editorFor.open && (
+        <NativeFilterEditor
+          open={editorFor.open}
+          onOpenChange={(o) => setEditorFor((s) => ({ ...s, open: o }))}
+          initial={editorFor.id ? filters.find((f) => f.id === editorFor.id) ?? null : null}
+          existing={filters}
+          tiles={board.tiles}
+          onSave={saveFilter}
+          onRemove={removeFilter}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * AddObjectDialog — add a decoration tile (#10): text, markdown, image, divider, or a
- * filter slicer. Charts are added from the builder; this covers the rest.
+ * AddObjectDialog — add a decoration tile (#10): text, markdown, image, or divider.
+ * Charts are added from the builder; this covers the rest.
  */
 function AddObjectDialog({
   open,
@@ -238,7 +271,6 @@ function AddObjectDialog({
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
-  const [member, setMember] = useState("");
   const [label, setLabel] = useState("");
 
   function reset() {
@@ -246,7 +278,6 @@ function AddObjectDialog({
     setTitle("");
     setText("");
     setUrl("");
-    setMember("");
     setLabel("");
   }
 
@@ -254,17 +285,12 @@ function AddObjectDialog({
     if (kind === "text") return { text };
     if (kind === "markdown") return { markdown: text };
     if (kind === "image") return { url: url.trim() };
-    if (kind === "divider") return label.trim() ? { label: label.trim() } : {};
-    return { member: member.trim(), label: label.trim() || undefined }; // filter
+    return label.trim() ? { label: label.trim() } : {}; // divider
   }
 
   function handleAdd() {
     if (kind === "image" && !url.trim()) {
       toast.error("An image URL is required");
-      return;
-    }
-    if (kind === "filter" && !member.trim()) {
-      toast.error("A filter member (e.g. sales.region) is required");
       return;
     }
     if ((kind === "text" || kind === "markdown") && !text.trim()) {
@@ -295,7 +321,7 @@ function AddObjectDialog({
       <DialogHeader>
         <DialogTitle>Add object</DialogTitle>
         <DialogDescription>
-          Add a text note, markdown, an image, a separator, or a filter slicer.
+          Add a text note, markdown, an image, or a separator.
         </DialogDescription>
       </DialogHeader>
 
@@ -311,7 +337,6 @@ function AddObjectDialog({
             <option value="markdown">Markdown</option>
             <option value="image">Image (URL)</option>
             <option value="divider">Divider</option>
-            <option value="filter">Filter slicer</option>
           </Select>
         </div>
 
@@ -348,19 +373,7 @@ function AddObjectDialog({
           </div>
         )}
 
-        {kind === "filter" && (
-          <div className="space-y-1.5">
-            <Label htmlFor="ao-member">Filter member</Label>
-            <Input
-              id="ao-member"
-              value={member}
-              onChange={(e) => setMember(e.target.value)}
-              placeholder="e.g. sales.region"
-            />
-          </div>
-        )}
-
-        {(kind === "divider" || kind === "filter") && (
+        {kind === "divider" && (
           <div className="space-y-1.5">
             <Label htmlFor="ao-label">Label (optional)</Label>
             <Input id="ao-label" value={label} onChange={(e) => setLabel(e.target.value)} />

@@ -2,12 +2,16 @@
  * DashboardCardTile — one placed object on a dashboard (#10).
  *
  * A tile is a `kind`: a pinned `chart` (re-runs its grounded query via useChartData so
- * it always shows current data) or a decoration — `text`, `markdown`, `image`,
- * `divider`, or `filter` (a slicer that drives the dashboard's view-time filter). In
- * edit mode every tile exposes a drag handle (dnd-kit), a size control, and remove.
+ * it always shows current data) or a decoration — `text`, `markdown`, `image`, or
+ * `divider`. In edit mode every tile exposes a drag handle (dnd-kit), a size control,
+ * and remove.
+ *
+ * Native filters (Slice C): chart tiles resolve their applicable filters via
+ * `resolveTileFilters` and pass them + any date-range overrides to `useChartData`.
+ * A transient cross-filter overlay is applied on top when its cube matches the tile.
  */
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
@@ -16,15 +20,15 @@ import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/Char
 import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useDeleteDashboardTile, useUpdateDashboardTile } from "@/api/hooks";
 import { useChartData } from "@/lib/useChartData";
 import { renderMarkdown } from "@/lib/markdown";
 import { cn } from "@/lib/cn";
-import type { DashboardTileRead, SemanticFilter } from "@/types/api";
+import { resolveTileFilters, cubeOf } from "@/lib/dashboardFilters";
+import type { FilterSelections } from "@/lib/dashboardFilters";
+import type { DashboardTileRead, NativeFilter, SemanticFilter } from "@/types/api";
 
 type TileSize = "sm" | "md" | "lg";
 
@@ -47,14 +51,18 @@ const KIND_LABEL: Record<string, string> = {
   markdown: "Note",
   image: "Image",
   divider: "Divider",
-  filter: "Filter",
 };
 
 interface TileProps {
   tile: DashboardTileRead;
   dashboardId: string;
   editing: boolean;
-  activeFilter?: SemanticFilter | null;
+  /** Persisted native-filter configs for the dashboard. */
+  filters?: NativeFilter[];
+  /** Live per-filter selections (session state). */
+  selections?: FilterSelections;
+  /** Transient cross-filter session overlay. */
+  crossFilter?: SemanticFilter | null;
   onCrossFilter?: (member: string, value: string) => void;
 }
 
@@ -62,7 +70,9 @@ export function DashboardCardTile({
   tile,
   dashboardId,
   editing,
-  activeFilter,
+  filters = [],
+  selections = {},
+  crossFilter = null,
   onCrossFilter,
 }: TileProps) {
   const updateTile = useUpdateDashboardTile(dashboardId);
@@ -143,7 +153,9 @@ export function DashboardCardTile({
         <TileBody
           tile={tile}
           editing={editing}
-          activeFilter={activeFilter}
+          filters={filters}
+          selections={selections}
+          crossFilter={crossFilter}
           onCrossFilter={onCrossFilter}
           title={title}
         />
@@ -155,13 +167,17 @@ export function DashboardCardTile({
 function TileBody({
   tile,
   editing,
-  activeFilter,
+  filters,
+  selections,
+  crossFilter,
   onCrossFilter,
   title,
 }: {
   tile: DashboardTileRead;
   editing: boolean;
-  activeFilter?: SemanticFilter | null;
+  filters: NativeFilter[];
+  selections: FilterSelections;
+  crossFilter: SemanticFilter | null;
   onCrossFilter?: (member: string, value: string) => void;
   title: string;
 }) {
@@ -173,7 +189,9 @@ function TileBody({
         <ChartTileBody
           tile={tile}
           editing={editing}
-          activeFilter={activeFilter}
+          filters={filters}
+          selections={selections}
+          crossFilter={crossFilter}
           onCrossFilter={onCrossFilter}
           title={title}
         />
@@ -219,45 +237,49 @@ function TileBody({
           <hr className="flex-1 border-border" />
         </div>
       );
-    case "filter":
-      return <FilterSlicer tile={tile} onCrossFilter={onCrossFilter} disabled={editing} />;
     default:
       return null;
   }
 }
 
-/** The cube a member belongs to (the part before the first dot), or undefined. */
-function cubeOf(member: string | undefined): string | undefined {
-  return member?.includes(".") ? member.split(".")[0] : undefined;
-}
-
 function ChartTileBody({
   tile,
   editing,
-  activeFilter,
+  filters,
+  selections,
+  crossFilter,
   onCrossFilter,
   title,
 }: {
   tile: DashboardTileRead;
   editing: boolean;
-  activeFilter?: SemanticFilter | null;
+  filters: NativeFilter[];
+  selections: FilterSelections;
+  crossFilter: SemanticFilter | null;
   onCrossFilter?: (member: string, value: string) => void;
   title: string;
 }) {
   const spec = tile.chart?.spec;
 
-  // Apply the dashboard filter only to a semantic tile on the same cube.
+  const { filters: resolved, dateRanges } = resolveTileFilters(filters, selections, tile);
+  // Cross-filter overlays on top, only when its cube matches this tile.
   const tileCube = cubeOf((spec?.query.metric_refs ?? [])[0]);
-  const filterApplies = !!activeFilter && !!tileCube && cubeOf(activeFilter.member) === tileCube;
-  const appliedFilters = filterApplies ? [activeFilter as SemanticFilter] : undefined;
+  const crossApplies = !!crossFilter && !!tileCube && cubeOf(crossFilter.member) === tileCube;
+  const appliedFilters: SemanticFilter[] = crossApplies ? [...resolved, crossFilter as SemanticFilter] : resolved;
+  const hasOverride = Object.keys(dateRanges).length > 0;
+
+  const { data, isLoading, isError } = useChartData(
+    spec ?? null,
+    appliedFilters.length > 0 ? appliedFilters : undefined,
+    hasOverride ? dateRanges : undefined
+  );
+  const filterApplies = appliedFilters.length > 0 || hasOverride;
 
   const crossDimension = tileCube && spec?.encoding.x ? spec.encoding.x : undefined;
   const onSelectCategory =
     onCrossFilter && crossDimension
       ? (value: string) => onCrossFilter(crossDimension, value)
       : undefined;
-
-  const { data, isLoading, isError } = useChartData(spec ?? null, appliedFilters);
 
   const chartHandle = useRef<ChartRendererHandle>(null);
 
@@ -298,45 +320,5 @@ function ChartTileBody({
         <EmptyState title="No data" description="This chart returned no rows." />
       )}
     </>
-  );
-}
-
-function FilterSlicer({
-  tile,
-  onCrossFilter,
-  disabled,
-}: {
-  tile: DashboardTileRead;
-  onCrossFilter?: (member: string, value: string) => void;
-  disabled: boolean;
-}) {
-  const member = String(tile.content?.member ?? "");
-  const [value, setValue] = useState("");
-
-  if (!member) {
-    return <p className="text-xs text-muted-foreground">No filter member configured.</p>;
-  }
-
-  const apply = () => {
-    if (onCrossFilter && value.trim()) onCrossFilter(member, value.trim());
-  };
-
-  return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">Filter the dashboard by {member}</p>
-      <Input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="value…"
-        aria-label={`Filter ${member}`}
-        disabled={disabled}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") apply();
-        }}
-      />
-      <Button size="sm" variant="outline" disabled={disabled || !value.trim()} onClick={apply}>
-        Apply
-      </Button>
-    </div>
   );
 }
