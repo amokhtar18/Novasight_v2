@@ -14,7 +14,10 @@
     },
     "metric_refs": [],
     "dimensions": [],
-    "time_dimensions": []
+    "time_dimensions": [],
+    "filters": [],
+    "order": {},
+    "limit": null
   },
   "encoding": {
     "x": "month",

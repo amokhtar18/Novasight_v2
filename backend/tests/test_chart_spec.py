@@ -209,3 +209,53 @@ def test_invalid_palette_colour_is_rejected() -> None:
                 "options": {"palette": ["not-a-color"]},
             }
         )
+
+
+def test_chart_query_carries_filters_order_limit() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {
+                "metric_refs": ["sales.total"],
+                "dimensions": ["sales.region"],
+                "filters": [
+                    {"member": "sales.region", "operator": "equals", "values": ["west"]}
+                ],
+                "order": {"sales.total": "desc"},
+                "limit": 25,
+            },
+            "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+        }
+    )
+    assert spec.query.filters[0].member == "sales.region"
+    assert spec.query.order == {"sales.total": "desc"}
+    assert spec.query.limit == 25
+
+
+def test_chart_query_defaults_are_empty() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {"metric_refs": ["sales.total"]},
+            "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+        }
+    )
+    assert spec.query.filters == []
+    assert spec.query.order == {}
+    assert spec.query.limit is None
+
+
+def test_chart_query_time_dimension_date_range_round_trips() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "line",
+            "query": {
+                "metric_refs": ["sales.total"],
+                "time_dimensions": [
+                    {"dimension": "sales.created", "granularity": "month", "date_range": "last_90_days"}
+                ],
+            },
+            "encoding": {"x": "sales.created.month", "series": [{"field": "sales.total"}]},
+        }
+    )
+    assert spec.query.time_dimensions[0].cube_date_range == "last 90 days"

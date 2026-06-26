@@ -30,7 +30,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from app.schemas.query import QueryRequest
-from app.schemas.semantic import SemanticTimeDimension
+from app.schemas.semantic import OrderDir, SemanticFilter, SemanticRef, SemanticTimeDimension
 
 # The current contract version. Bump when the shape changes in a breaking way so
 # stored specs and AI-emitted specs can be migrated rather than silently misread.
@@ -97,6 +97,15 @@ class ChartQuery(BaseModel):
     # on the spec so a saved/AI chart re-runs with the same granularity rollup; the
     # resolved key (``<dimension>.<granularity>``) is what ``encoding.x`` reads.
     time_dimensions: list[SemanticTimeDimension] = Field(default_factory=list)
+    # Optional governed filters carried on the spec so a saved chart re-runs with the
+    # same constraints. Each member is re-validated against the governed allow-list by
+    # the semantic service before any Cube call (golden rule #3).
+    filters: list[SemanticFilter] = Field(default_factory=list)
+    # Optional server-side ordering, e.g. {"sales.total": "desc"}. Keys must be members
+    # selected by this query; the service rejects anything else.
+    order: dict[SemanticRef, OrderDir] = Field(default_factory=dict)
+    # Optional per-chart row cap; the service clamps it to settings.max_query_rows.
+    limit: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _require_a_source(self) -> ChartQuery:

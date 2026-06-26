@@ -88,6 +88,36 @@ time rollup as `timeDimensions`. Legacy single-dimension specs leave `dimensions
 empty and carry their one dimension on `encoding.x` alone (re-run falls back to it).
 See `docs/SEMANTIC_LAYER.md` for the query semantics.
 
+#### Optional governed query parameters on `ChartQuery`
+
+Three optional fields let a saved or AI-generated chart re-run with the same
+constraints it was created with:
+
+- **`filters`** (`list[SemanticFilter]`, default `[]`) — governed filter predicates
+  of the form `{ member, operator, values }`. Each `member` is a fully-qualified
+  Cube identifier (e.g. `sales.region`). `operator` is one of the closed set:
+  `equals`, `notEquals`, `contains`, `notContains`, `gt`, `gte`, `lt`, `lte`,
+  `set`, `notSet`. Presence-check operators (`set`/`notSet`) take no values; all
+  others require at least one. Every member is **re-validated against the governed
+  allow-list** by the semantic service before any Cube call (golden rule #3 — no
+  filter is a way to reach an ungoverned field).
+
+- **`order`** (`dict[SemanticRef, OrderDir]`, default `{}`) — server-side ordering,
+  e.g. `{"sales.total": "desc"}`. Keys must be members selected by the query
+  (`metric_refs`, `dimensions`, or a time dimension's resolved key); the service
+  rejects any key that is not in the query's governed scope.
+
+- **`limit`** (`int | null`, default `null`) — optional per-chart row cap (`ge=1`).
+  The semantic service clamps this to `settings.max_query_rows` so no caller can
+  exceed the platform limit, regardless of what the spec carries.
+
+`time_dimensions[].date_range` accepts either a **relative token** from the closed
+set (`last_7_days`, `last_30_days`, `last_90_days`, `this_month`, `last_month`,
+`this_quarter`, `last_quarter`, `this_year`, `last_year`) or an **absolute
+`[from, to]` pair** of ISO-date strings (e.g. `["2024-01-01", "2024-03-31"]`). The
+service translates relative tokens to Cube's native relative-range strings before
+forwarding the query.
+
 ### `encoding` — encodings
 
 `x` names the column used for the category axis (or pie slice labels). `series` is a
