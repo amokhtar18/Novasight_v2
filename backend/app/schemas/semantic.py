@@ -13,6 +13,7 @@ query runs, so a caller can never reach a measure/dimension Cube does not expose
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
@@ -59,6 +60,31 @@ SemanticGranularity = Literal[
     "year",
 ]
 
+# Relative date-range tokens (closed set) → Cube's native relative range strings.
+RelativeDateRange = Literal[
+    "last_7_days",
+    "last_30_days",
+    "last_90_days",
+    "this_month",
+    "last_month",
+    "this_quarter",
+    "last_quarter",
+    "this_year",
+    "last_year",
+]
+
+_RELATIVE_TO_CUBE: dict[str, str] = {
+    "last_7_days": "last 7 days",
+    "last_30_days": "last 30 days",
+    "last_90_days": "last 90 days",
+    "this_month": "this month",
+    "last_month": "last month",
+    "this_quarter": "this quarter",
+    "last_quarter": "last quarter",
+    "this_year": "this year",
+    "last_year": "last year",
+}
+
 
 class SemanticFilter(BaseModel):
     """A filter on a governed member: ``member <operator> values``.
@@ -96,6 +122,22 @@ class SemanticTimeDimension(BaseModel):
 
     dimension: SemanticRef
     granularity: SemanticGranularity | None = None
+    # Optional time-range filter. Either a relative token (closed set) or an absolute
+    # [from, to] pair of ISO dates. Maps to Cube's ``dateRange`` (see cube_date_range).
+    date_range: RelativeDateRange | list[str] | None = None
+
+    @model_validator(mode="after")
+    def _validate_absolute_range(self) -> SemanticTimeDimension:
+        if isinstance(self.date_range, list):
+            if len(self.date_range) != 2:
+                raise ValueError("an absolute date_range must be exactly two ISO dates")
+            try:
+                start, end = (date.fromisoformat(d) for d in self.date_range)
+            except ValueError as exc:
+                raise ValueError("date_range entries must be ISO dates (YYYY-MM-DD)") from exc
+            if start > end:
+                raise ValueError("date_range start must not be after end")
+        return self
 
     @property
     def result_key(self) -> str:
@@ -103,6 +145,15 @@ class SemanticTimeDimension(BaseModel):
         if self.granularity is not None:
             return f"{self.dimension}.{self.granularity}"
         return self.dimension
+
+    @property
+    def cube_date_range(self) -> str | list[str] | None:
+        """The Cube-native dateRange value (None when unset)."""
+        if self.date_range is None:
+            return None
+        if isinstance(self.date_range, list):
+            return list(self.date_range)
+        return _RELATIVE_TO_CUBE[self.date_range]
 
 
 class SemanticField(BaseModel):
