@@ -715,4 +715,17 @@ describe("buildEChartsOption — sankey", () => {
     expect(nodeNames).toContain("Widget");
     expect(option.series[0].links).toContainEqual({ source: "West", target: "Widget", value: 10 });
   });
+
+  it("self-cycle: appends zero-width-space to target and label formatter strips it", () => {
+    const cyclicData: QueryResponse = {
+      columns: ["sales.region", "sales.product", "sales.total"],
+      rows: [["West", "West", 5]],
+      row_count: 1,
+    };
+    const option = buildEChartsOption(sankeySpec, cyclicData) as Record<string, any>;
+    // The link target must carry the U+200B suffix so ECharts doesn't see a duplicate node name.
+    expect(option.series[0].links).toContainEqual({ source: "West", target: "West​", value: 5 });
+    // The label formatter must strip the suffix for display.
+    expect(option.series[0].label.formatter({ name: "West​" } as any)).toBe("West");
+  });
 });
