@@ -18,7 +18,6 @@ export interface GridLayoutNode {
 export function nodesToLayoutTiles(nodes: GridLayoutNode[]): TileLayout[] {
   return nodes
     .filter((n): n is GridLayoutNode & { id: string } => typeof n.id === "string" && n.id.length > 0)
-    .slice()
     .sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0))
     .map((n, i) => ({
       id: n.id,
