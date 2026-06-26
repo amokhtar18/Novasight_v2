@@ -131,9 +131,6 @@ export function buildEChartsOption(
   // Cartesian family options (bar/line/area/hbar/combo/scatter).
   const cartesian = t.cartesian ?? null;
 
-  // Gauge family options.
-  const gauge = t.gauge ?? null;
-
   // Legend
   const legend = opts.legend ?? {};
   const showLegend = legend.show ?? true;
@@ -264,20 +261,45 @@ export function buildEChartsOption(
   if (spec.type === "gauge") {
     const valIdx = colIndex(series[0].field);
     const total = rows.reduce((acc, row) => acc + num(row[valIdx]), 0);
-    const maxVal = gauge?.max ?? Math.max(total * 1.25, 1);
+    const g = t.gauge ?? {};
+    const maxVal = g.max ?? Math.max(total * 1.25, 1);
+
+    // Build axisLine colour stops: if intervals defined, normalise each bound to [0..1]
+    // over maxVal and pair with its colour (fall back to palette[i] if colour missing).
+    const axisLineColor: [number, string][] =
+      Array.isArray(g.intervals) && g.intervals.length > 0
+        ? (g.intervals as number[]).map((bound: number, i: number) => [
+            bound / maxVal,
+            (Array.isArray(g.interval_colors) && g.interval_colors[i] != null
+              ? g.interval_colors[i]
+              : palette[i] ?? theme.axisLine) as string,
+          ])
+        : [[1, theme.axisLine as string]];
+
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
       title: titleBlock,
+      animation: g.animation ?? true,
       series: [
         {
           type: "gauge",
-          min: gauge?.min ?? 0,
+          min: g.min ?? 0,
           max: maxVal,
-          progress: { show: true },
-          axisLine: { lineStyle: { color: [[1, theme.axisLine]] } },
+          ...(g.start_angle != null ? { startAngle: g.start_angle as number } : {}),
+          ...(g.end_angle != null ? { endAngle: g.end_angle as number } : {}),
+          pointer: { show: g.show_pointer ?? true },
+          progress: { show: g.show_progress ?? false, roundCap: g.round_cap ?? false },
+          axisTick: { show: g.show_axis_tick ?? false },
+          splitLine: { show: g.show_split_line ?? false },
+          ...(g.split_number != null ? { splitNumber: g.split_number as number } : {}),
+          axisLine: { lineStyle: { color: axisLineColor } },
           axisLabel: { color: theme.text, formatter: (v: number) => fmt(v) },
-          detail: { formatter: (v: number) => fmt(v), color: theme.text },
+          detail: {
+            formatter: (v: number) => fmt(v),
+            color: theme.text,
+            ...(g.font_size != null ? { fontSize: g.font_size as number } : {}),
+          },
           title: { color: theme.text },
           data: [{ value: total, name: seriesLabel(series[0]) }],
         },

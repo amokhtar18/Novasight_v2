@@ -417,6 +417,22 @@ it("pie groups slices below group_others_threshold into Other", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Gauge family options (Task 7 — Slice A2)
+// ---------------------------------------------------------------------------
+
+it("gauge applies angles, intervals+colors, pointer/progress", () => {
+  const opt = buildEChartsOption(
+    { version: "2", type: "gauge", query: { metric_refs: ["m"] },
+      encoding: { series: [{ field: "m" }] },
+      options: { type_options: { gauge: { min: 0, max: 100, start_angle: 225, end_angle: -45,
+        show_progress: true, round_cap: true, intervals: [50, 100], interval_colors: ["#0f0", "#f00"] } } } },
+    { columns: ["m"], rows: [[42]], row_count: 1 }) as any;
+  expect(opt.series[0].startAngle).toBe(225);
+  expect(opt.series[0].progress.show).toBe(true);
+  expect(opt.series[0].axisLine.lineStyle.color[0][1]).toBe("#0f0");
+});
+
+// ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------
 
