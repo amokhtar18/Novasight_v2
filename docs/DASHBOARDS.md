@@ -81,9 +81,11 @@ A `time` filter resolves to a `date_range` entry in the `dateRanges` map keyed b
 filter's `member`. The value is either a `RelativeDateRange` token
 (`last_7_days` | `last_30_days` | `last_90_days` | `this_month` | `last_month` |
 `this_quarter` | `last_quarter` | `this_year` | `last_year`) or an absolute
-`[from, to]` pair of ISO-date strings (e.g. `["2024-01-01", "2024-03-31"]`). The
-semantic service injects this onto the matching time dimension when building the Cube
-query, replacing any `date_range` already on that dimension in the tile's spec.
+`[from, to]` pair of ISO-date strings (e.g. `["2024-01-01", "2024-03-31"]`). At view
+time `buildSemanticRequest` (in `useChartData`) injects this onto the matching time
+dimension before the request is sent, replacing any `date_range` already on that
+dimension in the tile's spec; the semantic service then forwards it to Cube as a
+`dateRange`.
 
 ## Scoping
 
