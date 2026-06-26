@@ -29,8 +29,8 @@ from app.schemas.dashboard import (
     DashboardTileRead,
     DashboardTileUpdate,
     DashboardUpdate,
+    NativeFilter,
 )
-from app.schemas.semantic import SemanticFilter
 from app.services.charts import chart_to_read
 from app.tenancy.context import TenantContext
 
@@ -113,8 +113,8 @@ class DashboardService:
             dashboard.name = data.name
         if data.description is not None:
             dashboard.description = data.description
-        if data.filters is not None:
-            dashboard.filters = [f.model_dump() for f in data.filters]
+        if data.native_filters is not None:
+            dashboard.native_filters = [f.model_dump(mode="json") for f in data.native_filters]
         await self._db.flush()
         # The row UPDATE expires the onupdate ``updated_at``; reload it explicitly so
         # ``_to_read`` doesn't trigger a sync lazy-load (MissingGreenlet) in async.
@@ -298,7 +298,7 @@ class DashboardService:
             owner_id=dashboard.owner_id,
             created_at=dashboard.created_at,
             updated_at=dashboard.updated_at,
-            filters=[SemanticFilter(**f) for f in (dashboard.filters or [])],
+            native_filters=[NativeFilter(**f) for f in (dashboard.native_filters or [])],
             tiles=tiles,
         )
 

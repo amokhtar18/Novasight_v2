@@ -140,28 +140,28 @@ async def test_filters_persist_and_round_trip(
     did = client_with_db.post(
         "/api/v1/dashboards", headers=_auth(), json={"name": "Sales"}
     ).json()["id"]
-    # A new dashboard has no filters.
-    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["filters"] == []
+    # A new dashboard has no native_filters.
+    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["native_filters"] == []
 
-    # PATCH persists a filter; GET returns it.
+    nf = {
+        "id": "f1", "kind": "value", "member": "regional_sales.region",
+        "operator": "equals", "default_values": ["west"],
+        "scope": {"mode": "auto", "tile_ids": []},
+    }
+    # PATCH persists a native_filter; GET returns it.
     patch = client_with_db.patch(
         f"/api/v1/dashboards/{did}",
         headers=_auth(),
-        json={
-            "filters": [
-                {"member": "regional_sales.region", "operator": "equals", "values": ["west"]}
-            ]
-        },
+        json={"native_filters": [nf]},
     )
     assert patch.status_code == 200, patch.text
     got = client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()
-    assert got["filters"] == [
-        {"member": "regional_sales.region", "operator": "equals", "values": ["west"]}
-    ]
+    assert got["native_filters"][0]["member"] == "regional_sales.region"
+    assert got["native_filters"][0]["default_values"] == ["west"]
 
-    # Filters can be cleared with an empty list.
-    client_with_db.patch(f"/api/v1/dashboards/{did}", headers=_auth(), json={"filters": []})
-    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["filters"] == []
+    # Native filters can be cleared with an empty list.
+    client_with_db.patch(f"/api/v1/dashboards/{did}", headers=_auth(), json={"native_filters": []})
+    assert client_with_db.get(f"/api/v1/dashboards/{did}", headers=_auth()).json()["native_filters"] == []
 
 
 @pytest.mark.asyncio

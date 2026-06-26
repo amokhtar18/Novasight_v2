@@ -30,10 +30,10 @@ class Dashboard(TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    # View-time dashboard filters (a list of SemanticFilter dicts). Applied to matching
+    # Native filters (a list of NativeFilter dicts; Slice C). Applied to matching
     # semantic tiles at render; each member is re-validated by the query path. Nullable
-    # so the column can be added to existing rows without a backfill (read as []).
-    filters: Mapped[list[dict[str, Any]] | None] = mapped_column(
+    # so the column reads as [] when absent.
+    native_filters: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True, default=list
     )
 
@@ -52,9 +52,9 @@ class DashboardTile(TimestampMixin, Base):
     """One placed object on a dashboard (grid position + size).
 
     A tile is a ``kind`` of content (#10): a pinned ``chart`` (the original kind), or a
-    decoration — ``text``, ``markdown``, ``image``, ``divider``, or ``filter``. Chart
-    tiles carry a ``chart_id``; the rest carry their payload in ``content`` (and have a
-    null ``chart_id``).
+    decoration — ``text``, ``markdown``, ``image`` or ``divider``. Chart tiles carry a
+    ``chart_id``; the rest carry their payload in ``content`` (and have a null
+    ``chart_id``).
     """
 
     __tablename__ = "dashboard_tiles"
@@ -66,7 +66,7 @@ class DashboardTile(TimestampMixin, Base):
     dashboard_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("dashboards.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    # What this tile is: "chart" | "text" | "markdown" | "image" | "divider" | "filter".
+    # What this tile is: "chart" | "text" | "markdown" | "image" | "divider".
     kind: Mapped[str] = mapped_column(
         String(32), nullable=False, default="chart", server_default="chart"
     )
