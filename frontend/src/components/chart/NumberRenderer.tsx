@@ -5,10 +5,15 @@
  * result directly. It shows the **total of the first series** across the returned
  * rows (so a single-aggregate query shows that value, and a grouped query shows the
  * grand total), with the series label underneath.
+ *
+ * v2 (Slice A2): Reads `spec.options?.type_options?.number` for subheader/subtitle
+ * text and header_font_size/subheader_font_size, and formats the main value via
+ * `formatChartValue` when `spec.options?.number_format` is set.
  */
 
 import { cn } from "@/lib/cn";
-import { formatCell, humanize } from "@/lib/format";
+import { formatChartValue } from "@/lib/chartFormat";
+import { humanize } from "@/lib/format";
 import type { ChartSpec, QueryResponse } from "@/types/api";
 
 interface NumberRendererProps {
@@ -33,6 +38,22 @@ export function NumberRenderer({ spec, data, className }: NumberRendererProps) {
 
   const label = series ? series.name ?? humanize(series.field) : "";
 
+  // v2: number-family options
+  const numberOpts = spec.options?.type_options?.number;
+  const numberFormat = spec.options?.number_format;
+
+  // Format main value: use formatChartValue when number_format is present,
+  // otherwise fall back to the raw localized string to preserve existing behaviour.
+  const formattedTotal =
+    total === null
+      ? "—"
+      : numberFormat
+        ? formatChartValue(total, numberFormat)
+        : total.toLocaleString();
+
+  const headerFontSize = numberOpts?.header_font_size;
+  const subheaderFontSize = numberOpts?.subheader_font_size;
+
   return (
     <div
       className={cn(
@@ -43,10 +64,29 @@ export function NumberRenderer({ spec, data, className }: NumberRendererProps) {
       {spec.options?.title && (
         <p className="mb-2 text-sm font-medium text-muted-foreground">{spec.options.title}</p>
       )}
-      <p className="text-5xl font-semibold tabular-nums tracking-tight">
-        {total === null ? "—" : formatCell(total)}
+      <p
+        className="text-5xl font-semibold tabular-nums tracking-tight"
+        style={headerFontSize != null ? { fontSize: headerFontSize } : undefined}
+      >
+        {formattedTotal}
       </p>
       {label && <p className="mt-2 text-sm text-muted-foreground">{label}</p>}
+      {numberOpts?.subheader && (
+        <p
+          className="mt-1 text-sm text-muted-foreground"
+          style={subheaderFontSize != null ? { fontSize: subheaderFontSize } : undefined}
+        >
+          {numberOpts.subheader}
+        </p>
+      )}
+      {numberOpts?.subtitle && (
+        <p
+          className="mt-1 text-xs text-muted-foreground"
+          style={subheaderFontSize != null ? { fontSize: subheaderFontSize } : undefined}
+        >
+          {numberOpts.subtitle}
+        </p>
+      )}
     </div>
   );
 }

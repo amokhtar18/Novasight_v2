@@ -2,7 +2,8 @@
  * Tests for NumberRenderer (the "big number" KPI tile):
  *   - sums the first series across rows and formats the total;
  *   - shows the series label and the optional title;
- *   - renders an em dash when the series column is missing.
+ *   - renders an em dash when the series column is missing;
+ *   - v2: compact formatting + subheader/subtitle with font sizes.
  */
 
 import { describe, it, expect } from "vitest";
@@ -49,5 +50,29 @@ describe("NumberRenderer", () => {
     });
     render(<NumberRenderer spec={missing} data={data} />);
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2 — number-family options (Slice A2)
+// ---------------------------------------------------------------------------
+
+const compactData: QueryResponse = { columns: ["m"], rows: [[1234]], row_count: 1 };
+const compactSpec: ChartSpec = {
+  version: "2",
+  type: "number",
+  query: { metric_refs: ["m"] },
+  encoding: { series: [{ field: "m" }] },
+  options: {
+    number_format: { compact: true },
+    type_options: { number: { subheader: "vs LY", header_font_size: 48 } },
+  },
+};
+
+describe("NumberRenderer v2", () => {
+  it("renders the compact value + subheader", () => {
+    render(<NumberRenderer spec={compactSpec} data={compactData} />);
+    expect(screen.getByText(/1\.2K/)).toBeInTheDocument();
+    expect(screen.getByText("vs LY")).toBeInTheDocument();
   });
 });
