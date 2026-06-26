@@ -505,11 +505,29 @@ export function buildEChartsOption(
     const funnelLabelShow = f.show_labels ?? true;
     const funnelFormatter = funnelLabelFormatter(f.label_type);
 
+    // Funnel tooltip: when show_tooltip_labels is true (default) and
+    // tooltip_label_type is set, build a formatter that renders the chosen
+    // content variant. When show_tooltip_labels is false, suppress labels in
+    // the tooltip by returning only the series name (no value/percent).
+    const showTooltipLabels = f.show_tooltip_labels ?? true;
+    const tooltipFormatter = showTooltipLabels
+      ? (funnelLabelFormatter(f.tooltip_label_type) ?? undefined)
+      : undefined;
+    const funnelTooltip = showTooltipLabels
+      ? {
+          ...itemTooltip,
+          ...(tooltipFormatter != null ? { formatter: tooltipFormatter } : {}),
+        }
+      : {
+          ...itemTooltip,
+          formatter: "{b}",
+        };
+
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
       title: titleBlock,
-      tooltip: itemTooltip,
+      tooltip: funnelTooltip,
       legend: legendBlock(),
       series: [
         {

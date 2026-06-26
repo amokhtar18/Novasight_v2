@@ -453,13 +453,29 @@ it("radar shape circle + per-metric bounds", () => {
     { columns: ["c","a","b"], rows: [["x",1,2],["y",3,4]], row_count: 2 }) as any;
   expect(opt.radar.shape).toBe("circle");
 });
-it("treemap upper labels + funnel label toggle", () => {
+it("treemap show_upper_labels sets upperLabel.show", () => {
   const t = buildEChartsOption(
     { version: "2", type: "treemap", query: { metric_refs: ["m"] },
       encoding: { x: "c", series: [{ field: "m" }] },
       options: { type_options: { treemap: { show_upper_labels: true } } } },
     { columns: ["c","m"], rows: [["a",1]], row_count: 1 }) as any;
   expect(t.series[0].upperLabel.show).toBe(true);
+});
+it("funnel show_labels false hides series label", () => {
+  const f = buildEChartsOption(
+    { version: "2", type: "funnel", query: { metric_refs: ["m"] },
+      encoding: { x: "c", series: [{ field: "m" }] },
+      options: { type_options: { funnel: { show_labels: false } } } },
+    { columns: ["c","m"], rows: [["a",10],["b",5]], row_count: 2 }) as any;
+  expect(f.series[0].label.show).toBe(false);
+});
+it("funnel tooltip_label_type drives tooltip formatter", () => {
+  const f = buildEChartsOption(
+    { version: "2", type: "funnel", query: { metric_refs: ["m"] },
+      encoding: { x: "c", series: [{ field: "m" }] },
+      options: { type_options: { funnel: { tooltip_label_type: "value_percent", show_tooltip_labels: true } } } },
+    { columns: ["c","m"], rows: [["a",10],["b",5]], row_count: 2 }) as any;
+  expect(f.tooltip.formatter).toBe("{c} ({d}%)");
 });
 
 // ---------------------------------------------------------------------------
