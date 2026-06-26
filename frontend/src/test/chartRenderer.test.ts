@@ -391,6 +391,32 @@ it("cartesian data_zoom adds a dataZoom block and y bounds/log come from the gro
 });
 
 // ---------------------------------------------------------------------------
+// Pie/donut family options (Task 6 — Slice A2)
+// ---------------------------------------------------------------------------
+
+const pieData = { columns: ["c", "m"], rows: [["a", 1], ["b", 1], ["c", 8]], row_count: 3 };
+
+it("pie rose_type + radius from group", () => {
+  const opt = buildEChartsOption(
+    { version: "2", type: "donut", query: { metric_refs: ["m"] },
+      encoding: { x: "c", series: [{ field: "m" }] },
+      options: { type_options: { pie: { rose_type: "area", inner_radius: 40, outer_radius: 70 } } } },
+    pieData) as any;
+  expect(opt.series[0].roseType).toBe("area");
+  expect(opt.series[0].radius).toEqual(["40%", "70%"]);
+});
+
+it("pie groups slices below group_others_threshold into Other", () => {
+  const opt = buildEChartsOption(
+    { version: "2", type: "pie", query: { metric_refs: ["m"] },
+      encoding: { x: "c", series: [{ field: "m" }] },
+      options: { type_options: { pie: { group_others_threshold: 20 } } } },
+    pieData) as any;
+  const names = opt.series[0].data.map((d: any) => d.name);
+  expect(names).toContain("Other");
+});
+
+// ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------
 

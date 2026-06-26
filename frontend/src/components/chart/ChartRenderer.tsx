@@ -333,20 +333,126 @@ export function buildEChartsOption(
     const seriesSpec = series[0];
     if (!seriesSpec) throw new Error("Pie chart requires at least one series");
     const valIdx = colIndex(seriesSpec.field);
+    const p = t.pie ?? {};
+
+    // Build raw slice data from sorted rows.
+    const rawSlices = srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) }));
+
+    // Fold slices below group_others_threshold (as % of total) into a single "Other" datum.
+    let sliceData: Array<{ name: string; value: number }>;
+    if (p.group_others_threshold != null && p.group_others_threshold > 0) {
+      const total = rawSlices.reduce((acc, s) => acc + s.value, 0);
+      if (total > 0) {
+        let othersSum = 0;
+        const kept: Array<{ name: string; value: number }> = [];
+        for (const s of rawSlices) {
+          if ((s.value / total) * 100 < p.group_others_threshold) {
+            othersSum += s.value;
+          } else {
+            kept.push(s);
+          }
+        }
+        sliceData = othersSum > 0 ? [...kept, { name: "Other", value: othersSum }] : kept;
+      } else {
+        sliceData = rawSlices;
+      }
+    } else {
+      sliceData = rawSlices;
+    }
+
+    // Radius: [inner, outer] — donut default inner 50, pie 0.
+    const innerR = p.inner_radius ?? (spec.type === "donut" ? 50 : 0);
+    const outerR = p.outer_radius ?? 70;
+    const radius: [string, string] = [`${innerR}%`, `${outerR}%`];
+
+    // roseType: omit (undefined) when not set or "none".
+    const roseType =
+      p.rose_type && p.rose_type !== "none" ? (p.rose_type as "area" | "radius") : undefined;
+
+    // Label position & line.
+    const labelPosition = p.labels_outside ? "outside" : "inside";
+    const labelLineShow = p.label_line ?? (p.labels_outside ? true : false);
+
+    // Label formatter from label_type + shared labels.template.
+    const buildLabelFormatter = (): string | undefined => {
+      const tpl = labels.template;
+      if (tpl) return tpl;
+      const lt = p.label_type;
+      if (!lt) return undefined;
+      switch (lt) {
+        case "category":              return "{b}";
+        case "value":                 return "{c}";
+        case "percent":               return "{d}%";
+        case "category_value":        return "{b}: {c}";
+        case "value_percent":         return "{c} ({d}%)";
+        case "category_value_percent": return "{b}: {c} ({d}%)";
+        default:                      return undefined;
+      }
+    };
+    const labelFormatter = buildLabelFormatter();
+
+    // show_labels_threshold: hide labels when slice < threshold %, else show.
+    // ECharts label.show can be a callback but that is complex; use formatter to blank out.
+    const showLabelsThreshold = p.show_labels_threshold ?? null;
+    const labelConfig: Record<string, unknown> = {
+      show: labels.show !== false,
+      color: theme.text,
+      position: labelPosition,
+      ...(labelFormatter ? { formatter: labelFormatter } : {}),
+    };
+    if (showLabelsThreshold != null && showLabelsThreshold > 0) {
+      // Blank the label text for slices below the threshold percentage.
+      labelConfig.formatter = (params: { percent?: number }) => {
+        const pct = params.percent ?? 0;
+        if (pct < showLabelsThreshold) return "";
+        return labelFormatter ?? "{b}";
+      };
+    }
+
+    // show_total: sum of all slice values, rendered as a centered title/graphic.
+    const pieTotal = sliceData.reduce((acc, s) => acc + s.value, 0);
+    let totalBlock: Record<string, unknown> | undefined;
+    let graphicBlock: unknown[] | undefined;
+    if (p.show_total) {
+      const totalText = fmt(pieTotal);
+      if (!opts.title) {
+        // No chart title — use ECharts title for the center total.
+        totalBlock = {
+          text: totalText,
+          left: "center",
+          top: "center",
+          textStyle: { color: theme.text, fontSize: 18, fontWeight: "bold" },
+        };
+      } else {
+        // Chart title already occupies the title slot — use a graphic element.
+        graphicBlock = [
+          {
+            type: "text",
+            left: "center",
+            top: "center",
+            style: { text: totalText, fill: theme.text, fontSize: 18, fontWeight: "bold" },
+          },
+        ];
+      }
+    }
+
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
-      title: titleBlock,
+      title: totalBlock ?? titleBlock,
       tooltip: itemTooltip,
       legend: legendBlock(),
+      ...(graphicBlock ? { graphic: graphicBlock } : {}),
       series: [
         {
           name: seriesLabel(seriesSpec),
           type: "pie",
-          radius: spec.type === "donut" ? ["50%", "72%"] : ["42%", "68%"],
+          radius,
+          ...(roseType ? { roseType } : {}),
           itemStyle: { borderColor: theme.tooltipBg, borderWidth: 2 },
-          label: labels.show ? { color: theme.text } : undefined,
-          data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
+          label: labelConfig,
+          labelLine: { show: labelLineShow },
+          data: sliceData,
           emphasis: {
             itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.5)" },
           },
