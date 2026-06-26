@@ -40,7 +40,14 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends
 
-from app.core.clickhouse import ClickHouseClient, QueryResult, get_clickhouse_client
+from app.core.clickhouse import (
+    ClickHouseClient,
+    QueryResult,
+    get_clickhouse_client,
+)
+from app.core.clickhouse import (
+    quote_ident as _ident,
+)
 from app.core.config import Settings, get_settings
 from app.core.iceberg_catalog import load_iceberg_catalog
 from app.ingestion.csv_iceberg import _table_name_for_dataset
@@ -51,15 +58,6 @@ if TYPE_CHECKING:
     from app.models.dataset import Dataset
 
 logger = logging.getLogger(__name__)
-
-
-def _ident(name: str) -> str:
-    """Backtick-quote a ClickHouse identifier (database/table name).
-
-    Names are derived from a validated tenant slug and a UUID hex, so they are
-    already safe; quoting is defensive against reserved words.
-    """
-    return f"`{name}`"
 
 
 def _str_literal(value: str) -> str:

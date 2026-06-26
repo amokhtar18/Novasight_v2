@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.clickhouse import ClickHouseClient, get_clickhouse_client
+from app.core.clickhouse import quote_ident as _ident
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.iceberg_catalog import load_iceberg_catalog
@@ -73,15 +74,6 @@ class ResourceConflictError(ProvisioningError):
 
     Signals an inconsistent state; we fail closed rather than adopt or clobber it.
     """
-
-
-def _ident(name: str) -> str:
-    """Backtick-quote a ClickHouse identifier.
-
-    Names are derived from a validated slug, so already safe; quoting is defensive
-    against reserved words (mirrors ``services.clickhouse_datasets._ident``).
-    """
-    return f"`{name}`"
 
 
 # ---------------------------------------------------------------------------

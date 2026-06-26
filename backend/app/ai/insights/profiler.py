@@ -30,7 +30,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from app.services.clickhouse_datasets import ClickHouseDatasetService, _ident
+from app.core.clickhouse import quote_ident
+from app.services.clickhouse_datasets import ClickHouseDatasetService
 from app.tenancy.context import TenantContext
 
 if TYPE_CHECKING:
@@ -138,8 +139,8 @@ class DatasetProfiler:
         from app.ingestion.csv_iceberg import _table_name_for_dataset  # local import avoids cycle
 
         table_name = _table_name_for_dataset(dataset.id)
-        db_ident = _ident(ctx.clickhouse_db)
-        tbl_ident = _ident(table_name)
+        db_ident = quote_ident(ctx.clickhouse_db)
+        tbl_ident = quote_ident(table_name)
 
         logger.info(
             "DatasetProfiler.profile: tenant_id=%r dataset_id=%r table=%r",
@@ -219,7 +220,7 @@ class DatasetProfiler:
 
         Uses safe, backtick-quoted column identifiers.
         """
-        col_ident = _ident(col_name)
+        col_ident = quote_ident(col_name)
         profile = ColumnProfile(name=col_name, type=col_type, row_count=total_rows)
 
         is_numeric = any(col_type.startswith(p) for p in _NUMERIC_TYPE_PREFIXES)

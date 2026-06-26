@@ -35,6 +35,19 @@ from fastapi import Depends
 from app.core.config import ClickHouseSettings, Settings, get_settings
 
 
+def quote_ident(name: str) -> str:
+    """Backtick-quote a ClickHouse identifier (database/table/column name).
+
+    Most callers pass names derived from a validated slug or a UUID hex, so the
+    quoting is defensive against reserved words. Embedded backticks are doubled
+    (ClickHouse's escape) so that even a name carrying a backtick — e.g. a column
+    name taken verbatim from a CSV header on upload — cannot break out of the
+    quotes. Without the escape an embedded backtick would terminate the identifier
+    early and let the remainder be parsed as SQL.
+    """
+    return "`" + name.replace("`", "``") + "`"
+
+
 @dataclass(frozen=True)
 class QueryResult:
     """A read-only query result: ordered column names + row tuples."""

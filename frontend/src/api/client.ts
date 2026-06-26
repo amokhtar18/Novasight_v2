@@ -165,6 +165,14 @@ async function apiFetch<T>(
   return response.json() as Promise<T>;
 }
 
+/** Auth-aware DELETE that expects no response body. Throws on non-2xx. */
+async function apiDelete(endpoint: string): Promise<void> {
+  const response = await fetchWithAuth(endpoint, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Auth endpoints (no bearer token required)
 // ---------------------------------------------------------------------------
@@ -266,10 +274,7 @@ export async function runDbtModel(id: string): Promise<DbtRunRead> {
 
 /** DELETE /dbt-models/{id}. */
 export async function deleteDbtModel(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/dbt-models/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/dbt-models/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,10 +346,7 @@ export async function testSource(id: string): Promise<SourceTestResponse> {
 
 /** DELETE /sources/{id}. */
 export async function deleteSource(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/sources/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/sources/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,10 +381,7 @@ export async function updatePipeline(
 
 /** DELETE /pipelines/{id}. */
 export async function deletePipeline(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/pipelines/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/pipelines/${id}`);
 }
 
 /** POST /pipelines/{id}/run — queue a run now; returns the queued run. */
@@ -440,10 +439,7 @@ export async function updateSchedule(
 
 /** DELETE /schedules/{id}. */
 export async function deleteSchedule(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/schedules/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/schedules/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,10 +496,7 @@ export async function updateSemanticModelDef(
 
 /** DELETE /semantic-models/{id}. */
 export async function deleteSemanticModelDef(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/semantic-models/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/semantic-models/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -544,10 +537,7 @@ export async function createChart(request: ChartCreate): Promise<SavedChartRead>
 
 /** DELETE /charts/{id}. */
 export async function deleteChart(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/charts/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/charts/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -587,10 +577,7 @@ export async function updateDashboard(
 
 /** DELETE /dashboards/{id}. */
 export async function deleteDashboard(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/dashboards/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/dashboards/${id}`);
 }
 
 /** PUT /dashboards/{id}/layout — persist tile order + sizes after a drag/resize. */
@@ -635,13 +622,7 @@ export async function deleteDashboardTile(
   dashboardId: string,
   tileId: string
 ): Promise<void> {
-  const response = await fetchWithAuth(
-    `/dashboards/${dashboardId}/tiles/${tileId}`,
-    { method: "DELETE" }
-  );
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/dashboards/${dashboardId}/tiles/${tileId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -748,10 +729,7 @@ export async function provisionTenant(
 
 /** DELETE /tenants/{slug} — de-provision a tenant. */
 export async function deprovisionTenant(slug: string): Promise<void> {
-  const response = await fetchWithAuth(`/tenants/${slug}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/tenants/${slug}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -783,10 +761,7 @@ export async function updateUser(id: string, request: UserUpdate): Promise<UserR
 
 /** DELETE /users/{id}. */
 export async function deleteUser(id: string): Promise<void> {
-  const response = await fetchWithAuth(`/users/${id}`, { method: "DELETE" });
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await parseDetail(response)}`);
-  }
+  return apiDelete(`/users/${id}`);
 }
 
 // ---------------------------------------------------------------------------
