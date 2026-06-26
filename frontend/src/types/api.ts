@@ -92,6 +92,12 @@ export interface ChartQuery {
   /** Governed metric names resolved by the semantic layer (AI path). */
   metric_refs?: string[];
   /**
+   * Plain (non-time) governed dimensions to group by. The first is the category axis
+   * (`encoding.x`); any others are breakdown dimensions (`encoding.breakdown`) pivoted
+   * into series. Empty for legacy single-dimension specs (dimension on `encoding.x`).
+   */
+  dimensions?: string[];
+  /**
    * Time dimensions for a semantic chart — carried on the spec so a saved/AI chart
    * re-runs with the same granularity rollup. The resolved `<dimension>.<granularity>`
    * key is what `encoding.x` reads.
@@ -115,6 +121,12 @@ export interface ChartEncoding {
   x?: string | null;
   /** Value series (for a table, the columns to display). At least one. */
   series: SeriesEncoding[];
+  /**
+   * Breakdown dimensions: dimension columns whose values are pivoted into one series
+   * each at render time. When present, `series[0]` is the measure that supplies the
+   * pivoted values. Empty for a plain chart where `series` lists measures directly.
+   */
+  breakdown?: string[];
 }
 
 /** How numeric values are formatted in labels, tooltips, and value axes (#8). */

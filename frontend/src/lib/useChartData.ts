@@ -36,11 +36,21 @@ export function useChartData(spec: ChartSpec | null, filters?: SemanticFilter[])
   const timeDimensions = spec?.query.time_dimensions ?? [];
   const hasTimeDim = timeDimensions.length > 0;
 
+  // Plain dimensions to group by: the spec's `query.dimensions` is the source of truth
+  // for multi-dimension charts (category axis + breakdown). Legacy specs predate that
+  // field and carry their single dimension on `encoding.x` only, so fall back to it.
+  const plainDimensions =
+    spec?.query.dimensions && spec.query.dimensions.length > 0
+      ? spec.query.dimensions
+      : hasTimeDim || !spec?.encoding.x
+        ? []
+        : [spec.encoding.x];
+
   const semanticRequest: SemanticQueryRequest | null =
     isSemantic && spec
       ? {
           measures: metricRefs,
-          dimensions: hasTimeDim ? [] : spec.encoding.x ? [spec.encoding.x] : [],
+          dimensions: plainDimensions,
           ...(hasTimeDim ? { time_dimensions: timeDimensions } : {}),
           limit: DEFAULT_LIMIT,
           ...(filters && filters.length > 0 ? { filters } : {}),

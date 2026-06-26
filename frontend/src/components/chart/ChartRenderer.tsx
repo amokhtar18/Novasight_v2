@@ -34,6 +34,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 
 import { readChartTheme, type ChartTheme } from "@/lib/chartTheme";
+import { applyBreakdown } from "@/lib/chartPivot";
 import { useTheme } from "@/lib/theme";
 import { TableRenderer } from "@/components/chart/TableRenderer";
 import { NumberRenderer } from "@/components/chart/NumberRenderer";
@@ -104,10 +105,13 @@ function valueAxis(
  * Exported so it can be unit-tested without a DOM.
  */
 export function buildEChartsOption(
-  spec: ChartSpec,
-  data: QueryResponse,
+  rawSpec: ChartSpec,
+  rawData: QueryResponse,
   theme: ChartTheme = readChartTheme()
 ): EChartsOption {
+  // Pivot any breakdown dimensions into one series column each (no-op when absent),
+  // so the rest of this function only ever sees the wide, one-series-per-column form.
+  const { spec, data } = applyBreakdown(rawSpec, rawData);
   const { columns, rows } = data;
   const { x, series } = spec.encoding;
   const options = spec.options ?? {};

@@ -34,13 +34,15 @@ both reading the one canonical fixture so the two languages cannot drift.
     "dataset_id": "…uuid…",      //   dataset the inline query runs against
     "query": { /* QueryRequest */ }, //   structured aggregation (Phase 1 path)
     "metric_refs": [],           //   OR governed metric names (semantic / AI path)
+    "dimensions": [],            //   plain dimensions to group by (semantic path)
     "time_dimensions": []        //   optional time-dimension rollups (semantic path)
   },
   "encoding": {                  // HOW columns map to visual channels
     "x": "month",                //   category axis (x / pie label); omit for table
     "series": [                  //   value series (≥1); for a table, the columns
       { "field": "sales", "name": "Sales", "color": "#3b82f6" }
-    ]
+    ],
+    "breakdown": []              //   dimensions pivoted into one series each (optional)
   },
   "options": {                   // display-only; never affects the query/data
     "title": "Monthly sales",
@@ -74,22 +76,35 @@ one of two sources is required:
 
 There is intentionally nowhere to put a raw SQL string.
 
-For the semantic path, `time_dimensions` (a list of
+For the semantic path, `dimensions` lists the plain (non-time) governed dimensions to
+group by. The first is the category axis (`encoding.x`); any others are **breakdown**
+dimensions. `time_dimensions` (a list of
 [`SemanticTimeDimension`](../backend/app/schemas/semantic.py): `{ dimension, granularity }`)
 carries any time-dimension rollup on the spec, so a saved or AI-generated chart
 re-runs at the same granularity. The rolled-up column key is
 `<dimension>.<granularity>` and is the value `encoding.x` reads — re-run logic
-(`frontend/src/lib/useChartData.ts`) sends these as Cube `timeDimensions`, not as plain
-`dimensions`. See `docs/SEMANTIC_LAYER.md` for the query semantics.
+(`frontend/src/lib/useChartData.ts`) sends `dimensions` as Cube `dimensions` and the
+time rollup as `timeDimensions`. Legacy single-dimension specs leave `dimensions`
+empty and carry their one dimension on `encoding.x` alone (re-run falls back to it).
+See `docs/SEMANTIC_LAYER.md` for the query semantics.
 
 ### `encoding` — encodings
 
 `x` names the column used for the category axis (or pie slice labels). `series` is a
 non-empty list; each entry's `field` is a column name in the resulting
 `QueryResponse`. `name` is the legend label (defaults to `field`); `color` is an
-optional explicit colour. Encoding `field`/`x` values are *display references* only
-— they are pattern-bounded (`^[A-Za-z_][A-Za-z0-9_.]*$`) and never reach the SQL
-builder.
+optional explicit colour.
+
+`breakdown` lists dimension columns whose values are **pivoted into one series each**
+at render time (`frontend/src/lib/chartPivot.ts`): a chart with one measure grouped by
+a category dimension *and* a breakdown dimension becomes a grouped/stacked chart with
+one series per breakdown value. When `breakdown` is set, `series[0]` is the measure
+that supplies the pivoted values; pivoting applies only to multi-series category types
+(bar/hbar/line/area/combo/radar). The drag-and-drop builder's X-axis / Breakdown /
+Metrics shelves map directly onto `encoding.x` / `encoding.breakdown` / `series`.
+
+Encoding `field`/`x` values are *display references* only — they are pattern-bounded
+(`^[A-Za-z_][A-Za-z0-9_.]*$`) and never reach the SQL builder.
 
 ### `options`
 

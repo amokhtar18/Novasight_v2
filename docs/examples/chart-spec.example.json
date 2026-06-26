@@ -13,6 +13,7 @@
       "limit": 50
     },
     "metric_refs": [],
+    "dimensions": [],
     "time_dimensions": []
   },
   "encoding": {
@@ -20,7 +21,8 @@
     "series": [
       { "field": "sales", "name": "Sales", "color": "#3b82f6" },
       { "field": "returns", "name": "Returns", "color": null }
-    ]
+    ],
+    "breakdown": []
   },
   "options": {
     "title": "Monthly sales vs returns",

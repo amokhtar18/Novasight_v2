@@ -86,6 +86,13 @@ class ChartQuery(BaseModel):
     dataset_id: uuid.UUID | None = None
     query: QueryRequest | None = None
     metric_refs: list[FieldName] = Field(default_factory=list)
+    # Plain (non-time) governed dimensions to group by for a semantic chart. The first
+    # is the chart's category axis (``encoding.x``); any others are *breakdown*
+    # dimensions pivoted into series (``encoding.breakdown``). Carried on the spec so a
+    # saved/AI chart re-runs the same multi-dimension grouping. Backward compatible:
+    # legacy single-dimension specs leave this empty and the dimension lives on
+    # ``encoding.x`` alone.
+    dimensions: list[FieldName] = Field(default_factory=list)
     # Optional time dimensions for a semantic chart (the ``metric_refs`` path). Carried
     # on the spec so a saved/AI chart re-runs with the same granularity rollup; the
     # resolved key (``<dimension>.<granularity>``) is what ``encoding.x`` reads.
@@ -120,6 +127,11 @@ class ChartEncoding(BaseModel):
 
     x: FieldName | None = None
     series: list[SeriesEncoding] = Field(min_length=1)
+    # Breakdown dimensions: governed dimension columns (from ``query.dimensions``) whose
+    # values are pivoted into one series each at render time. When present, the first
+    # entry of ``series`` is the measure that supplies the pivoted values. Empty for a
+    # plain chart where ``series`` already lists the measures to plot directly.
+    breakdown: list[FieldName] = Field(default_factory=list)
 
 
 # A hex colour for a custom palette entry (``#rgb`` … ``#rrggbbaa``).

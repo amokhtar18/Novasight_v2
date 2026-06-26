@@ -42,6 +42,8 @@ vi.mock("@/api/hooks", () => ({
   useSemanticModels: vi.fn(),
   useSemanticQuery: vi.fn(),
   useCreateChart: vi.fn(),
+  useCharts: vi.fn(),
+  useDeleteChart: vi.fn(),
 }));
 
 vi.mock("@/components/chart/ChartRenderer", () => ({
@@ -58,11 +60,19 @@ vi.mock("@/components/dashboard/AddToDashboard", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { Builder } from "@/pages/Builder";
-import { useCreateChart, useSemanticModels, useSemanticQuery } from "@/api/hooks";
+import {
+  useCharts,
+  useCreateChart,
+  useDeleteChart,
+  useSemanticModels,
+  useSemanticQuery,
+} from "@/api/hooks";
 
 const mockSemanticModels = vi.mocked(useSemanticModels);
 const mockSemanticQuery = vi.mocked(useSemanticQuery);
 const mockCreateChart = vi.mocked(useCreateChart);
+const mockCharts = vi.mocked(useCharts);
+const mockDeleteChart = vi.mocked(useDeleteChart);
 
 beforeEach(() => {
   // @ts-expect-error partial mock
@@ -71,6 +81,10 @@ beforeEach(() => {
   mockSemanticQuery.mockReturnValue(idleQuery(queryData));
   // @ts-expect-error partial mock
   mockCreateChart.mockReturnValue(idleMutation());
+  // @ts-expect-error partial mock
+  mockCharts.mockReturnValue(idleQuery([]));
+  // @ts-expect-error partial mock
+  mockDeleteChart.mockReturnValue(idleMutation());
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -87,10 +101,15 @@ describe("Builder — semantic path (semantic-only, #8)", () => {
   it("lists governed model/dimension/measure members", () => {
     renderBuilder();
 
-    // Model / dimension / measure selects render with governed titles.
+    // The model select renders with the governed title; dimensions and measures appear
+    // as draggable fields placed on the shelves (seeded defaults).
     expect((screen.getByLabelText(/^model$/i) as HTMLSelectElement).value).toBe("regional_sales");
-    expect(screen.getByRole("option", { name: "Region" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Total Amount" })).toBeInTheDocument();
+    expect(screen.getByText("Region")).toBeInTheDocument();
+    expect(screen.getByText("Total Amount")).toBeInTheDocument();
+    // The Superset-style shelves are present.
+    expect(screen.getByText(/^x-axis$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^breakdown \(series\)$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^metrics$/i)).toBeInTheDocument();
   });
 
   it("previews the chart and exposes the server-side Save action", () => {

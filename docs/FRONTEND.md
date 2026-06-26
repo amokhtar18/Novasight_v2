@@ -218,7 +218,7 @@ topbar) via `<Outlet>`; pages are lazy-loaded so each route is its own chunk
 | `/models` | Semantic models | Wizard to define governed measures/dimensions over a mart (regenerates Cube codegen; superuser) |
 | `/explore` | Ask AI | NL→SQL: question → validated SQL + table + visualize + summarize |
 | `/chat` | Chat | Conversational Q&A over the governed semantic layer via grounded tool-calling (shows which tools the assistant used); when the assistant generates a chart it renders inline with **Save chart** + **Add to dashboard** actions (#12) |
-| `/build` | Chart builder | Low-code builder over **semantic models** (default) or datasets, + NL→chart; a `time`-typed dimension exposes a **granularity** selector (day…year) that rolls it up via Cube time dimensions; **Save chart** (server-side, `POST /charts`) or add to dashboard |
+| `/build` | Chart builder | Drag-and-drop builder over **semantic models** (Superset-style shelves: **X-axis** / **Breakdown** / **Metrics**) — drag governed dimensions/measures onto shelves, allow **multiple measures** and **breakdown dimensions** (pivoted into series via `chartPivot`), + NL→chart; a `time`-typed X dimension exposes a **granularity** selector (day…year); a **Saved charts** list (not tiles) loads any chart back into the shelves; **Save chart** (server-side, `POST /charts`) or add to dashboard |
 | `/dashboards` | Dashboards | List / create dashboards |
 | `/dashboards/:dashboardId` | Dashboard detail | dnd-kit grid: reorder/resize/remove tiles |
 | `/insights` | Insights | Guardrailed AI narrative for a metric |
