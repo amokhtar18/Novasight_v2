@@ -47,6 +47,7 @@ export const FAMILY_FOR_TYPE: Record<ChartType, Family | null> = {
   radar: "radar",
   treemap: "treemap",
   heatmap: null,
+  sankey: null,
   number: "number",
   table: null,
 };

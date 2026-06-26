@@ -21,6 +21,7 @@ import {
   LineChart,
   PieChart,
   RadarChart,
+  SankeyChart,
   ScatterChart,
   TreemapChart,
 } from "echarts/charts";
@@ -45,7 +46,7 @@ import { formatChartValue } from "@/lib/chartFormat";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
 import type { CartesianOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
 
-// Register only what we use (v2 adds funnel/gauge/radar/treemap, #8; Slice D adds heatmap).
+// Register only what we use (v2 adds funnel/gauge/radar/treemap, #8; Slice D adds heatmap + sankey).
 echarts.use([
   BarChart,
   LineChart,
@@ -56,6 +57,7 @@ echarts.use([
   RadarChart,
   TreemapChart,
   HeatmapChart,
+  SankeyChart,
   DataZoomComponent,
   GridComponent,
   LegendComponent,
@@ -168,6 +170,56 @@ function buildHeatmapOption(
   } as EChartsOption;
 }
 
+/** Sankey: links from each x value to each y value (breakdown[0]), weighted by the measure. */
+function buildSankeyOption(
+  spec: ChartSpec,
+  data: QueryResponse,
+  theme: ChartTheme
+): EChartsOption {
+  const s = spec.options?.type_options?.sankey ?? {};
+  const xIdx = data.columns.indexOf(spec.encoding.x as string);
+  const yIdx = data.columns.indexOf((spec.encoding.breakdown ?? [])[0]);
+  const vIdx = data.columns.indexOf(spec.encoding.series[0].field);
+  if (xIdx < 0 || yIdx < 0 || vIdx < 0) {
+    throw new Error("sankey requires x, breakdown[0], and a measure present in the data");
+  }
+  // Disjoint node id namespaces: a target that shares an x value gets a suffix so links
+  // stay acyclic; the label strips the suffix for display.
+  const names = new Set<string>();
+  const nodes: { name: string }[] = [];
+  const addNode = (name: string) => {
+    if (!names.has(name)) {
+      names.add(name);
+      nodes.push({ name });
+    }
+  };
+  const links = data.rows.map((r) => {
+    const src = String(r[xIdx]);
+    let tgt = String(r[yIdx]);
+    if (src === tgt) tgt += "\u200B"; // zero-width suffix to break a self-cycle
+    addNode(src);
+    addNode(tgt);
+    return { source: src, target: tgt, value: Number(r[vIdx] ?? 0) || 0 };
+  });
+  return {
+    tooltip: { trigger: "item" },
+    series: [
+      {
+        type: "sankey",
+        orient: s.orient ?? "horizontal",
+        nodeAlign: s.node_align ?? "justify",
+        nodeWidth: s.node_width ?? 20,
+        nodeGap: s.node_gap ?? 8,
+        data: nodes,
+        links,
+        label: { show: s.show_labels !== false, color: theme.text,
+          formatter: (p: any) => String(p.name).replace(/\u200B/g, "") },
+        lineStyle: { color: s.link_color ?? "gradient", opacity: 0.4 },
+      },
+    ],
+  } as EChartsOption;
+}
+
 /**
  * Map a ChartSpec + QueryResponse into an ECharts option object.
  * Exported so it can be unit-tested without a DOM.
@@ -240,6 +292,10 @@ export function buildEChartsOption(
 
   if (spec.type === "heatmap") {
     return buildHeatmapOption(spec, data, theme);
+  }
+
+  if (spec.type === "sankey") {
+    return buildSankeyOption(spec, data, theme);
   }
 
   const titleBlock = opts.title

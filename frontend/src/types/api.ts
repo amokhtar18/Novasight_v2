@@ -81,6 +81,7 @@ export type ChartType =
   | "radar"
   | "gauge"
   | "heatmap"
+  | "sankey"
   | "table"
   | "number";
 
@@ -268,6 +269,16 @@ export interface HeatmapOptions {
   cell_border?: boolean;
 }
 
+/** Per-family options for sankey flow diagram. */
+export interface SankeyOptions {
+  orient?: "horizontal" | "vertical";
+  node_align?: "left" | "right" | "justify";
+  node_width?: number | null;
+  node_gap?: number | null;
+  link_color?: "source" | "target" | "gradient";
+  show_labels?: boolean;
+}
+
 /** Per-family options for number (KPI tile). */
 export interface NumberOptions {
   subheader?: string | null;
@@ -285,6 +296,7 @@ export interface TypeOptions {
   radar?: RadarOptions | null;
   treemap?: TreemapOptions | null;
   heatmap?: HeatmapOptions | null;
+  sankey?: SankeyOptions | null;
   number?: NumberOptions | null;
 }
 

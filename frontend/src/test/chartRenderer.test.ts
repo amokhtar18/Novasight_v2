@@ -684,3 +684,35 @@ describe("tooltip.time_format", () => {
     expect(result).not.toMatch(/^2024<br/);
   });
 });
+
+describe("buildEChartsOption — sankey", () => {
+  const sankeySpec: ChartSpec = {
+    version: "2",
+    type: "sankey",
+    query: { metric_refs: ["sales.total"], dimensions: ["sales.region", "sales.product"] },
+    encoding: {
+      x: "sales.region",
+      series: [{ field: "sales.total" }],
+      breakdown: ["sales.product"],
+    },
+    options: { type_options: { sankey: { orient: "vertical" } } },
+  };
+  const sankeyData: QueryResponse = {
+    columns: ["sales.region", "sales.product", "sales.total"],
+    rows: [
+      ["West", "Widget", 10],
+      ["East", "Widget", 5],
+    ],
+    row_count: 2,
+  };
+
+  it("builds nodes from both dimensions and weighted links", () => {
+    const option = buildEChartsOption(sankeySpec, sankeyData) as Record<string, any>;
+    expect(option.series[0].type).toBe("sankey");
+    expect(option.series[0].orient).toBe("vertical");
+    const nodeNames = option.series[0].data.map((n: any) => n.name);
+    expect(nodeNames).toContain("West");
+    expect(nodeNames).toContain("Widget");
+    expect(option.series[0].links).toContainEqual({ source: "West", target: "Widget", value: 10 });
+  });
+});
