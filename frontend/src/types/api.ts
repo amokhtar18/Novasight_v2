@@ -135,12 +135,144 @@ export interface ChartEncoding {
   breakdown?: string[];
 }
 
-/** How numeric values are formatted in labels, tooltips, and value axes (#8). */
+/** How numeric values are formatted in labels, tooltips, and value axes (v2). */
 export interface NumberFormat {
   style?: "plain" | "currency" | "percent";
   decimals?: number | null;
   compact?: boolean;
   currency?: string | null;
+  /** Optional prefix rendered before the formatted value (e.g. "≈"). */
+  prefix?: string | null;
+  /** Optional suffix rendered after the formatted value (e.g. "/u"). */
+  suffix?: string | null;
+}
+
+/** Legend display options. */
+export interface LegendOptions {
+  show?: boolean;
+  position?: "top" | "bottom" | "left" | "right";
+  type?: "scroll" | "plain";
+  margin?: number | null;
+  sort?: "none" | "asc" | "desc";
+}
+
+/** Data-label display options. */
+export interface LabelOptions {
+  show?: boolean;
+  position?: string | null;
+  template?: string | null;
+  threshold?: number | null;
+}
+
+/** Tooltip display options. */
+export interface TooltipOptions {
+  mode?: "item" | "axis" | "rich";
+  sort_by_metric?: boolean;
+  show_total?: boolean;
+  show_percentage?: boolean;
+  time_format?: string | null;
+}
+
+/** Per-family options for bar / line / area / hbar / combo / scatter. */
+export interface CartesianOptions {
+  stacked?: boolean;
+  percent?: boolean;
+  only_total?: boolean;
+  label_threshold?: number | null;
+  area_opacity?: number | null;
+  markers?: boolean;
+  marker_size?: number | null;
+  smooth?: boolean;
+  x_axis_label?: string | null;
+  y_axis_label?: string | null;
+  x_label_rotation?: 0 | 45 | 90 | null;
+  x_label_interval?: "auto" | "all";
+  y_min?: number | null;
+  y_max?: number | null;
+  log_scale?: boolean;
+  minor_ticks?: boolean;
+  minor_split_line?: boolean;
+  data_zoom?: boolean;
+  sort_series?: "none" | "asc" | "desc";
+}
+
+/** Per-family options for pie / donut. */
+export interface PieOptions {
+  label_type?: "category" | "value" | "percent" | "category_value" | "value_percent" | "category_value_percent";
+  inner_radius?: number | null;
+  outer_radius?: number | null;
+  rose_type?: "none" | "area" | "radius";
+  labels_outside?: boolean;
+  label_line?: boolean;
+  show_total?: boolean;
+  show_labels_threshold?: number | null;
+  group_others_threshold?: number | null;
+}
+
+/** Per-family options for gauge. */
+export interface GaugeOptions {
+  min?: number | null;
+  max?: number | null;
+  start_angle?: number | null;
+  end_angle?: number | null;
+  show_pointer?: boolean;
+  show_progress?: boolean;
+  round_cap?: boolean;
+  show_axis_tick?: boolean;
+  show_split_line?: boolean;
+  split_number?: number | null;
+  intervals?: number[];
+  interval_colors?: string[];
+  font_size?: number | null;
+  animation?: boolean;
+}
+
+/** Per-family options for funnel. */
+export interface FunnelOptions {
+  label_type?: "none" | "value" | "percent" | "category" | "category_value" | "value_percent" | "all";
+  tooltip_label_type?: "value" | "percent" | "category" | "category_value" | "value_percent" | "all";
+  show_labels?: boolean;
+  show_tooltip_labels?: boolean;
+}
+
+/** Min/max bound for a single metric on a radar chart. */
+export interface MetricBound {
+  min?: number | null;
+  max?: number | null;
+}
+
+/** Per-family options for radar. */
+export interface RadarOptions {
+  shape?: "polygon" | "circle";
+  label_type?: "value" | "category_value";
+  label_position?: string | null;
+  metric_bounds?: Record<string, MetricBound>;
+}
+
+/** Per-family options for treemap. */
+export interface TreemapOptions {
+  show_labels?: boolean;
+  show_upper_labels?: boolean;
+  label_type?: "key" | "value" | "key_value";
+}
+
+/** Per-family options for number (KPI tile). */
+export interface NumberOptions {
+  subheader?: string | null;
+  subtitle?: string | null;
+  header_font_size?: number | null;
+  subheader_font_size?: number | null;
+}
+
+/** Aggregated per-family options bag. Only the relevant family key is set. */
+export interface TypeOptions {
+  cartesian?: CartesianOptions | null;
+  pie?: PieOptions | null;
+  gauge?: GaugeOptions | null;
+  funnel?: FunnelOptions | null;
+  radar?: RadarOptions | null;
+  treemap?: TreemapOptions | null;
+  number?: NumberOptions | null;
 }
 
 export type ChartSort =
@@ -150,22 +282,18 @@ export type ChartSort =
   | "label_asc"
   | "label_desc";
 
-/** Display-only options (#8). None of these affect the query or the data. */
+/** Display-only options (v2). Cross-type chrome here; per-type options in type_options. */
 export interface ChartOptions {
   title?: string | null;
-  stacked?: boolean;
-  percent?: boolean;
-  show_legend?: boolean;
-  legend_position?: "top" | "bottom" | "left" | "right";
-  x_axis_label?: string | null;
-  y_axis_label?: string | null;
-  y_min?: number | null;
-  y_max?: number | null;
-  log_scale?: boolean;
-  data_labels?: boolean;
-  sort?: ChartSort;
-  number_format?: NumberFormat;
+  color_scheme?: string | null;
   palette?: string[];
+  legend?: LegendOptions;
+  number_format?: NumberFormat;
+  date_format?: string | null;
+  labels?: LabelOptions;
+  tooltip?: TooltipOptions;
+  sort?: ChartSort;
+  type_options?: TypeOptions | null;
 }
 
 export interface ChartSpec {
