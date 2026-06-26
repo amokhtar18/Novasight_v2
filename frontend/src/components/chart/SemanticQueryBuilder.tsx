@@ -34,7 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { humanize } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import type { ChartType, SemanticField } from "@/types/api";
+import type { ChartType, SemanticField, SemanticFilter, SemanticFilterOperator } from "@/types/api";
 import type { SemanticBuilder } from "@/pages/Builder";
 
 const CHART_TYPES: ChartType[] = [
@@ -68,6 +68,39 @@ const SHELF_ACCEPTS: Record<string, FieldKind> = {
   breakdown: "dimension",
   metrics: "measure",
 };
+
+// ---------------------------------------------------------------------------
+// Filter helpers (exported for unit tests)
+// ---------------------------------------------------------------------------
+
+/** Append a default `equals` filter for a member, unless it is already filtered. */
+export function filtersAfterDrop(filters: SemanticFilter[], member: string): SemanticFilter[] {
+  if (filters.some((f) => f.member === member)) return filters;
+  return [...filters, { member, operator: "equals" as SemanticFilterOperator, values: [] }];
+}
+
+/** Split a comma-separated values string into trimmed, non-empty values. */
+export function parseFilterValues(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+const FILTER_OPERATORS: SemanticFilterOperator[] = [
+  "equals",
+  "notEquals",
+  "contains",
+  "notContains",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "set",
+  "notSet",
+];
+
+const VALUELESS_OPERATORS: SemanticFilterOperator[] = ["set", "notSet"];
 
 // ---------------------------------------------------------------------------
 // Draggable palette chip + placed (removable) chip
@@ -141,7 +174,11 @@ function Shelf({
   empty: boolean;
 }) {
   const { setNodeRef, isOver, active } = useDroppable({ id });
-  const accepted = (active?.data.current as DragData | undefined)?.kind === SHELF_ACCEPTS[id];
+  // The "filters" shelf accepts both dimensions and measures; all other shelves are keyed.
+  const accepted =
+    id === "filters"
+      ? !!(active?.data.current as DragData | undefined)?.kind
+      : (active?.data.current as DragData | undefined)?.kind === SHELF_ACCEPTS[id];
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
@@ -186,7 +223,12 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
     setDragLabel(null);
     const data = e.active.data.current as DragData | undefined;
     const shelf = e.over?.id as string | undefined;
-    if (!data || !shelf || SHELF_ACCEPTS[shelf] !== data.kind) return;
+    if (!data || !shelf) return;
+    if (shelf === "filters") {
+      s.setFilters(filtersAfterDrop(s.filters, data.field));
+      return;
+    }
+    if (SHELF_ACCEPTS[shelf] !== data.kind) return;
     if (shelf === "x") s.setXDim(data.field);
     else if (shelf === "breakdown") s.addBreakdown(data.field);
     else if (shelf === "metrics") s.addMeasure(data.field);
@@ -331,6 +373,24 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
           </p>
         )}
 
+        <Shelf
+          id="filters"
+          label="Filters"
+          hint="Drop a field to filter on it"
+          empty={s.filters.length === 0}
+        >
+          {s.filters.map((f) => (
+            <FilterRow
+              key={f.member}
+              filter={f}
+              onChange={(next) =>
+                s.setFilters(s.filters.map((x) => (x.member === f.member ? next : x)))
+              }
+              onRemove={() => s.setFilters(s.filters.filter((x) => x.member !== f.member))}
+            />
+          ))}
+        </Shelf>
+
         <div className="space-y-1.5">
           <Label htmlFor="b-sem-type">Chart type</Label>
           <Select
@@ -353,5 +413,59 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
         ) : null}
       </DragOverlay>
     </DndContext>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FilterRow — inline editor for a placed filter
+// ---------------------------------------------------------------------------
+
+function FilterRow({
+  filter,
+  onChange,
+  onRemove,
+}: {
+  filter: SemanticFilter;
+  onChange: (next: SemanticFilter) => void;
+  onRemove: () => void;
+}) {
+  const valueless = VALUELESS_OPERATORS.includes(filter.operator);
+  return (
+    <div className="flex w-full flex-wrap items-center gap-1.5 rounded-md border bg-background/60 p-1.5">
+      <span className="truncate text-xs font-medium" title={filter.member}>
+        {filter.member}
+      </span>
+      <Select
+        aria-label={`Operator for ${filter.member}`}
+        value={filter.operator}
+        onChange={(e) =>
+          onChange({ ...filter, operator: e.target.value as SemanticFilterOperator, values: [] })
+        }
+        className="h-7 w-28 text-xs"
+      >
+        {FILTER_OPERATORS.map((op) => (
+          <option key={op} value={op}>
+            {op}
+          </option>
+        ))}
+      </Select>
+      {!valueless && (
+        <input
+          aria-label={`Values for ${filter.member}`}
+          defaultValue={filter.values.join(", ")}
+          onBlur={(e) => onChange({ ...filter, values: parseFilterValues(e.target.value) })}
+          placeholder="value(s), comma-separated"
+          className="h-7 flex-1 rounded border bg-transparent px-2 text-xs"
+        />
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove filter ${filter.member}`}
+        className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
   );
 }
