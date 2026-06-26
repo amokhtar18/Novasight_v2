@@ -136,12 +136,12 @@ function buildHeatmapOption(
     if (!xs.includes(xv)) xs.push(xv);
     if (!ys.includes(yv)) ys.push(yv);
   }
-  const cells = data.rows.map((r) => [
-    xs.indexOf(String(r[xIdx])),
-    ys.indexOf(String(r[yIdx])),
-    Number(r[vIdx] ?? 0) || 0,
-  ]);
-  const values = cells.map((c) => c[2] as number);
+  const cells = data.rows.map((r) => ({
+    value: [xs.indexOf(String(r[xIdx])), ys.indexOf(String(r[yIdx])), Number(r[vIdx] ?? 0) || 0],
+    $xCat: String(r[xIdx]),
+    $yCat: String(r[yIdx]),
+  }));
+  const values = cells.map((c) => c.value[2] as number);
   const fmt = (v: number) => formatChartValue(v, spec.options?.number_format);
   return {
     tooltip: { position: "top" },
@@ -186,19 +186,19 @@ function buildSankeyOption(
   // Disjoint node id namespaces: a target that shares an x value gets a suffix so links
   // stay acyclic; the label strips the suffix for display.
   const names = new Set<string>();
-  const nodes: { name: string }[] = [];
-  const addNode = (name: string) => {
+  const nodes: { name: string; $member: string }[] = [];
+  const addNode = (name: string, member: string) => {
     if (!names.has(name)) {
       names.add(name);
-      nodes.push({ name });
+      nodes.push({ name, $member: member });
     }
   };
   const links = data.rows.map((r) => {
     const src = String(r[xIdx]);
     let tgt = String(r[yIdx]);
     if (src === tgt) tgt += "\u200B"; // zero-width suffix to break a self-cycle
-    addNode(src);
-    addNode(tgt);
+    addNode(src, spec.encoding.x as string);
+    addNode(tgt, (spec.encoding.breakdown ?? [])[0]);
     return { source: src, target: tgt, value: Number(r[vIdx] ?? 0) || 0 };
   });
   return {
@@ -936,11 +936,33 @@ export function buildEChartsOption(
 // React component
 // ---------------------------------------------------------------------------
 
-/** Map an ECharts click to cross-filter pairs. Category charts emit one pair on `x`. */
-function selectionPairsFromClick(
+/** Map an ECharts click to cross-filter pairs. */
+export function selectionPairsFromClick(
   spec: ChartSpec,
   params: Record<string, unknown>
 ): SelectionPair[] {
+  if (spec.type === "heatmap") {
+    const datum = params.data as { $xCat?: string; $yCat?: string } | undefined;
+    const yMember = (spec.encoding.breakdown ?? [])[0];
+    if (datum?.$xCat != null && datum?.$yCat != null && spec.encoding.x && yMember) {
+      return [
+        { member: spec.encoding.x, value: String(datum.$xCat) },
+        { member: yMember, value: String(datum.$yCat) },
+      ];
+    }
+    return [];
+  }
+  if (spec.type === "sankey") {
+    // Only node clicks cross-filter; nodes from the x set map to x, others to breakdown[0].
+    if (params.dataType !== "node") return [];
+    const name = String(params.name ?? "").replace(/\u200B/g, "");
+    const yMember = (spec.encoding.breakdown ?? [])[0];
+    // We cannot tell from the click alone which dimension a node belongs to, so resolve by
+    // membership: a value present in the x column is an x node, otherwise a y node. The
+    // renderer attaches the side via the node's `$member` (set in buildSankeyOption).
+    const member = (params.data as { $member?: string } | undefined)?.$member ?? yMember;
+    return name ? [{ member, value: name }] : [];
+  }
   const name = params.name as string | undefined;
   if (name && spec.encoding.x) {
     return [{ member: spec.encoding.x, value: String(name) }];

@@ -200,3 +200,14 @@ Slice C is a **fresh-start** change:
 
 There is no data migration — existing dashboards that carried the old filter bar config
 or `filter` tiles will render without them. No rows are dropped or transformed.
+
+## Cross-filtering from chart clicks
+
+Clicking a data point on a category-axis chart emits a cross-filter pair
+`{ member, value }` that DashboardDetail overlays on the grid as a temporary
+`SemanticFilter`. Only tiles whose cube contains the filtered member are affected.
+
+Heatmap and sankey participate in cross-filtering: clicking a **heatmap cell** emits two
+filters (its x value AND its y value); clicking a **sankey node** emits one filter on that
+node's dimension. As with other charts, a cross-filter only applies to tiles whose cube
+contains the filtered member.

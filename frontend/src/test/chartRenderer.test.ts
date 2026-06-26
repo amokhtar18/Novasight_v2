@@ -6,7 +6,7 @@
 
 import { describe, it, expect, test } from "vitest";
 import type { ChartRendererHandle } from "@/components/chart/ChartRenderer";
-import { buildEChartsOption } from "@/components/chart/ChartRenderer";
+import { buildEChartsOption, selectionPairsFromClick } from "@/components/chart/ChartRenderer";
 import type { ChartSpec, QueryResponse } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -510,9 +510,9 @@ describe("buildEChartsOption — heatmap", () => {
     // Distinct x categories and y categories become the two axes.
     expect(option.xAxis.data).toEqual(["West", "East"]);
     expect(option.yAxis.data).toEqual(["Jan", "Feb"]);
-    // Each datum is [xIndex, yIndex, measure].
-    expect(option.series[0].data).toContainEqual([0, 0, 10]);
-    expect(option.series[0].data).toContainEqual([1, 0, 5]);
+    // Each datum is { value: [xIndex, yIndex, measure], $xCat, $yCat }.
+    expect(option.series[0].data).toContainEqual({ value: [0, 0, 10], $xCat: "West", $yCat: "Jan" });
+    expect(option.series[0].data).toContainEqual({ value: [1, 0, 5], $xCat: "East", $yCat: "Jan" });
     expect(option.visualMap.max).toBe(20);
     expect(option.series[0].label.show).toBe(true);
   });
@@ -727,5 +727,44 @@ describe("buildEChartsOption — sankey", () => {
     expect(option.series[0].links).toContainEqual({ source: "West", target: "West​", value: 5 });
     // The label formatter must strip the suffix for display.
     expect(option.series[0].label.formatter({ name: "West​" } as any)).toBe("West");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// selectionPairsFromClick (Task 6 — Slice D)
+// ---------------------------------------------------------------------------
+
+describe("selectionPairsFromClick", () => {
+  const heatmapSpec: ChartSpec = {
+    version: "2", type: "heatmap",
+    query: { metric_refs: ["sales.total"], dimensions: ["sales.region", "sales.month"] },
+    encoding: { x: "sales.region", series: [{ field: "sales.total" }], breakdown: ["sales.month"] },
+    options: {},
+  };
+  const sankeySpec: ChartSpec = { ...heatmapSpec, type: "sankey",
+    encoding: { x: "sales.region", series: [{ field: "sales.total" }], breakdown: ["sales.product"] } };
+
+  it("emits both axes for a heatmap cell", () => {
+    // buildHeatmapOption emits each datum as { value:[xIdx,yIdx,measure], $xCat, $yCat },
+    // and ECharts passes that object back as params.data on click.
+    const pairs = selectionPairsFromClick(heatmapSpec, {
+      seriesType: "heatmap",
+      data: { value: [0, 1, 10], $xCat: "West", $yCat: "Feb" },
+    } as any);
+    expect(pairs).toEqual([
+      { member: "sales.region", value: "West" },
+      { member: "sales.month", value: "Feb" },
+    ]);
+  });
+
+  it("emits one pair for a sankey node", () => {
+    const pairs = selectionPairsFromClick(sankeySpec, {
+      seriesType: "sankey", dataType: "node", name: "Widget",
+    } as any);
+    expect(pairs).toEqual([{ member: "sales.product", value: "Widget" }]);
+  });
+
+  it("ignores a sankey edge click", () => {
+    expect(selectionPairsFromClick(sankeySpec, { seriesType: "sankey", dataType: "edge" } as any)).toEqual([]);
   });
 });
