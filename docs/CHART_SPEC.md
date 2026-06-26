@@ -136,10 +136,124 @@ Metrics shelves map directly onto `encoding.x` / `encoding.breakdown` / `series`
 Encoding `field`/`x` values are *display references* only — they are pattern-bounded
 (`^[A-Za-z_][A-Za-z0-9_.]*$`) and never reach the SQL builder.
 
-### `options`
+### `options` (v2)
 
-Display-only. `title`, `stacked`, `show_legend`, `x_axis_label`, `y_axis_label`.
-Changing any option never changes the query or the data.
+Display-only. Changing any option never changes the query or the data.
+
+#### v1 → v2 BREAK
+
+The v1 flat fields (`stacked`, `show_legend`, `legend_position`, `data_labels`,
+`log_scale`, `y_min`, `y_max`) **have been removed**. They do not exist in the
+`ChartOptions` TypeScript type or the backend Pydantic model. Saved specs that carry
+those flat fields are **not migrated** — they render with the v2 defaults. Any new
+spec must use the v2 structure documented below.
+
+#### Shared chrome — present on every chart type
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `title` | `string \| null` | Override the auto-generated title. `null` keeps the auto title. |
+| `color_scheme` | `string \| null` | Named palette (e.g. `"blues"`, `"vivid"`). `null` uses the theme default. |
+| `palette` | `string[]` | Explicit hex colour list — overrides `color_scheme`. |
+| `sort` | `ChartSort` | `"none"` \| `"value_desc"` \| `"value_asc"` \| `"label_asc"` \| `"label_desc"`. |
+| `date_format` | `string \| null` | strftime-style format applied to time-axis labels (e.g. `"YYYY-MM-DD"`). |
+
+**`legend`** (`LegendOptions`):
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `show` | `boolean` | `true` |
+| `position` | `"top"` \| `"bottom"` \| `"left"` \| `"right"` | `"top"` |
+| `type` | `"plain"` \| `"scroll"` | `"plain"` |
+| `margin` | `number \| null` | ECharts default |
+| `sort` | `"none"` \| `"asc"` \| `"desc"` | `"none"` |
+
+**`number_format`** (`NumberFormat`):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `style` | `"plain"` \| `"currency"` \| `"percent"` | Default `"plain"`. |
+| `decimals` | `number \| null` | Fixed decimal places. `null` = auto. |
+| `compact` | `boolean` | Compact notation (`1.2k`, `3.4M`). |
+| `currency` | `string \| null` | ISO currency code (e.g. `"USD"`). Only used when `style="currency"`. |
+| `prefix` | `string \| null` | Literal string prepended to the formatted value. |
+| `suffix` | `string \| null` | Literal string appended to the formatted value. |
+
+**`labels`** (`LabelOptions`) — data-label overlays on the chart marks:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `show` | `boolean` | Default `false`. |
+| `position` | `string \| null` | ECharts label position string (e.g. `"top"`, `"inside"`). |
+| `template` | `string \| null` | ECharts formatter template (e.g. `"{c}%"`). |
+| `threshold` | `number \| null` | Minimum value to show a label for. |
+
+**`tooltip`** (`TooltipOptions`):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `mode` | `"item"` \| `"axis"` \| `"rich"` | Default `"item"`. |
+| `sort_by_metric` | `boolean` | Sort tooltip rows by metric value descending. |
+| `show_total` | `boolean` | Show the sum row in stacked-series tooltips. |
+| `show_percentage` | `boolean` | Show each series' share of the total. |
+| `time_format` | `string \| null` | Format string for time-axis tooltips. |
+
+#### Per-family options — `type_options`
+
+Only the key matching the chart's family is populated; all others are absent/null.
+The family is determined by the chart type:
+
+| `ChartType` | Family key |
+| --- | --- |
+| `bar`, `hbar`, `line`, `area`, `combo`, `scatter` | `cartesian` |
+| `pie`, `donut` | `pie` |
+| `gauge` | `gauge` |
+| `funnel` | `funnel` |
+| `radar` | `radar` |
+| `treemap` | `treemap` |
+| `number` | `number` |
+| `table` | *(no per-family options)* |
+
+**`type_options.cartesian`** (`CartesianOptions`):
+
+`stacked`, `percent`, `only_total`, `label_threshold`, `area_opacity`, `markers`,
+`marker_size`, `smooth`, `x_axis_label`, `y_axis_label`, `x_label_rotation`
+(`0 | 45 | 90`), `x_label_interval` (`"auto" | "all"`), `y_min`, `y_max`,
+`log_scale`, `minor_ticks`, `minor_split_line`, `data_zoom`,
+`sort_series` (`"none" | "asc" | "desc"`).
+
+**`type_options.pie`** (`PieOptions`):
+
+`label_type` (`"category" | "value" | "percent" | "category_value" | "value_percent" | "category_value_percent"`),
+`inner_radius`, `outer_radius`, `rose_type` (`"none" | "area" | "radius"`),
+`labels_outside`, `label_line`, `show_total`, `show_labels_threshold`,
+`group_others_threshold`.
+
+**`type_options.gauge`** (`GaugeOptions`):
+
+`min`, `max`, `start_angle`, `end_angle`, `show_pointer`, `show_progress`
+(default **false** — was implicitly enabled in v1 specs; matches Superset default),
+`round_cap`, `show_axis_tick`, `show_split_line`, `split_number`, `intervals`,
+`interval_colors`, `font_size`, `animation`.
+
+**`type_options.funnel`** (`FunnelOptions`):
+
+`label_type`, `tooltip_label_type`, `show_labels`, `show_tooltip_labels`.
+
+**`type_options.radar`** (`RadarOptions`):
+
+`shape` (`"polygon" | "circle"`), `label_type` (`"value" | "category_value"`),
+`label_position`, `metric_bounds` — a `Record<string, { min?, max? }>` keyed
+by **x-category name** (the dimension value, e.g. `"Sales"`, not the field path).
+
+**`type_options.treemap`** (`TreemapOptions`):
+
+`show_labels`, `show_upper_labels`,
+`label_type` (`"key" | "value" | "key_value"`).
+
+**`type_options.number`** (`NumberOptions`) — KPI tile extras:
+
+`subheader`, `subtitle`, `header_font_size`, `subheader_font_size`.
 
 ## Validation invariants
 

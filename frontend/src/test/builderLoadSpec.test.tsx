@@ -90,6 +90,31 @@ const savedSpec: ChartSpec = {
   options: { title: "Test spec" },
 };
 
+// A v2 spec with type_options and legend options to test v2 ChartOptions restoration.
+const savedSpecV2: ChartSpec = {
+  version: "1",
+  type: "bar",
+  query: {
+    metric_refs: ["regional_sales.total_amount"],
+    dimensions: ["regional_sales.region"],
+    time_dimensions: [],
+    filters: [],
+    order: {},
+    limit: 50,
+  },
+  encoding: {
+    x: "regional_sales.region",
+    series: [{ field: "regional_sales.total_amount", name: "Total Amount" }],
+  },
+  options: {
+    title: "V2 spec",
+    legend: { position: "bottom" },
+    type_options: {
+      cartesian: { stacked: true },
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
@@ -157,5 +182,16 @@ describe("useSemanticBuilder.loadSpec — restores spec into builder state", () 
     });
 
     expect(result.current.dateRange).toBe("last_30_days");
+  });
+
+  it("restores v2 ChartOptions (type_options + legend) from a v2 spec", () => {
+    const { result } = renderHook(() => useSemanticBuilder());
+
+    act(() => {
+      result.current.loadSpec(savedSpecV2);
+    });
+
+    expect(result.current.options.type_options?.cartesian?.stacked).toBe(true);
+    expect(result.current.options.legend?.position).toBe("bottom");
   });
 });

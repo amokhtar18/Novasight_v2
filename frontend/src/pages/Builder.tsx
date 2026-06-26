@@ -24,22 +24,17 @@ import { QueryControls } from "@/components/chart/QueryControls";
 import { SavedChartsList } from "@/components/chart/SavedChartsList";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
-import { humanize } from "@/lib/format";
 import { buildSemanticRequest } from "@/lib/useChartData";
+import { FormatControls } from "@/components/chart/format";
 import type {
   ChartOptions,
   ChartQuery,
-  ChartSort,
   ChartSpec,
   ChartType,
   NLChartResponse,
-  NumberFormat,
   RelativeDateRange,
   SemanticFilter,
   SemanticGranularity,
@@ -76,80 +71,9 @@ export function buildChartQuery(s: BuilderQueryState): ChartQuery {
   };
 }
 
-const SORTS: ChartSort[] = ["none", "value_desc", "value_asc", "label_asc", "label_desc"];
 const DEFAULT_LIMIT = 50;
 // Chart types that present a single value / raw table and so need no category (x) axis.
 const NO_X_TYPES: ChartType[] = ["table", "number", "gauge"];
-
-interface FormatState {
-  stacked: boolean;
-  legend: "top" | "bottom" | "left" | "right" | "hidden";
-  dataLabels: boolean;
-  sort: ChartSort;
-  numberStyle: NumberFormat["style"];
-  decimals: string;
-  compact: boolean;
-  currency: string;
-  yMin: string;
-  yMax: string;
-  logScale: boolean;
-}
-
-const DEFAULT_FORMAT: FormatState = {
-  stacked: false,
-  legend: "top",
-  dataLabels: false,
-  sort: "none",
-  numberStyle: "plain",
-  decimals: "",
-  compact: false,
-  currency: "",
-  yMin: "",
-  yMax: "",
-  logScale: false,
-};
-
-/** Compose the display-only ChartOptions for the spec from the format controls. */
-function toChartOptions(title: string, f: FormatState): ChartOptions {
-  const numOrNull = (s: string): number | null =>
-    s.trim() !== "" && Number.isFinite(Number(s)) ? Number(s) : null;
-  return {
-    title,
-    stacked: f.stacked,
-    show_legend: f.legend !== "hidden",
-    legend_position: f.legend === "hidden" ? "top" : f.legend,
-    data_labels: f.dataLabels,
-    sort: f.sort,
-    log_scale: f.logScale,
-    y_min: numOrNull(f.yMin),
-    y_max: numOrNull(f.yMax),
-    number_format: {
-      style: f.numberStyle,
-      decimals: f.decimals.trim() !== "" ? Number(f.decimals) : null,
-      compact: f.compact,
-      currency: f.currency.trim() || null,
-    },
-  };
-}
-
-/** Reverse of `toChartOptions` — restore the format controls from a saved spec. */
-function fromChartOptions(o: ChartOptions | undefined): FormatState {
-  if (!o) return DEFAULT_FORMAT;
-  const nf = o.number_format;
-  return {
-    stacked: o.stacked ?? false,
-    legend: o.show_legend === false ? "hidden" : (o.legend_position ?? "top"),
-    dataLabels: o.data_labels ?? false,
-    sort: o.sort ?? "none",
-    numberStyle: nf?.style ?? "plain",
-    decimals: nf?.decimals != null ? String(nf.decimals) : "",
-    compact: nf?.compact ?? false,
-    currency: nf?.currency ?? "",
-    yMin: o.y_min != null ? String(o.y_min) : "",
-    yMax: o.y_max != null ? String(o.y_max) : "",
-    logScale: o.log_scale ?? false,
-  };
-}
 
 export function Builder() {
   const semantic = useSemanticBuilder();
@@ -175,7 +99,7 @@ export function Builder() {
           <CardContent className="space-y-4">
             <SemanticQueryBuilder s={semantic} />
             <QueryControls s={semantic} />
-            <FormatControls format={semantic.format} setFormat={semantic.setFormat} />
+            <FormatControls options={semantic.options} setOptions={semantic.setOptions} chartType={semantic.chartType} />
           </CardContent>
         </Card>
 
@@ -224,7 +148,7 @@ export function useSemanticBuilder() {
   const [measures, setMeasures] = useState<string[]>([]);
   const [granularity, setGranularity] = useState<SemanticGranularity>("month");
   const [chartType, setChartType] = useState<ChartType>("bar");
-  const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
+  const [options, setOptions] = useState<ChartOptions>({});
   const [rowLimit, setRowLimit] = useState(DEFAULT_LIMIT);
   const [dateRange, setDateRange] = useState<RelativeDateRange | string[] | null>(null);
   const [orderBy, setOrderBy] = useState<{ member: string; dir: "asc" | "desc" } | null>(null);
@@ -301,7 +225,7 @@ export function useSemanticBuilder() {
       series,
       ...(hasBreakdown ? { breakdown } : {}),
     },
-    options: toChartOptions(title, format),
+    options: { ...options, title: options.title ?? title },
   };
 
   const request = ready ? buildSemanticRequest(spec) : null;
@@ -329,7 +253,7 @@ export function useSemanticBuilder() {
     setMeasures(refs);
     if (td[0]?.granularity) setGranularity(td[0].granularity);
     setChartType(loaded.type);
-    setFormat(fromChartOptions(loaded.options));
+    setOptions(loaded.options ?? {});
     setRowLimit(loaded.query.limit ?? DEFAULT_LIMIT);
     setDateRange(td[0]?.date_range ?? null);
     setFilters(loaded.query.filters ?? []);
@@ -356,8 +280,8 @@ export function useSemanticBuilder() {
     setGranularity,
     chartType,
     setChartType,
-    format,
-    setFormat,
+    options,
+    setOptions,
     rowLimit,
     setRowLimit,
     dateRange,
@@ -371,144 +295,6 @@ export function useSemanticBuilder() {
     result,
     loadSpec,
   };
-}
-
-function FormatControls({
-  format: f,
-  setFormat,
-}: {
-  format: FormatState;
-  setFormat: (next: FormatState) => void;
-}) {
-  const set = <K extends keyof FormatState>(key: K, value: FormatState[K]) =>
-    setFormat({ ...f, [key]: value });
-
-  return (
-    <details className="rounded-lg border bg-background/40 p-3" open={false}>
-      <summary className="cursor-pointer text-sm font-medium">Formatting</summary>
-      <div className="mt-3 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="f-legend">Legend</Label>
-            <Select
-              id="f-legend"
-              value={f.legend}
-              onChange={(e) => set("legend", e.target.value as FormatState["legend"])}
-            >
-              {(["top", "bottom", "left", "right", "hidden"] as const).map((p) => (
-                <option key={p} value={p}>
-                  {humanize(p)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="f-sort">Sort</Label>
-            <Select
-              id="f-sort"
-              value={f.sort}
-              onChange={(e) => set("sort", e.target.value as ChartSort)}
-            >
-              {SORTS.map((srt) => (
-                <option key={srt} value={srt}>
-                  {humanize(srt)}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="f-numstyle">Number format</Label>
-            <Select
-              id="f-numstyle"
-              value={f.numberStyle}
-              onChange={(e) => set("numberStyle", e.target.value as NumberFormat["style"])}
-            >
-              {(["plain", "currency", "percent"] as const).map((st) => (
-                <option key={st} value={st}>
-                  {humanize(st)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="f-decimals">Decimals</Label>
-            <Input
-              id="f-decimals"
-              value={f.decimals}
-              onChange={(e) => set("decimals", e.target.value)}
-              placeholder="auto"
-              inputMode="numeric"
-            />
-          </div>
-        </div>
-
-        {f.numberStyle === "currency" && (
-          <div className="space-y-1.5">
-            <Label htmlFor="f-currency">Currency symbol</Label>
-            <Input
-              id="f-currency"
-              value={f.currency}
-              onChange={(e) => set("currency", e.target.value)}
-              placeholder="$"
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="f-ymin">Y min</Label>
-            <Input
-              id="f-ymin"
-              value={f.yMin}
-              onChange={(e) => set("yMin", e.target.value)}
-              placeholder="auto"
-              inputMode="numeric"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="f-ymax">Y max</Label>
-            <Input
-              id="f-ymax"
-              value={f.yMax}
-              onChange={(e) => set("yMax", e.target.value)}
-              placeholder="auto"
-              inputMode="numeric"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={f.stacked} onChange={(e) => set("stacked", e.target.checked)} />
-            Stacked
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={f.dataLabels}
-              onChange={(e) => set("dataLabels", e.target.checked)}
-            />
-            Data labels
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={f.compact} onChange={(e) => set("compact", e.target.checked)} />
-            Compact
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={f.logScale}
-              onChange={(e) => set("logScale", e.target.checked)}
-            />
-            Log scale
-          </label>
-        </div>
-      </div>
-    </details>
-  );
 }
 
 function SemanticPreview({ s }: { s: SemanticBuilder }) {
