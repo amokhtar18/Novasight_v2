@@ -4,7 +4,8 @@
  * Tests run in Node (no DOM needed) since we test pure data transformation.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, test } from "vitest";
+import type { ChartRendererHandle } from "@/components/chart/ChartRenderer";
 import { buildEChartsOption } from "@/components/chart/ChartRenderer";
 import type { ChartSpec, QueryResponse } from "@/types/api";
 
@@ -288,4 +289,13 @@ describe("buildEChartsOption — multiple series", () => {
     expect(series[0]).toMatchObject({ name: "Sales", data: [100, 120] });
     expect(series[1]).toMatchObject({ name: "Returns", data: [5, 8] });
   });
+});
+
+// ---------------------------------------------------------------------------
+// ChartRendererHandle type guard
+// ---------------------------------------------------------------------------
+
+test("ChartRendererHandle exposes toPng", () => {
+  const handle: ChartRendererHandle = { toPng: () => null };
+  expect(handle.toPng()).toBeNull();
 });

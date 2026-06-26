@@ -9,7 +9,7 @@
  * Only the ECharts modules actually used are imported (keep the bundle lean).
  */
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 // Tree-shaken ECharts imports — only load what we use.
 import * as echarts from "echarts/core";
@@ -411,6 +411,11 @@ export function buildEChartsOption(
 // React component
 // ---------------------------------------------------------------------------
 
+export interface ChartRendererHandle {
+  /** PNG data URL of the current chart, or null for non-ECharts renders. */
+  toPng: () => string | null;
+}
+
 interface ChartRendererProps {
   spec: ChartSpec;
   data: QueryResponse;
@@ -429,13 +434,10 @@ interface ChartRendererProps {
  * Renders a chart described by `spec` using `data` from the query endpoint.
  * The chart is responsive: it listens to container resize via ResizeObserver.
  */
-export function ChartRenderer({
-  spec,
-  data,
-  title,
-  className = "",
-  onSelectCategory,
-}: ChartRendererProps) {
+export const ChartRenderer = forwardRef<ChartRendererHandle, ChartRendererProps>(function ChartRenderer(
+  { spec, data, title, className = "", onSelectCategory },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   // Latest select handler, read by the (once-attached) click listener so it never
@@ -447,6 +449,17 @@ export function ChartRenderer({
   });
   // Re-theme charts when the user flips light/dark.
   const { resolvedTheme } = useTheme();
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      toPng: () =>
+        chartRef.current
+          ? chartRef.current.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "transparent" })
+          : null,
+    }),
+    []
+  );
 
   // Table + number tiles are rendered without ECharts (see below).
   const isEcharts = spec.type !== "table" && spec.type !== "number";
@@ -502,4 +515,4 @@ export function ChartRenderer({
       className={`w-full h-80 ${className}`}
     />
   );
-}
+});
