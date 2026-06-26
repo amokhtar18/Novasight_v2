@@ -11,13 +11,15 @@
  * A transient cross-filter overlay is applied on top when its cube matches the tile.
  */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 
 import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/ChartRenderer";
 import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
+import { DrillByModal } from "@/components/chart/DrillByModal";
+import { DrillToDetailModal } from "@/components/chart/DrillToDetailModal";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
@@ -261,6 +263,10 @@ function ChartTileBody({
 }) {
   const spec = tile.chart?.spec;
 
+  const [drillBy, setDrillBy] = useState(false);
+  const [drillDetail, setDrillDetail] = useState(false);
+  const isSemantic = (spec?.query.metric_refs ?? []).length > 0;
+
   const { filters: resolved, dateRanges } = resolveTileFilters(filters, selections, tile);
   // Cross-filter overlays on top, only when its cube matches this tile.
   const tileCube = cubeOf((spec?.query.metric_refs ?? [])[0]);
@@ -302,7 +308,11 @@ function ChartTileBody({
         <div className="relative h-full">
           {!editing && (
             <div className="absolute right-0 top-0 z-10">
-              <ChartActionsMenu spec={spec} data={data} chartHandle={chartHandle} title={title} />
+              <ChartActionsMenu
+                spec={spec} data={data} chartHandle={chartHandle} title={title}
+                onDrillBy={isSemantic ? () => setDrillBy(true) : undefined}
+                onDrillToDetail={isSemantic ? () => setDrillDetail(true) : undefined}
+              />
             </div>
           )}
           <ChartRenderer
@@ -318,6 +328,12 @@ function ChartTileBody({
         <EmptyState title="Couldn't load data" description="This tile's query failed to run." />
       ) : (
         <EmptyState title="No data" description="This chart returned no rows." />
+      )}
+      {drillBy && data && (
+        <DrillByModal open={drillBy} onOpenChange={setDrillBy} spec={spec} tileFilters={appliedFilters} data={data} />
+      )}
+      {drillDetail && data && (
+        <DrillToDetailModal open={drillDetail} onOpenChange={setDrillDetail} spec={spec} tileFilters={appliedFilters} data={data} />
       )}
     </>
   );
