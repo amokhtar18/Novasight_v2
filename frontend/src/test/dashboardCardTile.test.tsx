@@ -215,4 +215,17 @@ describe("DashboardCardTile", () => {
     expect(mockUseChartData).toHaveBeenCalledWith(spec, [crossFilterSameCube], undefined);
     expect(screen.getByText(/filtered/i)).toBeInTheDocument();
   });
+
+  it("ignores a cross-filter overlay when cube does not match", () => {
+    const crossFilterDifferentCube: SemanticFilter = {
+      member: "orders.status",
+      operator: "equals",
+      values: ["paid"],
+    };
+    render(
+      <DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} crossFilter={[crossFilterDifferentCube]} />
+    );
+    expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined, undefined);
+    expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
+  });
 });
