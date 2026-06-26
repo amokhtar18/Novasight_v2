@@ -103,6 +103,12 @@ export interface ChartQuery {
    * key is what `encoding.x` reads.
    */
   time_dimensions?: SemanticTimeDimension[];
+  /** Governed filters carried on the spec; re-validated server-side. */
+  filters?: SemanticFilter[];
+  /** Server-side ordering, e.g. { "sales.total": "desc" }. */
+  order?: Record<string, "asc" | "desc">;
+  /** Per-chart row cap; clamped server-side. */
+  limit?: number | null;
 }
 
 /** One plotted series: which result column to read, and how to label it. */
@@ -250,6 +256,18 @@ export type SemanticGranularity =
   | "quarter"
   | "year";
 
+/** Relative time-range tokens (mirrors schemas/semantic.py RelativeDateRange). */
+export type RelativeDateRange =
+  | "last_7_days"
+  | "last_30_days"
+  | "last_90_days"
+  | "this_month"
+  | "last_month"
+  | "this_quarter"
+  | "last_quarter"
+  | "this_year"
+  | "last_year";
+
 /**
  * A time dimension to group by, optionally rolled up to a `granularity`.
  * With a granularity Cube returns the bucket under the `<dimension>.<granularity>`
@@ -258,6 +276,8 @@ export type SemanticGranularity =
 export interface SemanticTimeDimension {
   dimension: string;
   granularity?: SemanticGranularity | null;
+  /** Time-range filter: a relative token or an absolute [from, to] ISO-date pair. */
+  date_range?: RelativeDateRange | string[] | null;
 }
 
 /** A structured, grounded query against the semantic layer. */

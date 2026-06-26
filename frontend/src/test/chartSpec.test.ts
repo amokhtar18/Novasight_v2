@@ -13,10 +13,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, test } from "vitest";
 
 import { buildEChartsOption } from "@/components/chart/ChartRenderer";
-import type { ChartSpec, QueryResponse } from "@/types/api";
+import type { ChartSpec, QueryResponse, ChartQuery, RelativeDateRange } from "@/types/api";
 
 // The fixture lives at the repo root; vitest runs with cwd = frontend/, so the
 // repo root is one level up. Both this test and the backend test read this one
@@ -70,4 +70,18 @@ describe("chart-spec contract — frontend round-trip", () => {
       "Monthly sales vs returns"
     );
   });
+});
+
+test("ChartQuery accepts filters/order/limit and time date_range", () => {
+  const range: RelativeDateRange = "last_30_days";
+  const q: ChartQuery = {
+    metric_refs: ["sales.total"],
+    dimensions: ["sales.region"],
+    time_dimensions: [{ dimension: "sales.created", granularity: "month", date_range: range }],
+    filters: [{ member: "sales.region", operator: "equals", values: ["west"] }],
+    order: { "sales.total": "desc" },
+    limit: 25,
+  };
+  expect(q.limit).toBe(25);
+  expect(q.order?.["sales.total"]).toBe("desc");
 });
