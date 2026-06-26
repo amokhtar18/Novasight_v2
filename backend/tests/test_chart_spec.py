@@ -475,3 +475,10 @@ def test_matrix_chart_requires_single_series() -> None:
         ChartSpec.model_validate(
             _heatmap_raw(series=[{"field": "sales.total"}, {"field": "sales.count"}])
         )
+
+
+def test_matrix_chart_requires_x() -> None:
+    raw = _heatmap_raw()
+    raw["encoding"]["x"] = None
+    with pytest.raises(ValidationError, match="requires encoding.x"):
+        ChartSpec.model_validate(raw)
