@@ -26,36 +26,46 @@ import type {
 const EMPTY_QUERY: QueryRequest = { dimensions: [], metrics: [] };
 const DEFAULT_LIMIT = 200;
 
-export function useChartData(spec: ChartSpec | null, filters?: SemanticFilter[]) {
+/**
+ * Build the SemanticQueryRequest a ChartSpec describes. Forwards spec-level
+ * order/limit/filters and merges any view-time filters (spec filters first).
+ * Returns null for a non-semantic (dataset) spec.
+ */
+export function buildSemanticRequest(
+  spec: ChartSpec | null,
+  viewFilters?: SemanticFilter[]
+): SemanticQueryRequest | null {
   const metricRefs = spec?.query.metric_refs ?? [];
-  const isSemantic = metricRefs.length > 0;
+  if (!spec || metricRefs.length === 0) return null;
 
-  // A semantic chart over a time dimension carries it in `query.time_dimensions`; the
-  // granularity-rolled column (its `<dimension>.<granularity>` key) is `encoding.x`,
-  // so it goes to Cube as a timeDimension — never as a plain `dimensions` entry.
-  const timeDimensions = spec?.query.time_dimensions ?? [];
+  const timeDimensions = spec.query.time_dimensions ?? [];
   const hasTimeDim = timeDimensions.length > 0;
-
-  // Plain dimensions to group by: the spec's `query.dimensions` is the source of truth
-  // for multi-dimension charts (category axis + breakdown). Legacy specs predate that
-  // field and carry their single dimension on `encoding.x` only, so fall back to it.
   const plainDimensions =
-    spec?.query.dimensions && spec.query.dimensions.length > 0
+    spec.query.dimensions && spec.query.dimensions.length > 0
       ? spec.query.dimensions
-      : hasTimeDim || !spec?.encoding.x
+      : hasTimeDim || !spec.encoding.x
         ? []
         : [spec.encoding.x];
 
-  const semanticRequest: SemanticQueryRequest | null =
-    isSemantic && spec
-      ? {
-          measures: metricRefs,
-          dimensions: plainDimensions,
-          ...(hasTimeDim ? { time_dimensions: timeDimensions } : {}),
-          limit: DEFAULT_LIMIT,
-          ...(filters && filters.length > 0 ? { filters } : {}),
-        }
-      : null;
+  const specFilters = spec.query.filters ?? [];
+  const filters = [...specFilters, ...(viewFilters ?? [])];
+
+  return {
+    measures: metricRefs,
+    dimensions: plainDimensions,
+    ...(hasTimeDim ? { time_dimensions: timeDimensions } : {}),
+    ...(spec.query.order && Object.keys(spec.query.order).length > 0
+      ? { order: spec.query.order }
+      : {}),
+    limit: spec.query.limit ?? DEFAULT_LIMIT,
+    ...(filters.length > 0 ? { filters } : {}),
+  };
+}
+
+export function useChartData(spec: ChartSpec | null, filters?: SemanticFilter[]) {
+  const isSemantic = (spec?.query.metric_refs ?? []).length > 0;
+
+  const semanticRequest = buildSemanticRequest(spec, filters);
 
   const datasetId =
     !isSemantic && spec?.query.dataset_id && spec.query.query ? spec.query.dataset_id : null;
