@@ -19,6 +19,7 @@ import { ChartRenderer } from "@/components/chart/ChartRenderer";
 import { NLChartPanel } from "@/components/chart/NLChartPanel";
 import { SaveChartButton } from "@/components/chart/SaveChartButton";
 import { SemanticQueryBuilder } from "@/components/chart/SemanticQueryBuilder";
+import { QueryControls } from "@/components/chart/QueryControls";
 import { SavedChartsList } from "@/components/chart/SavedChartsList";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,16 +30,50 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { humanize } from "@/lib/format";
+import { buildSemanticRequest } from "@/lib/useChartData";
 import type {
   ChartOptions,
+  ChartQuery,
   ChartSort,
   ChartSpec,
   ChartType,
   NLChartResponse,
   NumberFormat,
+  RelativeDateRange,
+  SemanticFilter,
   SemanticGranularity,
-  SemanticQueryRequest,
 } from "@/types/api";
+
+export interface BuilderQueryState {
+  measures: string[];
+  plainDims: string[];
+  timeDimension: { dimension: string; granularity: SemanticGranularity } | null;
+  dateRange: RelativeDateRange | string[] | null;
+  filters: SemanticFilter[];
+  orderBy: { member: string; dir: "asc" | "desc" } | null;
+  rowLimit: number;
+}
+
+/** Build the spec's ChartQuery from the builder's shelf + query-control state. */
+export function buildChartQuery(s: BuilderQueryState): ChartQuery {
+  const timeDimensions = s.timeDimension
+    ? [
+        {
+          dimension: s.timeDimension.dimension,
+          granularity: s.timeDimension.granularity,
+          ...(s.dateRange ? { date_range: s.dateRange } : {}),
+        },
+      ]
+    : [];
+  return {
+    metric_refs: s.measures,
+    dimensions: s.plainDims,
+    time_dimensions: timeDimensions,
+    filters: s.filters,
+    order: s.orderBy ? { [s.orderBy.member]: s.orderBy.dir } : {},
+    limit: s.rowLimit,
+  };
+}
 
 const SORTS: ChartSort[] = ["none", "value_desc", "value_asc", "label_asc", "label_desc"];
 const DEFAULT_LIMIT = 50;
@@ -138,6 +173,7 @@ export function Builder() {
           </CardHeader>
           <CardContent className="space-y-4">
             <SemanticQueryBuilder s={semantic} />
+            <QueryControls s={semantic} />
             <FormatControls format={semantic.format} setFormat={semantic.setFormat} />
           </CardContent>
         </Card>
@@ -188,6 +224,10 @@ function useSemanticBuilder() {
   const [granularity, setGranularity] = useState<SemanticGranularity>("month");
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
+  const [rowLimit, setRowLimit] = useState(DEFAULT_LIMIT);
+  const [dateRange, setDateRange] = useState<RelativeDateRange | string[] | null>(null);
+  const [orderBy, setOrderBy] = useState<{ member: string; dir: "asc" | "desc" } | null>(null);
+  const [filters, setFilters] = useState<SemanticFilter[]>([]);
 
   const model = models?.find((m) => m.name === modelName) ?? models?.[0];
 
@@ -217,21 +257,10 @@ function useSemanticBuilder() {
   const needsX = !NO_X_TYPES.includes(chartType);
   const ready = !!model && measures.length > 0 && (!needsX || !!xDim);
 
-  const timeDimensions = isTimeX && xDim ? [{ dimension: xDim, granularity }] : [];
   const xField = xDim ? (isTimeX ? `${xDim}.${granularity}` : xDim) : null;
   // Plain (non-time) dimensions sent to Cube: the category axis (unless it's a time
   // dimension, which goes via time_dimensions) plus every breakdown dimension.
   const plainDims = [...(xDim && !isTimeX ? [xDim] : []), ...breakdown];
-
-  const request: SemanticQueryRequest | null = ready
-    ? {
-        measures,
-        dimensions: plainDims,
-        ...(timeDimensions.length ? { time_dimensions: timeDimensions } : {}),
-        limit: DEFAULT_LIMIT,
-      }
-    : null;
-  const result = useSemanticQuery(request);
 
   const measureLabel = (name: string) =>
     model?.measures.find((m) => m.name === name)?.title ?? name;
@@ -252,14 +281,20 @@ function useSemanticBuilder() {
       (hasBreakdown ? ` split by ${breakdown.map(dimLabel).join(", ")}` : "")
     : "Chart";
 
+  const query = buildChartQuery({
+    measures,
+    plainDims,
+    timeDimension: isTimeX && xDim ? { dimension: xDim, granularity } : null,
+    dateRange,
+    filters,
+    orderBy,
+    rowLimit,
+  });
+
   const spec: ChartSpec = {
     version: "1",
     type: chartType,
-    query: {
-      metric_refs: measures,
-      dimensions: plainDims,
-      ...(timeDimensions.length ? { time_dimensions: timeDimensions } : {}),
-    },
+    query,
     encoding: {
       x: xField,
       series,
@@ -267,6 +302,9 @@ function useSemanticBuilder() {
     },
     options: toChartOptions(title, format),
   };
+
+  const request = ready ? buildSemanticRequest(spec) : null;
+  const result = useSemanticQuery(request);
 
   /** Load a saved (semantic) spec back into the shelves for editing. */
   const loadSpec = (loaded: ChartSpec) => {
@@ -291,6 +329,11 @@ function useSemanticBuilder() {
     if (td[0]?.granularity) setGranularity(td[0].granularity);
     setChartType(loaded.type);
     setFormat(fromChartOptions(loaded.options));
+    setRowLimit(loaded.query.limit ?? DEFAULT_LIMIT);
+    setDateRange(td[0]?.date_range ?? null);
+    setFilters(loaded.query.filters ?? []);
+    const orderEntry = Object.entries(loaded.query.order ?? {})[0];
+    setOrderBy(orderEntry ? { member: orderEntry[0], dir: orderEntry[1] as "asc" | "desc" } : null);
   };
 
   return {
@@ -314,6 +357,14 @@ function useSemanticBuilder() {
     setChartType,
     format,
     setFormat,
+    rowLimit,
+    setRowLimit,
+    dateRange,
+    setDateRange,
+    orderBy,
+    setOrderBy,
+    filters,
+    setFilters,
     ready,
     spec,
     result,
