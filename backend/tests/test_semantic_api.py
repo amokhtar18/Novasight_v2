@@ -73,6 +73,7 @@ class _FakeCube:
         self.seen_dbs: list[str] = []
         self.seen_filters: list[list[dict[str, Any]] | None] = []
         self.seen_time_dims: list[list[dict[str, Any]] | None] = []
+        self.seen_limits: list[int | None] = []
 
     async def meta(self, ctx: TenantContext) -> dict[str, Any]:
         self.seen_dbs.append(ctx.clickhouse_db)
@@ -92,6 +93,7 @@ class _FakeCube:
         self.seen_dbs.append(ctx.clickhouse_db)
         self.seen_filters.append(filters)
         self.seen_time_dims.append(time_dimensions)
+        self.seen_limits.append(limit)
         # When a time dimension is rolled up, Cube keys the bucket under
         # ``<dimension>.<granularity>``; echo that shape back for the time-dim test.
         if time_dimensions:
@@ -407,3 +409,83 @@ async def test_query_is_tenant_scoped(
     # The two tenants resolved to two different ClickHouse databases — the scope
     # the Cube JWT is minted from, never the request body.
     assert len(set(fake_cube.seen_dbs)) == 2
+
+
+@pytest.mark.asyncio
+async def test_query_clamps_oversized_limit_to_platform_cap(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
+) -> None:
+    """A limit far above max_query_rows must be clamped to the platform cap.
+
+    Also verifies that a small in-range limit is passed through unchanged.
+    """
+    from app.core.config import get_settings
+
+    await make_tenant("local")
+    cap = get_settings().max_query_rows
+
+    # Oversized request: 10_000_000 >> cap — must be clamped to cap.
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "dimensions": ["regional_sales.region"],
+            "limit": 10_000_000,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert fake_cube.seen_limits[-1] == cap, (
+        f"Expected Cube to receive limit={cap} (the platform cap) "
+        f"but got {fake_cube.seen_limits[-1]}"
+    )
+
+    # In-range request: limit=5 is below cap, must pass through unchanged.
+    resp2 = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "dimensions": ["regional_sales.region"],
+            "limit": 5,
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+    assert fake_cube.seen_limits[-1] == 5, (
+        f"Expected Cube to receive limit=5 (small in-range value) "
+        f"but got {fake_cube.seen_limits[-1]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_query_rejects_ungoverned_order_key(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube
+) -> None:
+    """An order key that is not a selected/governed field must be rejected with 422.
+
+    The service raises ``SemanticValidationError`` with "Cannot order by unselected
+    field(s)" before any Cube call is made, so no query should reach the fake.
+    The governed meta for this test exposes only
+    ``regional_sales.total_amount`` (measure) and ``regional_sales.region`` (dimension).
+    """
+    await make_tenant("local")
+    calls_before = len(fake_cube.seen_limits)
+
+    resp = client_with_db.post(
+        "/api/v1/semantic/query",
+        headers=_auth(),
+        json={
+            "measures": ["regional_sales.total_amount"],
+            "dimensions": [],
+            "order": {"regional_sales.secret": "desc"},
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"].lower()
+    assert "order" in detail or "unselected" in detail, (
+        f"Expected 'order' or 'unselected' in detail but got: {resp.json()['detail']!r}"
+    )
+    # No Cube call must have been made — rejection is fail-closed, before the query.
+    assert len(fake_cube.seen_limits) == calls_before, (
+        "Cube must not be called when an ungoverned order key is present"
+    )

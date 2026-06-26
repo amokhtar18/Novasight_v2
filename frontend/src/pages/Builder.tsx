@@ -213,7 +213,7 @@ export function Builder() {
 
 export type SemanticBuilder = ReturnType<typeof useSemanticBuilder>;
 
-function useSemanticBuilder() {
+export function useSemanticBuilder() {
   const { data: models, isLoading: modelsLoading } = useSemanticModels();
 
   const [modelName, setModelName] = useState("");
