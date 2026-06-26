@@ -421,6 +421,21 @@ export interface SemanticQueryRequest {
   limit?: number;
 }
 
+/** Request distinct values for a governed dimension (filter dropdown / cascading). */
+export interface SemanticValuesRequest {
+  member: string;
+  /** Optional substring typeahead → server-side `contains` filter. */
+  search?: string | null;
+  /** Parent-filter selections constraining the values (cascading). */
+  constraints?: SemanticFilter[];
+  limit?: number;
+}
+
+/** Distinct values for a dimension (deduped, capped, ordered). */
+export interface SemanticValuesResponse {
+  values: string[];
+}
+
 // ---------------------------------------------------------------------------
 // ETL: source connections — /api/v1/sources  (mirrors schemas/source.py)
 // ---------------------------------------------------------------------------
@@ -825,9 +840,43 @@ export interface SavedChartRead {
 // Dashboards — /api/v1/dashboards  (mirrors schemas/dashboard.py)
 // ---------------------------------------------------------------------------
 
+/** One of the three native filter kinds (Slice C). */
+export type NativeFilterKind = "value" | "time" | "numeric";
+
+/** A numeric filter's [min, max] bounds (either side optional). */
+export interface NumericRange {
+  min?: number | null;
+  max?: number | null;
+}
+
+/** Which tiles a native filter targets. `auto` = every cube-compatible tile. */
+export interface FilterScope {
+  mode: "auto" | "tiles";
+  tile_ids: string[];
+}
+
+/** A configured dashboard filter control (persisted with its default selection). */
+export interface NativeFilter {
+  id: string;
+  kind: NativeFilterKind;
+  member: string;
+  label?: string | null;
+  /** value filters: equals/notEquals/contains/notContains. */
+  operator?: SemanticFilterOperator;
+  default_values?: string[];
+  /** time filters: relative token or absolute [from, to] ISO pair. */
+  date_range?: RelativeDateRange | string[] | null;
+  /** numeric filters. */
+  numeric_range?: NumericRange | null;
+  scope?: FilterScope;
+  /** value filter whose selection constrains this one's options (cascading). */
+  parent_id?: string | null;
+  required?: boolean;
+}
+
 /** A dashboard tile: a placed saved chart (chart embedded for one-round-trip render). */
 // What a dashboard tile holds (#10): a pinned chart, or a decoration object.
-export type TileKind = "chart" | "text" | "markdown" | "image" | "divider" | "filter";
+export type TileKind = "chart" | "text" | "markdown" | "image" | "divider";
 
 export interface DashboardTileRead {
   id: string;
@@ -865,8 +914,8 @@ export interface DashboardRead {
   owner_id: string | null;
   created_at: string;
   updated_at: string;
-  /** View-time filters applied across the dashboard's matching semantic tiles. */
-  filters?: SemanticFilter[];
+  /** Native filters applied across the dashboard's matching semantic tiles. */
+  native_filters?: NativeFilter[];
   tiles: DashboardTileRead[];
 }
 
@@ -878,8 +927,8 @@ export interface DashboardCreate {
 export interface DashboardUpdate {
   name?: string | null;
   description?: string | null;
-  /** Replaces the dashboard's view-time filters when provided. */
-  filters?: SemanticFilter[];
+  /** Native filters applied across the dashboard's matching semantic tiles. */
+  native_filters?: NativeFilter[];
 }
 
 export interface DashboardTileCreate {

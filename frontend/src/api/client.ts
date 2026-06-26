@@ -64,6 +64,8 @@ import type {
   SemanticModelDefUpdate,
   SemanticModelRead,
   SemanticQueryRequest,
+  SemanticValuesRequest,
+  SemanticValuesResponse,
   ServingColumn,
   SuggestionsResponse,
   TenantProvisionRequest,
@@ -457,6 +459,17 @@ export async function querySemantic(
 ): Promise<QueryResponse> {
   return apiFetch<QueryResponse>(
     "/semantic/query",
+    { method: "POST", body: JSON.stringify(request) },
+    { "Content-Type": "application/json" }
+  );
+}
+
+/** POST /semantic/values — grounded distinct values for a filter dropdown. */
+export async function semanticValues(
+  request: SemanticValuesRequest
+): Promise<SemanticValuesResponse> {
+  return apiFetch<SemanticValuesResponse>(
+    "/semantic/values",
     { method: "POST", body: JSON.stringify(request) },
     { "Content-Type": "application/json" }
   );

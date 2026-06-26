@@ -65,6 +65,7 @@ import {
   provisionTenant,
   queryDataset,
   querySemantic,
+  semanticValues,
   runDbtModel,
   runPipeline,
   setDashboardLayout,
@@ -102,6 +103,7 @@ import type {
   SemanticModelDefCreate,
   SemanticModelDefUpdate,
   SemanticQueryRequest,
+  SemanticValuesRequest,
   SourceConnectionCreate,
   SourceConnectionUpdate,
   TenantProvisionRequest,
@@ -127,6 +129,7 @@ export const queryKeys = {
   dbtModels: () => ["dbt-models"] as const,
   dbtLineage: () => ["dbt-models", "lineage"] as const,
   semanticQuery: (req: SemanticQueryRequest) => ["semantic", "query", req] as const,
+  semanticValues: (req: SemanticValuesRequest) => ["semantic", "values", req] as const,
   charts: () => ["charts"] as const,
   dashboards: () => ["dashboards"] as const,
   dashboard: (id: string) => ["dashboards", id] as const,
@@ -322,6 +325,24 @@ export function useSemanticQuery(request: SemanticQueryRequest | null) {
     },
     enabled: request !== null,
     staleTime: 30_000,
+    retry: 0,
+  });
+}
+
+/**
+ * Query: grounded distinct values for a filter dropdown. Disabled until a request is
+ * provided (a value filter is open) so it never runs on mount for non-value filters.
+ */
+export function useSemanticValues(request: SemanticValuesRequest | null) {
+  return useQuery({
+    queryKey:
+      request !== null ? queryKeys.semanticValues(request) : (["noop"] as const),
+    queryFn: () => {
+      if (!request) throw new Error("a semantic values request is required");
+      return semanticValues(request);
+    },
+    enabled: request !== null,
+    staleTime: 60_000,
     retry: 0,
   });
 }
