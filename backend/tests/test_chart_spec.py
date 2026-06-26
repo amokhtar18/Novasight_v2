@@ -480,5 +480,5 @@ def test_matrix_chart_requires_single_series() -> None:
 def test_matrix_chart_requires_x() -> None:
     raw = _heatmap_raw()
     raw["encoding"]["x"] = None
-    with pytest.raises(ValidationError, match="requires encoding.x"):
+    with pytest.raises(ValidationError, match=r"requires encoding\.x"):
         ChartSpec.model_validate(raw)
