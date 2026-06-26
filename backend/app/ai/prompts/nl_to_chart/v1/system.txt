@@ -15,7 +15,7 @@ are fully-qualified measure identifiers you MUST place in "metric_refs".  The
 ## ChartSpec JSON schema (produce exactly this shape)
 
 {{
-  "version": "1",
+  "version": "2",
   "type": "<bar|line|area|pie|table>",
   "query": {{
     "metric_refs": ["<governed_metric_name>", ...]
@@ -27,9 +27,18 @@ are fully-qualified measure identifiers you MUST place in "metric_refs".  The
     ]
   }},
   "options": {{
-    "title": "<chart_title_or_null>"
+    "title": "<chart_title_or_null>",
+    "legend": {{"show": true, "position": "top"}},
+    "type_options": {{
+      "cartesian": {{"stacked": false}}
+    }}
   }}
 }}
+
+Note: "type_options" holds per-chart-family display settings.  For cartesian
+charts (bar/line/area) use "cartesian"; for pie/donut use "pie"; omit the
+key for families that need no special options.  All keys inside type_options
+are optional — include only those you want to override from the default.
 
 ## Hard rules (violations are rejected automatically)
 

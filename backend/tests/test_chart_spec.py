@@ -368,7 +368,8 @@ def test_cartesian_area_opacity_range() -> None:
 
 
 def test_radar_metric_bounds_and_treemap_and_number() -> None:
-    spec = ChartSpec.model_validate(
+    # --- radar ---
+    spec_radar = ChartSpec.model_validate(
         {
             "type": "radar",
             "query": {"metric_refs": ["s.a", "s.b"]},
@@ -386,5 +387,37 @@ def test_radar_metric_bounds_and_treemap_and_number() -> None:
             },
         }
     )
-    assert spec.options.type_options.radar.shape == "circle"
-    assert spec.options.type_options.radar.metric_bounds["s.a"].max == 100
+    assert spec_radar.options.type_options.radar.shape == "circle"
+    assert spec_radar.options.type_options.radar.metric_bounds["s.a"].max == 100
+
+    # --- treemap ---
+    spec_treemap = ChartSpec.model_validate(
+        {
+            "type": "treemap",
+            "query": {"metric_refs": ["s.total"]},
+            "encoding": {"x": "s.category", "series": [{"field": "s.total"}]},
+            "options": {
+                "type_options": {
+                    "treemap": {"show_upper_labels": True, "label_type": "key_value"},
+                }
+            },
+        }
+    )
+    assert spec_treemap.options.type_options.treemap.show_upper_labels is True
+    assert spec_treemap.options.type_options.treemap.label_type == "key_value"
+
+    # --- number (KPI tile) ---
+    spec_number = ChartSpec.model_validate(
+        {
+            "type": "number",
+            "query": {"metric_refs": ["s.total"]},
+            "encoding": {"series": [{"field": "s.total"}]},
+            "options": {
+                "type_options": {
+                    "number": {"subheader": "vs last month", "header_font_size": 48},
+                }
+            },
+        }
+    )
+    assert spec_number.options.type_options.number.subheader == "vs last month"
+    assert spec_number.options.type_options.number.header_font_size == 48
