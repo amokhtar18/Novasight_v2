@@ -75,4 +75,23 @@ describe("NumberRenderer v2", () => {
     expect(screen.getByText(/1\.2K/)).toBeInTheDocument();
     expect(screen.getByText("vs LY")).toBeInTheDocument();
   });
+
+  it("applies header_font_size as px on the main value element", () => {
+    render(<NumberRenderer spec={compactSpec} data={compactData} />);
+    const valueEl = screen.getByText(/1\.2K/);
+    expect(valueEl).toHaveStyle({ fontSize: "48px" });
+  });
+
+  it("applies subheader_font_size as px on the subheader element when set", () => {
+    const specWithSubheaderSize: ChartSpec = {
+      ...compactSpec,
+      options: {
+        ...compactSpec.options,
+        type_options: { number: { subheader: "vs LY", header_font_size: 48, subheader_font_size: 16 } },
+      },
+    };
+    render(<NumberRenderer spec={specWithSubheaderSize} data={compactData} />);
+    const subheaderEl = screen.getByText("vs LY");
+    expect(subheaderEl).toHaveStyle({ fontSize: "16px" });
+  });
 });
