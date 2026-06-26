@@ -479,6 +479,46 @@ it("funnel tooltip_label_type drives tooltip formatter", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Heatmap (Slice D)
+// ---------------------------------------------------------------------------
+
+describe("buildEChartsOption — heatmap", () => {
+  const heatmapSpec: ChartSpec = {
+    version: "2",
+    type: "heatmap",
+    query: { metric_refs: ["sales.total"], dimensions: ["sales.region", "sales.month"] },
+    encoding: {
+      x: "sales.region",
+      series: [{ field: "sales.total" }],
+      breakdown: ["sales.month"],
+    },
+    options: { type_options: { heatmap: { show_values: true } } },
+  };
+  const heatmapData: QueryResponse = {
+    columns: ["sales.region", "sales.month", "sales.total"],
+    rows: [
+      ["West", "Jan", 10],
+      ["West", "Feb", 20],
+      ["East", "Jan", 5],
+    ],
+    row_count: 3,
+  };
+
+  it("maps the two dimensions to axes and the measure to visualMap data", () => {
+    const option = buildEChartsOption(heatmapSpec, heatmapData) as Record<string, any>;
+    expect(option.series[0].type).toBe("heatmap");
+    // Distinct x categories and y categories become the two axes.
+    expect(option.xAxis.data).toEqual(["West", "East"]);
+    expect(option.yAxis.data).toEqual(["Jan", "Feb"]);
+    // Each datum is [xIndex, yIndex, measure].
+    expect(option.series[0].data).toContainEqual([0, 0, 10]);
+    expect(option.series[0].data).toContainEqual([1, 0, 5]);
+    expect(option.visualMap.max).toBe(20);
+    expect(option.series[0].label.show).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------
 

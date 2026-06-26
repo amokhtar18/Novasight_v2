@@ -80,6 +80,7 @@ export type ChartType =
   | "treemap"
   | "radar"
   | "gauge"
+  | "heatmap"
   | "table"
   | "number";
 
@@ -256,6 +257,17 @@ export interface TreemapOptions {
   label_type?: "key" | "value" | "key_value";
 }
 
+/** Per-family options for heatmap. */
+export interface HeatmapOptions {
+  show_values?: boolean;
+  min_color?: string | null;
+  max_color?: string | null;
+  value_min?: number | null;
+  value_max?: number | null;
+  show_visual_map?: boolean;
+  cell_border?: boolean;
+}
+
 /** Per-family options for number (KPI tile). */
 export interface NumberOptions {
   subheader?: string | null;
@@ -272,6 +284,7 @@ export interface TypeOptions {
   funnel?: FunnelOptions | null;
   radar?: RadarOptions | null;
   treemap?: TreemapOptions | null;
+  heatmap?: HeatmapOptions | null;
   number?: NumberOptions | null;
 }
 

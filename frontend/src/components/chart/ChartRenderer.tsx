@@ -17,6 +17,7 @@ import {
   BarChart,
   FunnelChart,
   GaugeChart,
+  HeatmapChart,
   LineChart,
   PieChart,
   RadarChart,
@@ -30,6 +31,7 @@ import {
   RadarComponent,
   TooltipComponent,
   TitleComponent,
+  VisualMapComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
@@ -43,7 +45,7 @@ import { formatChartValue } from "@/lib/chartFormat";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
 import type { CartesianOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
 
-// Register only what we use (v2 adds funnel/gauge/radar/treemap, #8).
+// Register only what we use (v2 adds funnel/gauge/radar/treemap, #8; Slice D adds heatmap).
 echarts.use([
   BarChart,
   LineChart,
@@ -53,12 +55,14 @@ echarts.use([
   GaugeChart,
   RadarChart,
   TreemapChart,
+  HeatmapChart,
   DataZoomComponent,
   GridComponent,
   LegendComponent,
   RadarComponent,
   TooltipComponent,
   TitleComponent,
+  VisualMapComponent,
   CanvasRenderer,
 ]);
 
@@ -105,6 +109,64 @@ function valueAxis(
 // ---------------------------------------------------------------------------
 // Spec → ECharts option mapping
 // ---------------------------------------------------------------------------
+
+/** Heatmap: x dimension × y dimension (breakdown[0]) grid, measure → cell colour. */
+function buildHeatmapOption(
+  spec: ChartSpec,
+  data: QueryResponse,
+  theme: ChartTheme
+): EChartsOption {
+  const h = spec.options?.type_options?.heatmap ?? {};
+  const xCol = spec.encoding.x as string;
+  const yCol = (spec.encoding.breakdown ?? [])[0];
+  const vCol = spec.encoding.series[0].field;
+  const xIdx = data.columns.indexOf(xCol);
+  const yIdx = yCol != null ? data.columns.indexOf(yCol) : -1;
+  const vIdx = data.columns.indexOf(vCol);
+  if (xIdx < 0 || yIdx < 0 || vIdx < 0) {
+    throw new Error("heatmap requires x, breakdown[0], and a measure present in the data");
+  }
+  const xs: string[] = [];
+  const ys: string[] = [];
+  for (const r of data.rows) {
+    const xv = String(r[xIdx]);
+    const yv = String(r[yIdx]);
+    if (!xs.includes(xv)) xs.push(xv);
+    if (!ys.includes(yv)) ys.push(yv);
+  }
+  const cells = data.rows.map((r) => [
+    xs.indexOf(String(r[xIdx])),
+    ys.indexOf(String(r[yIdx])),
+    Number(r[vIdx] ?? 0) || 0,
+  ]);
+  const values = cells.map((c) => c[2] as number);
+  const fmt = (v: number) => formatChartValue(v, spec.options?.number_format);
+  return {
+    tooltip: { position: "top" },
+    grid: { containLabel: true, left: 8, right: 8, top: 8, bottom: 8 },
+    xAxis: { type: "category", data: xs, axisLabel: { color: theme.text } },
+    yAxis: { type: "category", data: ys, axisLabel: { color: theme.text } },
+    visualMap: {
+      min: h.value_min ?? Math.min(0, ...values),
+      max: h.value_max ?? Math.max(0, ...values),
+      calculable: true,
+      orient: "horizontal",
+      left: "center",
+      bottom: 0,
+      show: h.show_visual_map !== false,
+      inRange: { color: [h.min_color ?? "#e0f2fe", h.max_color ?? "#0369a1"] },
+      textStyle: { color: theme.text },
+    },
+    series: [
+      {
+        type: "heatmap",
+        data: cells,
+        label: { show: h.show_values === true, formatter: (p: any) => fmt(Number(p.value[2])) },
+        itemStyle: h.cell_border ? { borderColor: theme.axisLine, borderWidth: 1 } : undefined,
+      },
+    ],
+  } as EChartsOption;
+}
 
 /**
  * Map a ChartSpec + QueryResponse into an ECharts option object.
@@ -174,6 +236,10 @@ export function buildEChartsOption(
   }
   if (spec.type === "number") {
     throw new Error("number charts are rendered without ECharts (see NumberRenderer)");
+  }
+
+  if (spec.type === "heatmap") {
+    return buildHeatmapOption(spec, data, theme);
   }
 
   const titleBlock = opts.title
