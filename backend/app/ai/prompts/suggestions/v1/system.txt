@@ -34,9 +34,7 @@ Each suggestion MUST be a JSON object with this exact shape:
       ]
     }},
     "options": {{
-      "title": "<same as outer title>",
-      "stacked": false,
-      "show_legend": true
+      "title": "<same as outer title>"
     }}
   }}
 }}

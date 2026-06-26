@@ -489,8 +489,6 @@ def _make_valid_suggestion_json(
             },
             "options": {
                 "title": "Revenue by Region",
-                "stacked": False,
-                "show_legend": True,
             },
         },
     }
@@ -579,7 +577,7 @@ class TestValidateSuggestions:
                     "x": "region",
                     "series": [{"field": "some.metric"}],
                 },
-                "options": {"title": None, "stacked": False, "show_legend": True},
+                "options": {"title": None},
             },
         }
         result = validate_suggestions(

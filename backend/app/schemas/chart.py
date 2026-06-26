@@ -185,10 +185,136 @@ class TooltipOptions(BaseModel):
     time_format: str | None = Field(default=None, max_length=64)
 
 
-# Placeholder so ChartOptions.type_options forward-ref resolves within this task.
-# Task 2 expands this with per-type family fields and calls model_rebuild().
+class CartesianOptions(BaseModel):
+    """Per-chart-family display options for bar / line / area / hbar / combo / scatter."""
+
+    stacked: bool = False
+    percent: bool = False
+    only_total: bool = False
+    label_threshold: float | None = None
+    area_opacity: float | None = Field(default=None, ge=0, le=1)
+    markers: bool = False
+    marker_size: int | None = Field(default=None, ge=1, le=50)
+    smooth: bool = False
+    x_axis_label: str | None = None
+    y_axis_label: str | None = None
+    x_label_rotation: Literal[0, 45, 90] | None = None
+    x_label_interval: Literal["auto", "all"] = "auto"
+    y_min: float | None = None
+    y_max: float | None = None
+    log_scale: bool = False
+    minor_ticks: bool = False
+    minor_split_line: bool = False
+    data_zoom: bool = False
+    sort_series: Literal["none", "asc", "desc"] = "none"
+
+
+class PieOptions(BaseModel):
+    """Per-chart-family display options for pie / donut."""
+
+    label_type: Literal[
+        "category",
+        "value",
+        "percent",
+        "category_value",
+        "value_percent",
+        "category_value_percent",
+    ] = "value"
+    inner_radius: int | None = Field(default=None, ge=0, le=100)
+    outer_radius: int | None = Field(default=None, ge=0, le=100)
+    rose_type: Literal["none", "area", "radius"] = "none"
+    labels_outside: bool = False
+    label_line: bool = False
+    show_total: bool = False
+    show_labels_threshold: float | None = None
+    group_others_threshold: float | None = None
+
+
+class GaugeOptions(BaseModel):
+    """Per-chart-family display options for gauge."""
+
+    min: float | None = None
+    max: float | None = None
+    start_angle: float | None = None
+    end_angle: float | None = None
+    show_pointer: bool = True
+    show_progress: bool = False
+    round_cap: bool = False
+    show_axis_tick: bool = False
+    show_split_line: bool = False
+    split_number: int | None = Field(default=None, ge=3, le=30)
+    intervals: list[float] = Field(default_factory=list, max_length=12)
+    interval_colors: list[HexColor] = Field(default_factory=list, max_length=12)
+    font_size: int | None = Field(default=None, ge=10, le=20)
+    animation: bool = True
+
+    @model_validator(mode="after")
+    def _intervals_match_colors(self) -> GaugeOptions:
+        if (
+            self.intervals
+            and self.interval_colors
+            and len(self.intervals) != len(self.interval_colors)
+        ):
+            raise ValueError("gauge interval_colors length must match intervals length")
+        return self
+
+
+class FunnelOptions(BaseModel):
+    """Per-chart-family display options for funnel."""
+
+    label_type: Literal[
+        "none", "value", "percent", "category", "category_value", "value_percent", "all"
+    ] = "value"
+    tooltip_label_type: Literal[
+        "value", "percent", "category", "category_value", "value_percent", "all"
+    ] = "value"
+    show_labels: bool = True
+    show_tooltip_labels: bool = True
+
+
+class MetricBound(BaseModel):
+    """Min/max bound for a single metric on a radar chart."""
+
+    min: float | None = None
+    max: float | None = None
+
+
+class RadarOptions(BaseModel):
+    """Per-chart-family display options for radar."""
+
+    shape: Literal["polygon", "circle"] = "polygon"
+    label_type: Literal["value", "category_value"] = "value"
+    label_position: str | None = None
+    metric_bounds: dict[FieldName, MetricBound] = Field(default_factory=dict)
+
+
+class TreemapOptions(BaseModel):
+    """Per-chart-family display options for treemap."""
+
+    show_labels: bool = True
+    show_upper_labels: bool = False
+    label_type: Literal["key", "value", "key_value"] = "key"
+
+
+class NumberOptions(BaseModel):
+    """Per-chart-family display options for number (KPI tile)."""
+
+    subheader: str | None = Field(default=None, max_length=200)
+    subtitle: str | None = Field(default=None, max_length=200)
+    header_font_size: int | None = Field(default=None, ge=8, le=120)
+    subheader_font_size: int | None = Field(default=None, ge=8, le=120)
+
+
 class TypeOptions(BaseModel):
-    pass
+    """Aggregated per-family options bag. Only the relevant family key is set."""
+
+    cartesian: CartesianOptions | None = None
+    pie: PieOptions | None = None
+    gauge: GaugeOptions | None = None
+    funnel: FunnelOptions | None = None
+    radar: RadarOptions | None = None
+    treemap: TreemapOptions | None = None
+    number: NumberOptions | None = None
 
 
 class ChartOptions(BaseModel):
@@ -229,3 +355,8 @@ class ChartSpec(BaseModel):
         if self.type not in ("table", "number", "gauge") and self.encoding.x is None:
             raise ValueError(f"chart type '{self.type}' requires encoding.x")
         return self
+
+
+# Rebuild ChartOptions now that TypeOptions has been fully defined (resolves the
+# forward reference that ChartOptions.type_options carries).
+ChartOptions.model_rebuild()

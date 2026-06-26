@@ -27,9 +27,7 @@ are fully-qualified measure identifiers you MUST place in "metric_refs".  The
     ]
   }},
   "options": {{
-    "title": "<chart_title_or_null>",
-    "stacked": false,
-    "show_legend": true
+    "title": "<chart_title_or_null>"
   }}
 }}
 

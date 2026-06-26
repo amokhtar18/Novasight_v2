@@ -193,7 +193,12 @@ def test_v2_shared_chrome_options() -> None:
                 "title": "Sales",
                 "color_scheme": "vibrant",
                 "legend": {"show": True, "position": "bottom", "type": "plain", "sort": "desc"},
-                "number_format": {"style": "currency", "currency": "$", "prefix": "≈", "suffix": " net"},
+                "number_format": {
+                    "style": "currency",
+                    "currency": "$",
+                    "prefix": "≈",
+                    "suffix": " net",
+                },
                 "date_format": "%Y-%m",
                 "labels": {"show": True, "threshold": 5, "template": "{value}"},
                 "tooltip": {"mode": "rich", "show_total": True, "show_percentage": True},
@@ -300,3 +305,86 @@ def test_chart_query_time_dimension_date_range_round_trips() -> None:
         }
     )
     assert spec.query.time_dimensions[0].cube_date_range == "last 90 days"
+
+
+# --- v2 type_options per-family models (Task 2) -----------------------------
+
+
+def test_type_options_cartesian_and_pie() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {"metric_refs": ["s.total"]},
+            "encoding": {"x": "s.region", "series": [{"field": "s.total"}]},
+            "options": {
+                "type_options": {
+                    "cartesian": {
+                        "stacked": True,
+                        "percent": True,
+                        "area_opacity": 0.4,
+                        "y_min": 0,
+                        "log_scale": True,
+                    },
+                    "pie": {
+                        "rose_type": "area",
+                        "inner_radius": 50,
+                        "label_type": "value_percent",
+                    },
+                }
+            },
+        }
+    )
+    assert spec.options.type_options.cartesian.percent is True
+    assert spec.options.type_options.cartesian.area_opacity == 0.4
+    assert spec.options.type_options.pie.rose_type == "area"
+
+
+def test_gauge_interval_colors_length_must_match() -> None:
+    with pytest.raises(ValidationError, match="interval"):
+        ChartSpec.model_validate(
+            {
+                "type": "gauge",
+                "query": {"metric_refs": ["s.total"]},
+                "encoding": {"series": [{"field": "s.total"}]},
+                "options": {
+                    "type_options": {
+                        "gauge": {"intervals": [50, 80], "interval_colors": ["#ff0000"]},
+                    }
+                },
+            }
+        )
+
+
+def test_cartesian_area_opacity_range() -> None:
+    with pytest.raises(ValidationError):
+        ChartSpec.model_validate(
+            {
+                "type": "area",
+                "query": {"metric_refs": ["s.total"]},
+                "encoding": {"x": "s.d", "series": [{"field": "s.total"}]},
+                "options": {"type_options": {"cartesian": {"area_opacity": 2}}},
+            }
+        )
+
+
+def test_radar_metric_bounds_and_treemap_and_number() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "radar",
+            "query": {"metric_refs": ["s.a", "s.b"]},
+            "encoding": {
+                "x": "s.region",
+                "series": [{"field": "s.a"}, {"field": "s.b"}],
+            },
+            "options": {
+                "type_options": {
+                    "radar": {
+                        "shape": "circle",
+                        "metric_bounds": {"s.a": {"min": 0, "max": 100}},
+                    }
+                }
+            },
+        }
+    )
+    assert spec.options.type_options.radar.shape == "circle"
+    assert spec.options.type_options.radar.metric_bounds["s.a"].max == 100

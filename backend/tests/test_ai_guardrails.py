@@ -116,7 +116,7 @@ _VALID_CHART_DICT: dict[str, Any] = {
         "x": "regional_sales.region",
         "series": [{"field": "regional_sales.total_amount", "name": "Total Amount"}],
     },
-    "options": {"title": "Sales", "stacked": False, "show_legend": True},
+    "options": {"title": "Sales"},
 }
 
 # Test-only dummy values (NOT real infra/secrets). The Cube client is always
@@ -529,7 +529,7 @@ def test_cat2_suggestions_ungrounded_column_dropped() -> None:
                     "x": "ghost_col",
                     "series": [{"field": "total", "name": "Total"}],
                 },
-                "options": {"title": None, "stacked": False, "show_legend": True},
+                "options": {"title": None},
             },
         }
     ]
@@ -568,7 +568,7 @@ def test_cat2_suggestions_ungrounded_metric_column_dropped() -> None:
                     "x": "region",
                     "series": [{"field": "total", "name": "Total"}],
                 },
-                "options": {"title": None, "stacked": False, "show_legend": True},
+                "options": {"title": None},
             },
         }
     ]
@@ -606,7 +606,7 @@ def test_cat2_suggestions_ungrounded_metric_column_dropped() -> None:
                             {"field": "regional_sales.total_amount", "name": "Total"}
                         ],
                     },
-                    "options": {"title": None, "stacked": False, "show_legend": True},
+                    "options": {"title": None},
                 }
             ),
             "missing_encoding_x",
@@ -632,7 +632,7 @@ def test_cat2_suggestions_ungrounded_metric_column_dropped() -> None:
                             {"field": "regional_sales.total_amount", "name": "Total"}
                         ],
                     },
-                    "options": {"title": None, "stacked": False, "show_legend": True},
+                    "options": {"title": None},
                 }
             ),
             "inline_query_smuggled",
@@ -664,7 +664,7 @@ def test_cat2_suggestions_ungrounded_metric_column_dropped() -> None:
                             {"field": "regional_sales.avg_share", "name": "Avg Share"}
                         ],
                     },
-                    "options": {"title": None, "stacked": False, "show_legend": True},
+                    "options": {"title": None},
                 }
             ),
             "series_field_not_in_metric_refs",
@@ -680,7 +680,7 @@ def test_cat2_suggestions_ungrounded_metric_column_dropped() -> None:
                         "x": "regional_sales.region",
                         "series": [],
                     },
-                    "options": {"title": None, "stacked": False, "show_legend": True},
+                    "options": {"title": None},
                 }
             ),
             "empty_series",
@@ -729,7 +729,7 @@ async def test_cat3_chart_spec_rejection_query_never_called(
                     "encoding": {
                         "series": [{"field": "regional_sales.total_amount"}],
                     },
-                    "options": {"title": None, "stacked": False, "show_legend": True},
+                    "options": {"title": None},
                 }
             ),
             "missing_x",

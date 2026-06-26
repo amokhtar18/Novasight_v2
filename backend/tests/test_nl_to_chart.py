@@ -104,8 +104,6 @@ _VALID_SPEC_DICT: dict[str, Any] = {
     },
     "options": {
         "title": "Sales by Region",
-        "stacked": False,
-        "show_legend": True,
     },
 }
 
@@ -251,7 +249,7 @@ async def test_line_chart_type_is_accepted() -> None:
     spec_dict = {
         **_VALID_SPEC_DICT,
         "type": "line",
-        "options": {"title": "Trend", "stacked": False, "show_legend": True},
+        "options": {"title": "Trend"},
     }
     svc, _, _, _ = _make_service(gateway_response=_make_llm_response(json.dumps(spec_dict)))
 
@@ -270,7 +268,7 @@ async def test_table_chart_with_no_x_is_accepted() -> None:
         "encoding": {
             "series": [{"field": "regional_sales.total_amount", "name": "Total Amount"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(table_spec)),
@@ -310,7 +308,7 @@ async def test_multiple_metrics_in_spec() -> None:
                 {"field": "regional_sales.avg_share", "name": "Avg Share"},
             ],
         },
-        "options": {"title": "Sales overview", "stacked": False, "show_legend": True},
+        "options": {"title": "Sales overview"},
     }
     cube_rows: list[CubeRow] = [
         {
@@ -402,7 +400,7 @@ async def test_missing_series_is_rejected() -> None:
         "type": "bar",
         "query": {"metric_refs": ["regional_sales.total_amount"]},
         "encoding": {"x": "regional_sales.region", "series": []},
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(bad_spec))
@@ -425,7 +423,7 @@ async def test_missing_x_for_axis_chart_is_rejected() -> None:
         "encoding": {
             "series": [{"field": "regional_sales.total_amount"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(bad_spec))
@@ -456,7 +454,7 @@ async def test_inline_query_is_rejected() -> None:
             "x": "regional_sales.region",
             "series": [{"field": "regional_sales.total_amount"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(inline_spec))
@@ -517,7 +515,7 @@ async def test_ungrounded_metric_ref_is_rejected() -> None:
             "x": "regional_sales.region",
             "series": [{"field": "regional_sales.not_a_metric"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(bad_spec))
@@ -543,7 +541,7 @@ async def test_ungrounded_series_field_is_rejected() -> None:
             "x": "regional_sales.region",
             "series": [{"field": "regional_sales.invented_field"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(bad_spec))
@@ -569,7 +567,7 @@ async def test_ungrounded_dimension_x_is_rejected() -> None:
             "x": "regional_sales.not_a_dimension",
             "series": [{"field": "regional_sales.total_amount"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     svc, _, _, mock_query = _make_service(
         gateway_response=_make_llm_response(json.dumps(bad_spec))
@@ -846,7 +844,7 @@ def test_direct_validator_rejects_inline_query() -> None:
             "x": "regional_sales.region",
             "series": [{"field": "regional_sales.total_amount"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     with pytest.raises(ChartValidationError) as exc_info:
         validate_chart_spec(
@@ -869,7 +867,7 @@ def test_direct_validator_case_insensitive_allow_list() -> None:
             "x": "regional_sales.region",
             "series": [{"field": "regional_sales.total_amount"}],
         },
-        "options": {"title": None, "stacked": False, "show_legend": True},
+        "options": {"title": None},
     }
     # Pass upper-cased allowed sets (the validator should normalise)
     result = validate_chart_spec(
@@ -954,7 +952,7 @@ def test_grounding_semantic_text_does_not_contain_physical_table() -> None:
                     "x": "regional_sales.region",
                     "series": [{"field": "regional_sales.fake_metric"}],
                 },
-                "options": {"title": None, "stacked": False, "show_legend": True},
+                "options": {"title": None},
             }
         ),
         json.dumps(
@@ -966,7 +964,7 @@ def test_grounding_semantic_text_does_not_contain_physical_table() -> None:
                     "x": "regional_sales.not_a_dim",
                     "series": [{"field": "regional_sales.total_amount"}],
                 },
-                "options": {"title": None, "stacked": False, "show_legend": True},
+                "options": {"title": None},
             }
         ),
     ],
