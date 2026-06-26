@@ -112,8 +112,9 @@ async def test_values_grounded_dedup_ordered(client_with_db: TestClient, make_te
 async def test_values_search_becomes_contains_filter(client_with_db: TestClient, make_tenant: Any,
                                                      fake_cube: _FakeCube) -> None:
     await make_tenant("local")
-    client_with_db.post("/api/v1/semantic/values", headers=_auth(),
-                        json={"member": "regional_sales.region", "search": "wes"})
+    resp = client_with_db.post("/api/v1/semantic/values", headers=_auth(),
+                               json={"member": "regional_sales.region", "search": "wes"})
+    assert resp.status_code == 200, resp.text
     assert {"member": "regional_sales.region", "operator": "contains", "values": ["wes"]} \
         in (fake_cube.seen_filters[-1] or [])
 
@@ -122,10 +123,11 @@ async def test_values_search_becomes_contains_filter(client_with_db: TestClient,
 async def test_values_forwards_parent_constraints(client_with_db: TestClient, make_tenant: Any,
                                                   fake_cube: _FakeCube) -> None:
     await make_tenant("local")
-    client_with_db.post("/api/v1/semantic/values", headers=_auth(), json={
+    resp = client_with_db.post("/api/v1/semantic/values", headers=_auth(), json={
         "member": "regional_sales.region",
         "constraints": [{"member": "regional_sales.region", "operator": "equals", "values": ["x"]}],
     })
+    assert resp.status_code == 200, resp.text
     assert {"member": "regional_sales.region", "operator": "equals", "values": ["x"]} \
         in (fake_cube.seen_filters[-1] or [])
 
@@ -141,11 +143,24 @@ async def test_values_rejects_ungoverned_member_without_cube_call(
 
 
 @pytest.mark.asyncio
+async def test_values_rejects_ungoverned_constraint_member(
+    client_with_db: TestClient, make_tenant: Any, fake_cube: _FakeCube) -> None:
+    await make_tenant("local")
+    resp = client_with_db.post("/api/v1/semantic/values", headers=_auth(), json={
+        "member": "regional_sales.region",
+        "constraints": [{"member": "regional_sales.secret", "operator": "equals", "values": ["x"]}],
+    })
+    assert resp.status_code == 422, resp.text
+    assert fake_cube.call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_values_clamps_limit_to_cap(client_with_db: TestClient, make_tenant: Any,
                                           fake_cube: _FakeCube) -> None:
     from app.core.config import get_settings
     await make_tenant("local")
     cap = get_settings().max_filter_values
-    client_with_db.post("/api/v1/semantic/values", headers=_auth(),
-                        json={"member": "regional_sales.region", "limit": 10_000_000})
+    resp = client_with_db.post("/api/v1/semantic/values", headers=_auth(),
+                               json={"member": "regional_sales.region", "limit": 10_000_000})
+    assert resp.status_code == 200, resp.text
     assert fake_cube.seen_limits[-1] == cap
