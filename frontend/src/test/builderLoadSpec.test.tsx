@@ -92,7 +92,7 @@ const savedSpec: ChartSpec = {
 
 // A v2 spec with type_options and legend options to test v2 ChartOptions restoration.
 const savedSpecV2: ChartSpec = {
-  version: "1",
+  version: "2",
   type: "bar",
   query: {
     metric_refs: ["regional_sales.total_amount"],

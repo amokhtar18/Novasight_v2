@@ -26,10 +26,15 @@ both reading the one canonical fixture so the two languages cannot drift.
 
 ## Shape
 
+See [`docs/examples/chart-spec.example.json`](examples/chart-spec.example.json) for
+the canonical v2 fixture used by both the backend and frontend round-trip tests.
+
+A condensed sketch:
+
 ```jsonc
 {
-  "version": "1",                // contract version; bump on breaking changes
-  "type": "bar",                 // bar | line | area | pie | table | number | scatter
+  "version": "2",                // contract version — "2" for all new specs
+  "type": "bar",                 // bar | line | area | pie | table | number | ...
   "query": {                     // WHERE the data comes from (≥1 source required)
     "dataset_id": "…uuid…",      //   dataset the inline query runs against
     "query": { /* QueryRequest */ }, //   structured aggregation (Phase 1 path)
@@ -44,15 +49,24 @@ both reading the one canonical fixture so the two languages cannot drift.
     ],
     "breakdown": []              //   dimensions pivoted into one series each (optional)
   },
-  "options": {                   // display-only; never affects the query/data
+  "options": {                   // display-only v2 structure; never affects the query
     "title": "Monthly sales",
-    "stacked": false,
-    "show_legend": true,
-    "x_axis_label": "Month",
-    "y_axis_label": "Amount"
+    "color_scheme": null,        //   named palette key or null for theme default
+    "palette": [],               //   explicit hex list — overrides color_scheme
+    "legend": { "show": true, "position": "top", "sort": "none" },
+    "labels": { "show": false, "template": null, "threshold": null },
+    "tooltip": { "mode": "axis", "sort_by_metric": false },
+    "type_options": {            //   per-family options (cartesian / pie / gauge / …)
+      "cartesian": { "stacked": false, "y_axis_label": "Amount" }
+    }
   }
 }
 ```
+
+> **v1 → v2 break:** the v1 flat fields (`stacked`, `show_legend`, `x_axis_label`,
+> `y_axis_label`) no longer exist in `ChartOptions`. Use `type_options.cartesian` and
+> `legend.show` instead. See the [v2 section below](#options-v2) for the full field
+> reference.
 
 ### `type`
 
@@ -192,7 +206,7 @@ spec must use the v2 structure documented below.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `mode` | `"item"` \| `"axis"` \| `"rich"` | Default `"item"`. |
+| `mode` | `"item"` \| `"axis"` \| `"rich"` | Default `"axis"`. |
 | `sort_by_metric` | `boolean` | Sort tooltip rows by metric value descending. |
 | `show_total` | `boolean` | Show the sum row in stacked-series tooltips. |
 | `show_percentage` | `boolean` | Show each series' share of the total. |

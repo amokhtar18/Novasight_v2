@@ -15,20 +15,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { humanize } from "@/lib/format";
+import { COLOR_SCHEMES } from "@/lib/colorSchemes";
 
-// Static UI list of color scheme names — acceptable as a display-only affordance
-// (no environment-specific values).
-const COLOR_SCHEMES = [
-  "default",
-  "blues",
-  "greens",
-  "reds",
-  "warm",
-  "cool",
-  "monochrome",
-  "pastel",
-  "vivid",
-];
+// Derive the dropdown entries from the single source of truth so the UI stays in sync
+// with the palette map used by the renderer.
+const COLOR_SCHEME_KEYS = Object.keys(COLOR_SCHEMES);
 
 const SORT_OPTIONS: ChartSort[] = [
   "none",
@@ -109,7 +100,7 @@ export function SharedFormatControls({ options, setOptions }: Props) {
               value={options.color_scheme ?? "default"}
               onChange={(e) => setOptions({ ...options, color_scheme: e.target.value || null })}
             >
-              {COLOR_SCHEMES.map((cs) => (
+              {COLOR_SCHEME_KEYS.map((cs) => (
                 <option key={cs} value={cs}>
                   {humanize(cs)}
                 </option>
@@ -356,7 +347,7 @@ export function SharedFormatControls({ options, setOptions }: Props) {
             <Label htmlFor="sf-tooltip-mode">Mode</Label>
             <Select
               id="sf-tooltip-mode"
-              value={tooltip.mode ?? "item"}
+              value={tooltip.mode ?? "axis"}
               onChange={(e) =>
                 setTooltip({ mode: e.target.value as TooltipOptions["mode"] })
               }

@@ -40,6 +40,7 @@ import { useTheme } from "@/lib/theme";
 import { TableRenderer } from "@/components/chart/TableRenderer";
 import { NumberRenderer } from "@/components/chart/NumberRenderer";
 import { formatChartValue } from "@/lib/chartFormat";
+import { COLOR_SCHEMES } from "@/lib/colorSchemes";
 import type { CartesianOptions, ChartSpec, ChartSort, QueryResponse } from "@/types/api";
 
 // Register only what we use (v2 adds funnel/gauge/radar/treemap, #8).
@@ -141,8 +142,13 @@ export function buildEChartsOption(
   // Tooltip
   const tip = opts.tooltip ?? {};
 
+  // Resolve palette: explicit > color_scheme named palette > theme default.
   const palette =
-    opts.palette && opts.palette.length > 0 ? opts.palette : theme.palette;
+    opts.palette && opts.palette.length > 0
+      ? opts.palette
+      : opts.color_scheme
+        ? (COLOR_SCHEMES[opts.color_scheme] ?? theme.palette)
+        : theme.palette;
   const fmt = (v: number): string => formatChartValue(v, opts.number_format);
   const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 
@@ -174,12 +180,20 @@ export function buildEChartsOption(
     ? { text: opts.title, textStyle: { color: theme.text } }
     : undefined;
 
-  // Shared legend block — reads from opts.legend.{show,position,type,margin}
+  // Shared legend block — reads from opts.legend.{show,position,type,margin,sort}
   const legendBlock = (): Record<string, unknown> | undefined => {
     if (!showLegend) return undefined;
     const pos = legend.position ?? "top";
+    // A1: legend.sort — ECharts has no native sort prop; sort the data array.
+    const rawLabels = series.map(seriesLabel);
+    const legendData =
+      legend.sort === "asc"
+        ? [...rawLabels].sort((a, b) => a.localeCompare(b))
+        : legend.sort === "desc"
+          ? [...rawLabels].sort((a, b) => b.localeCompare(a))
+          : rawLabels;
     const base: Record<string, unknown> = {
-      data: series.map(seriesLabel),
+      data: legendData,
       textStyle: { color: theme.text },
       type: legend.type === "plain" ? "plain" : "scroll",
       ...(legend.margin != null ? { padding: legend.margin } : {}),
@@ -190,19 +204,42 @@ export function buildEChartsOption(
     return { ...base, top: 0 };
   };
 
-  // Shared data label — reads from opts.labels.{show,position}
-  const dataLabel = labels.show
-    ? { show: true, color: theme.text, ...(labels.position ? { position: labels.position } : {}) }
-    : undefined;
+  // Shared data label — reads from opts.labels.{show,position,template,threshold}
+  // A3: template and threshold for non-pie families.
+  const buildDataLabel = (): Record<string, unknown> | undefined => {
+    if (!labels.show) return undefined;
+    const base: Record<string, unknown> = {
+      show: true,
+      color: theme.text,
+      ...(labels.position ? { position: labels.position } : {}),
+    };
+    // When threshold is set, hide labels for values below it (compose with template
+    // if both are set — threshold wins on hiding).
+    if (labels.threshold != null) {
+      const tpl = labels.template;
+      base.formatter = (params: { value?: number | unknown }) => {
+        const v = typeof params === "object" && params !== null
+          ? (params as { value?: unknown }).value
+          : params;
+        if ((v == null ? 0 : Number(v)) < (labels.threshold as number)) return "";
+        return tpl ?? String(v ?? "");
+      };
+    } else if (labels.template) {
+      base.formatter = labels.template;
+    }
+    return base;
+  };
+  const dataLabel = buildDataLabel();
 
-  // dateFmt: when options.date_format is set and a category string parses as a Date,
-  // format it using a minimal token map (%Y %m %d %H %M, zero-padded).
-  const dateFmt = (cat: string): string => {
-    if (!opts.date_format) return cat;
+  // applyDateFmt: apply a strftime-style token format to a date string.
+  // Recognises %Y %m %d %H %M with zero-padding. Returns the input unchanged
+  // when the format is absent or the string does not parse as a Date.
+  const applyDateFmt = (cat: string, fmt: string | null | undefined): string => {
+    if (!fmt) return cat;
     const d = new Date(cat);
     if (isNaN(d.getTime())) return cat;
     const pad = (n: number): string => String(n).padStart(2, "0");
-    return opts.date_format
+    return fmt
       .replace(/%Y/g, String(d.getFullYear()))
       .replace(/%m/g, pad(d.getMonth() + 1))
       .replace(/%d/g, pad(d.getDate()))
@@ -210,18 +247,31 @@ export function buildEChartsOption(
       .replace(/%M/g, pad(d.getMinutes()));
   };
 
+  // dateFmt: applies options.date_format to axis category labels.
+  const dateFmt = (cat: string): string => applyDateFmt(cat, opts.date_format);
+
   // Tooltip trigger — for cartesian families the mode drives axis vs item.
   const tooltipTrigger = tip.mode === "item" ? "item" : "axis";
 
-  // Axis tooltip formatter: optionally appends Total and/or per-series percentage
-  // when tooltip.show_total or tooltip.show_percentage is set.
+  // Axis tooltip formatter: handles sort_by_metric (A2), time_format header (A5),
+  // show_total, and show_percentage.
   const buildAxisTooltipFormatter = (): ((params: unknown) => string) | undefined => {
-    if (!tip.show_total && !tip.show_percentage) return undefined;
+    if (!tip.show_total && !tip.show_percentage && !tip.sort_by_metric && !tip.time_format) {
+      return undefined;
+    }
     return (params: unknown): string => {
-      const items = params as Array<{ seriesName: string; value: number; marker: string }>;
-      if (!Array.isArray(items) || items.length === 0) return "";
+      const rawItems = params as Array<{ seriesName: string; value: number; marker: string }>;
+      if (!Array.isArray(rawItems) || rawItems.length === 0) return "";
+      // A2: sort_by_metric — sort tooltip rows by value descending before rendering.
+      const items = tip.sort_by_metric
+        ? [...rawItems].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+        : rawItems;
       const total = items.reduce((s, p) => s + (Number(p.value) || 0), 0);
-      const header = dateFmt(String((items[0] as { axisValue?: string }).axisValue ?? ""));
+      // A5: tooltip.time_format — apply to the axis header value; fall back to date_format.
+      const rawHeader = String((items[0] as { axisValue?: string }).axisValue ?? "");
+      const header = tip.time_format
+        ? applyDateFmt(rawHeader, tip.time_format)
+        : dateFmt(rawHeader);
       let html = `${header}<br/>`;
       for (const p of items) {
         const val = fmt(Number(p.value));
@@ -238,13 +288,14 @@ export function buildEChartsOption(
     };
   };
 
+  const _axisFormatter = buildAxisTooltipFormatter();
   const axisTooltip = {
     trigger: tooltipTrigger,
     backgroundColor: theme.tooltipBg,
     borderColor: theme.tooltipBorder,
     textStyle: { color: theme.text },
-    ...(tip.show_total || tip.show_percentage
-      ? { formatter: buildAxisTooltipFormatter() }
+    ...(_axisFormatter != null
+      ? { formatter: _axisFormatter }
       : { valueFormatter: (v: number | string) => fmt(Number(v)) }),
   };
 

@@ -217,7 +217,7 @@ export function useSemanticBuilder() {
   });
 
   const spec: ChartSpec = {
-    version: "1",
+    version: "2",
     type: chartType,
     query,
     encoding: {

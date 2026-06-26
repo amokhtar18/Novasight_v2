@@ -297,7 +297,7 @@ export interface ChartOptions {
 }
 
 export interface ChartSpec {
-  /** Contract version. Current: "1". */
+  /** Contract version. Current: "2". */
   version?: string;
   type: ChartType;
   query: ChartQuery;

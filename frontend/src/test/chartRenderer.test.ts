@@ -486,3 +486,161 @@ test("ChartRendererHandle exposes toPng", () => {
   const handle: ChartRendererHandle = { toPng: () => null };
   expect(handle.toPng()).toBeNull();
 });
+
+// ---------------------------------------------------------------------------
+// Slice A2 final-review: legend.sort / tooltip.sort_by_metric /
+//   labels.template+threshold / color_scheme / tooltip.time_format
+// ---------------------------------------------------------------------------
+
+const a2Data = { columns: ["c", "m1", "m2"], rows: [["a", 5, 30], ["b", 20, 10]], row_count: 2 };
+const a2Spec = (opts: any): ChartSpec => ({
+  version: "2", type: "bar", query: { metric_refs: ["m1", "m2"] },
+  encoding: { x: "c", series: [{ field: "m1", name: "Zebra" }, { field: "m2", name: "Apple" }] },
+  options: opts,
+});
+
+describe("legend.sort", () => {
+  it("sort=asc orders legend data alphabetically ascending", () => {
+    const opt = buildEChartsOption(a2Spec({ legend: { show: true, sort: "asc" } }), a2Data) as any;
+    expect(opt.legend.data).toEqual(["Apple", "Zebra"]);
+  });
+
+  it("sort=desc orders legend data alphabetically descending", () => {
+    const opt = buildEChartsOption(a2Spec({ legend: { show: true, sort: "desc" } }), a2Data) as any;
+    expect(opt.legend.data).toEqual(["Zebra", "Apple"]);
+  });
+
+  it("sort=none (default) preserves original series order", () => {
+    const opt = buildEChartsOption(a2Spec({ legend: { show: true, sort: "none" } }), a2Data) as any;
+    expect(opt.legend.data).toEqual(["Zebra", "Apple"]);
+  });
+});
+
+describe("tooltip.sort_by_metric", () => {
+  it("sort_by_metric=true returns tooltip items sorted by value desc", () => {
+    const opt = buildEChartsOption(
+      a2Spec({ tooltip: { sort_by_metric: true, show_total: true } }),
+      a2Data
+    ) as any;
+    expect(typeof opt.tooltip.formatter).toBe("function");
+    const result: string = opt.tooltip.formatter([
+      { seriesName: "Zebra", value: 5, marker: "", axisValue: "a" },
+      { seriesName: "Apple", value: 30, marker: "", axisValue: "a" },
+    ]);
+    // Apple (30) should appear before Zebra (5) in the output
+    expect(result.indexOf("Apple")).toBeLessThan(result.indexOf("Zebra"));
+  });
+
+  it("sort_by_metric=false preserves original tooltip order", () => {
+    const opt = buildEChartsOption(
+      a2Spec({ tooltip: { sort_by_metric: false, show_total: true } }),
+      a2Data
+    ) as any;
+    const result: string = opt.tooltip.formatter([
+      { seriesName: "Zebra", value: 5, marker: "", axisValue: "a" },
+      { seriesName: "Apple", value: 30, marker: "", axisValue: "a" },
+    ]);
+    expect(result.indexOf("Zebra")).toBeLessThan(result.indexOf("Apple"));
+  });
+});
+
+describe("labels.template and labels.threshold (non-pie)", () => {
+  it("labels.template sets formatter on the data label", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { labels: { show: true, template: "{c} units" } } },
+      { columns: ["c", "m"], rows: [["a", 10]], row_count: 1 }
+    ) as any;
+    expect(opt.series[0].label.formatter).toBe("{c} units");
+  });
+
+  it("labels.threshold hides the label for values below the threshold", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { labels: { show: true, threshold: 15 } } },
+      { columns: ["c", "m"], rows: [["a", 5], ["b", 20]], row_count: 2 }
+    ) as any;
+    const formatter = opt.series[0].label.formatter as (p: { value: number }) => string;
+    expect(typeof formatter).toBe("function");
+    expect(formatter({ value: 5 })).toBe("");   // below threshold
+    expect(formatter({ value: 20 })).not.toBe(""); // above threshold
+  });
+
+  it("labels.threshold + template: below threshold returns empty, above returns template", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { labels: { show: true, threshold: 10, template: "{c}%" } } },
+      { columns: ["c", "m"], rows: [["a", 3], ["b", 50]], row_count: 2 }
+    ) as any;
+    const formatter = opt.series[0].label.formatter as (p: { value: number }) => string;
+    expect(formatter({ value: 3 })).toBe("");
+    expect(formatter({ value: 50 })).toBe("{c}%");
+  });
+});
+
+describe("color_scheme palette resolution", () => {
+  it("color_scheme sets option.color when palette is empty", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { color_scheme: "vibrant", palette: [] } },
+      { columns: ["c", "m"], rows: [["a", 1]], row_count: 1 }
+    ) as any;
+    // The vibrant scheme starts with "#e6194b"
+    expect(opt.color[0]).toBe("#e6194b");
+  });
+
+  it("explicit palette overrides color_scheme", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { color_scheme: "vibrant", palette: ["#aabbcc"] } },
+      { columns: ["c", "m"], rows: [["a", 1]], row_count: 1 }
+    ) as any;
+    expect(opt.color[0]).toBe("#aabbcc");
+  });
+
+  it("unknown color_scheme falls back to theme palette (array)", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { color_scheme: "nonexistent_scheme_xyz" } },
+      { columns: ["c", "m"], rows: [["a", 1]], row_count: 1 }
+    ) as any;
+    expect(Array.isArray(opt.color)).toBe(true);
+  });
+});
+
+describe("tooltip.time_format", () => {
+  it("time_format is applied to the axis header in the tooltip formatter", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m", name: "M" }] },
+        options: { tooltip: { time_format: "%Y-%m", show_total: true } } },
+      { columns: ["c", "m"], rows: [["2024-06-15", 10]], row_count: 1 }
+    ) as any;
+    expect(typeof opt.tooltip.formatter).toBe("function");
+    const result: string = opt.tooltip.formatter([
+      { seriesName: "M", value: 10, marker: "", axisValue: "2024-06-15" },
+    ]);
+    expect(result).toContain("2024-06");
+  });
+
+  it("time_format takes priority over date_format for tooltip header", () => {
+    const opt = buildEChartsOption(
+      { version: "2", type: "bar", query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m", name: "M" }] },
+        options: { date_format: "%Y", tooltip: { time_format: "%Y-%m", show_total: true } } },
+      { columns: ["c", "m"], rows: [["2024-06-15", 5]], row_count: 1 }
+    ) as any;
+    const result: string = opt.tooltip.formatter([
+      { seriesName: "M", value: 5, marker: "", axisValue: "2024-06-15" },
+    ]);
+    // tooltip.time_format wins: should show "2024-06", not "2024"
+    expect(result).toContain("2024-06");
+    expect(result).not.toMatch(/^2024<br/);
+  });
+});
