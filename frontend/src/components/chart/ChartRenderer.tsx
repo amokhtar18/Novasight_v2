@@ -486,6 +486,25 @@ export function buildEChartsOption(
   // ---- Funnel. --------------------------------------------------------
   if (spec.type === "funnel") {
     const valIdx = colIndex(series[0].field);
+    const f = t.funnel ?? {};
+
+    // Map funnel label_type to an ECharts formatter string.
+    const funnelLabelFormatter = (lt: string | undefined): string | undefined => {
+      switch (lt) {
+        case "none":            return "";
+        case "value":           return "{c}";
+        case "percent":         return "{d}%";
+        case "category":        return "{b}";
+        case "category_value":  return "{b}: {c}";
+        case "value_percent":   return "{c} ({d}%)";
+        case "all":             return "{b}: {c} ({d}%)";
+        default:                return undefined;
+      }
+    };
+
+    const funnelLabelShow = f.show_labels ?? true;
+    const funnelFormatter = funnelLabelFormatter(f.label_type);
+
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
@@ -497,7 +516,11 @@ export function buildEChartsOption(
           type: "funnel",
           left: "10%",
           right: "10%",
-          label: { color: theme.text },
+          label: {
+            show: funnelLabelShow,
+            color: theme.text,
+            ...(funnelFormatter != null ? { formatter: funnelFormatter } : {}),
+          },
           data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
         },
       ],
@@ -507,6 +530,20 @@ export function buildEChartsOption(
   // ---- Treemap. -------------------------------------------------------
   if (spec.type === "treemap") {
     const valIdx = colIndex(series[0].field);
+    const tm = t.treemap ?? {};
+
+    // Map treemap label_type to an ECharts formatter string.
+    const treemapLabelFormatter = (lt: string | undefined): string | undefined => {
+      switch (lt) {
+        case "key":       return "{b}";
+        case "value":     return "{c}";
+        case "key_value": return "{b}: {c}";
+        default:          return undefined;
+      }
+    };
+
+    const tmFormatter = treemapLabelFormatter(tm.label_type);
+
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
@@ -517,7 +554,15 @@ export function buildEChartsOption(
           type: "treemap",
           roam: false,
           breadcrumb: { show: false },
-          label: { color: "#fff" },
+          label: {
+            show: tm.show_labels ?? true,
+            color: "#fff",
+            ...(tmFormatter != null ? { formatter: tmFormatter } : {}),
+          },
+          upperLabel: {
+            show: tm.show_upper_labels ?? false,
+            color: theme.text,
+          },
           data: srows.map((row, i) => ({ name: categories[i], value: num(row[valIdx]) })),
         },
       ],
@@ -526,8 +571,42 @@ export function buildEChartsOption(
 
   // ---- Radar: each series is a polygon over the x categories. ---------
   if (spec.type === "radar") {
+    const r = t.radar ?? {};
     const valIdxs = series.map((s) => colIndex(s.field));
     const maxVal = Math.max(1, ...valIdxs.flatMap((vi) => srows.map((row) => num(row[vi]))));
+
+    // Build per-indicator max/min: when metric_bounds is keyed by category name,
+    // look up the bound for that category; otherwise use the computed maxVal.
+    // metric_bounds is keyed by category (x-axis value) in the current data model.
+    const metricBounds = r.metric_bounds ?? {};
+    const indicator = categories.map((c) => {
+      const bound = metricBounds[c];
+      return {
+        name: c,
+        max: (bound?.max != null ? bound.max : maxVal) as number,
+        ...(bound?.min != null ? { min: bound.min as number } : {}),
+      };
+    });
+
+    // Radar series label formatter.
+    const radarLabelFormatter = (lt: string | undefined): string | undefined => {
+      switch (lt) {
+        case "value":          return "{c}";
+        case "category_value": return "{b}: {c}";
+        default:               return undefined;
+      }
+    };
+
+    const radarFormatter = radarLabelFormatter(r.label_type);
+    const radarSeriesLabel = r.label_type
+      ? {
+          show: true,
+          color: theme.text,
+          ...(radarFormatter != null ? { formatter: radarFormatter } : {}),
+          ...(r.label_position ? { position: r.label_position } : {}),
+        }
+      : undefined;
+
     return toOption({
       color: palette,
       textStyle: { color: theme.text },
@@ -535,13 +614,15 @@ export function buildEChartsOption(
       tooltip: itemTooltip,
       legend: legendBlock(),
       radar: {
-        indicator: categories.map((c) => ({ name: c, max: maxVal })),
+        shape: (r.shape ?? "polygon") as "circle" | "polygon",
+        indicator,
         axisName: { color: theme.text },
         splitLine: { lineStyle: { color: theme.axisLine } },
       },
       series: [
         {
           type: "radar",
+          ...(radarSeriesLabel ? { label: radarSeriesLabel } : {}),
           data: series.map((s, si) => ({
             name: seriesLabel(s),
             value: srows.map((row) => num(row[valIdxs[si]])),

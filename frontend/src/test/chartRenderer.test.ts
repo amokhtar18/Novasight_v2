@@ -442,6 +442,27 @@ it("gauge clamps interval stops exceeding max to 1.0", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Funnel / Radar / Treemap family options (Task 8 — Slice A2)
+// ---------------------------------------------------------------------------
+
+it("radar shape circle + per-metric bounds", () => {
+  const opt = buildEChartsOption(
+    { version: "2", type: "radar", query: { metric_refs: ["a","b"] },
+      encoding: { x: "c", series: [{ field: "a" }, { field: "b" }] },
+      options: { type_options: { radar: { shape: "circle", metric_bounds: {} } } } },
+    { columns: ["c","a","b"], rows: [["x",1,2],["y",3,4]], row_count: 2 }) as any;
+  expect(opt.radar.shape).toBe("circle");
+});
+it("treemap upper labels + funnel label toggle", () => {
+  const t = buildEChartsOption(
+    { version: "2", type: "treemap", query: { metric_refs: ["m"] },
+      encoding: { x: "c", series: [{ field: "m" }] },
+      options: { type_options: { treemap: { show_upper_labels: true } } } },
+    { columns: ["c","m"], rows: [["a",1]], row_count: 1 }) as any;
+  expect(t.series[0].upperLabel.show).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
 // ChartRendererHandle type guard
 // ---------------------------------------------------------------------------
 
