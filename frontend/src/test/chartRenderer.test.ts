@@ -372,6 +372,10 @@ const cartData = { columns: ["c", "m"], rows: [["a", 1], ["b", 3]], row_count: 2
 it("cartesian stacked + percent normalises series to 100", () => {
   const opt = buildEChartsOption(cartSpec({ stacked: true, percent: true }), cartData) as any;
   expect(opt.series[0].stack).toBe("total");
+  // With a single series each category total equals the series value,
+  // so every normalised value is 100.
+  expect(opt.series[0].data[0]).toBeCloseTo(100);
+  expect(opt.series[0].data[1]).toBeCloseTo(100);
 });
 it("cartesian area_opacity + smooth + markers on line", () => {
   const opt = buildEChartsOption(cartSpec({ area_opacity: 0.3, smooth: true, markers: true }, "area"), cartData) as any;

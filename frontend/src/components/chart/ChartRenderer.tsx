@@ -450,13 +450,14 @@ export function buildEChartsOption(
       grid: { left: 8, right: 16, top: opts.title ? 48 : 24, bottom: c.data_zoom ? 48 : 8, containLabel: true },
       legend: legendBlock(),
       ...(c.data_zoom ? { dataZoom: [{ type: "inside" }, { type: "slider" }] } : {}),
-      xAxis: valueAxis(theme, cartesian, fmt, c.x_axis_label ?? undefined),
+      xAxis: valueAxis(theme, c, fmt, c.x_axis_label ?? undefined),
       yAxis: {
         type: "category",
         data: categories,
         axisLabel: { color: theme.text },
         axisLine: { lineStyle: { color: theme.axisLine } },
         minorTick: { show: c.minor_ticks ?? false },
+        minorSplitLine: { show: c.minor_split_line ?? false },
       },
       series: seriesList,
     });
@@ -487,8 +488,8 @@ export function buildEChartsOption(
       stack: c.stacked || c.percent ? "total" : undefined,
       areaStyle: isArea ? { opacity: c.area_opacity ?? 0.5 } : undefined,
       smooth: c.smooth || undefined,
-      showSymbol: seriesType === "line" ? (c.markers ?? false) : undefined,
-      symbolSize: c.marker_size ?? undefined,
+      showSymbol: seriesType === "line" ? (c.markers ?? undefined) : undefined,
+      symbolSize: seriesType === "line" ? (c.marker_size ?? undefined) : undefined,
       itemStyle: s.color ? { color: s.color } : undefined,
       label: c.only_total && si === ordered.length - 1
         ? { show: true, position: "top", color: theme.text }
@@ -523,6 +524,7 @@ export function buildEChartsOption(
       },
       axisLine: { lineStyle: { color: theme.axisLine } },
       minorTick: { show: c.minor_ticks ?? false },
+      minorSplitLine: { show: c.minor_split_line ?? false },
       nameTextStyle: { color: theme.text },
     },
     yAxis: valueAxis(theme, c, fmt, c.y_axis_label),
