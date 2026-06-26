@@ -308,6 +308,53 @@ describe("buildEChartsOption — v2 shared chrome", () => {
       { columns: ["c", "m"], rows: [["a", 1]], row_count: 1 }
     ) as any;
     expect(opt.legend.type).toBe("plain");
+    expect(opt.series[0].label.show).toBe(true);
+  });
+
+  it("itemTooltip always uses trigger 'item' for pie (no mode set)", () => {
+    const opt = buildEChartsOption(
+      {
+        type: "pie",
+        query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        // no options.tooltip set — default must still be item
+      },
+      { columns: ["c", "m"], rows: [["a", 1]], row_count: 1 }
+    ) as any;
+    expect(opt.tooltip.trigger).toBe("item");
+  });
+
+  it("axisTooltip formatter includes a total line when show_total is true", () => {
+    const opt = buildEChartsOption(
+      {
+        type: "bar",
+        query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m", name: "M" }] },
+        options: { tooltip: { show_total: true } },
+      },
+      { columns: ["c", "m"], rows: [["a", 10], ["b", 20]], row_count: 2 }
+    ) as any;
+    // formatter must be a function (not valueFormatter)
+    expect(typeof opt.tooltip.formatter).toBe("function");
+    // call it with a mock params array
+    const result = opt.tooltip.formatter([
+      { seriesName: "M", value: 10, marker: "", axisValue: "a" },
+    ]);
+    expect(result).toContain("Total:");
+  });
+
+  it("date_format formats ISO date categories with token replacement", () => {
+    const opt = buildEChartsOption(
+      {
+        type: "bar",
+        query: { metric_refs: ["m"] },
+        encoding: { x: "c", series: [{ field: "m" }] },
+        options: { date_format: "%Y-%m" },
+      },
+      { columns: ["c", "m"], rows: [["2024-03-15", 5]], row_count: 1 }
+    ) as any;
+    // The formatted category should use the date_format pattern
+    expect((opt.xAxis as { data: string[] }).data[0]).toBe("2024-03");
   });
 });
 

@@ -196,22 +196,63 @@ export function buildEChartsOption(
     ? { show: true, color: theme.text, ...(labels.position ? { position: labels.position } : {}) }
     : undefined;
 
-  // Tooltip trigger — item mode for single-series circular charts; axis otherwise.
+  // dateFmt: when options.date_format is set and a category string parses as a Date,
+  // format it using a minimal token map (%Y %m %d %H %M, zero-padded).
+  const dateFmt = (cat: string): string => {
+    if (!opts.date_format) return cat;
+    const d = new Date(cat);
+    if (isNaN(d.getTime())) return cat;
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    return opts.date_format
+      .replace(/%Y/g, String(d.getFullYear()))
+      .replace(/%m/g, pad(d.getMonth() + 1))
+      .replace(/%d/g, pad(d.getDate()))
+      .replace(/%H/g, pad(d.getHours()))
+      .replace(/%M/g, pad(d.getMinutes()));
+  };
+
+  // Tooltip trigger — for cartesian families the mode drives axis vs item.
   const tooltipTrigger = tip.mode === "item" ? "item" : "axis";
+
+  // Axis tooltip formatter: optionally appends Total and/or per-series percentage
+  // when tooltip.show_total or tooltip.show_percentage is set.
+  const buildAxisTooltipFormatter = (): ((params: unknown) => string) | undefined => {
+    if (!tip.show_total && !tip.show_percentage) return undefined;
+    return (params: unknown): string => {
+      const items = params as Array<{ seriesName: string; value: number; marker: string }>;
+      if (!Array.isArray(items) || items.length === 0) return "";
+      const total = items.reduce((s, p) => s + (Number(p.value) || 0), 0);
+      const header = dateFmt(String((items[0] as { axisValue?: string }).axisValue ?? ""));
+      let html = `${header}<br/>`;
+      for (const p of items) {
+        const val = fmt(Number(p.value));
+        const pct =
+          tip.show_percentage && total !== 0
+            ? ` (${((Number(p.value) / total) * 100).toFixed(1)}%)`
+            : "";
+        html += `${p.marker}${p.seriesName}: ${val}${pct}<br/>`;
+      }
+      if (tip.show_total) {
+        html += `<strong>Total: ${fmt(total)}</strong>`;
+      }
+      return html;
+    };
+  };
 
   const axisTooltip = {
     trigger: tooltipTrigger,
     backgroundColor: theme.tooltipBg,
     borderColor: theme.tooltipBorder,
     textStyle: { color: theme.text },
-    valueFormatter: (v: number | string) => fmt(Number(v)),
+    ...(tip.show_total || tip.show_percentage
+      ? { formatter: buildAxisTooltipFormatter() }
+      : { valueFormatter: (v: number | string) => fmt(Number(v)) }),
   };
 
-  // Item tooltip used for circular chart families (pie/funnel/treemap/radar/gauge).
-  // If the caller explicitly sets tooltip.mode="axis" we still respect "item" for
-  // these families; "rich" is treated as axis-style for now (Tasks 5-8 extend this).
+  // Item tooltip always uses trigger "item" — circular families (pie/funnel/treemap/
+  // radar/gauge) are not category-axis charts and always need per-point tooltips.
   const itemTooltip = {
-    trigger: tip.mode === "axis" ? "item" : tooltipTrigger,
+    trigger: "item" as const,
     backgroundColor: theme.tooltipBg,
     borderColor: theme.tooltipBorder,
     textStyle: { color: theme.text },
@@ -280,7 +321,7 @@ export function buildEChartsOption(
     opts.sort ?? "none"
   );
   const categories = srows.map((row) =>
-    row[xIdx] === null || row[xIdx] === undefined ? "(null)" : String(row[xIdx])
+    row[xIdx] === null || row[xIdx] === undefined ? "(null)" : dateFmt(String(row[xIdx]))
   );
 
   // ---- Pie / Donut. ---------------------------------------------------
