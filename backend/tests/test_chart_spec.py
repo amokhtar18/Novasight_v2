@@ -40,7 +40,7 @@ def test_canonical_fixture_round_trips() -> None:
 
 def test_fixture_uses_current_version() -> None:
     spec = ChartSpec.model_validate(_fixture_dict())
-    assert spec.version == "1"
+    assert spec.version == "2"
 
 
 def test_chart_query_requires_a_source() -> None:
@@ -178,25 +178,62 @@ def test_gauge_may_omit_x() -> None:
     assert spec.encoding.x is None
 
 
-def test_advanced_options_validate() -> None:
+def test_v2_version_is_current() -> None:
+    from app.schemas.chart import CHART_SPEC_VERSION
+    assert CHART_SPEC_VERSION == "2"
+
+
+def test_v2_shared_chrome_options() -> None:
     spec = ChartSpec.model_validate(
         {
             "type": "bar",
             "query": {"metric_refs": ["sales.total"]},
             "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
             "options": {
-                "legend_position": "bottom",
-                "sort": "value_desc",
-                "data_labels": True,
-                "log_scale": True,
-                "number_format": {"style": "currency", "currency": "$", "decimals": 2},
-                "palette": ["#3b82f6", "#22c55e"],
+                "title": "Sales",
+                "color_scheme": "vibrant",
+                "legend": {"show": True, "position": "bottom", "type": "plain", "sort": "desc"},
+                "number_format": {"style": "currency", "currency": "$", "prefix": "≈", "suffix": " net"},
+                "date_format": "%Y-%m",
+                "labels": {"show": True, "threshold": 5, "template": "{value}"},
+                "tooltip": {"mode": "rich", "show_total": True, "show_percentage": True},
             },
         }
     )
-    assert spec.options.number_format.style == "currency"
-    assert spec.options.palette == ["#3b82f6", "#22c55e"]
-    assert spec.options.sort == "value_desc"
+    assert spec.version == "2"
+    assert spec.options.legend.position == "bottom"
+    assert spec.options.legend.type == "plain"
+    assert spec.options.number_format.prefix == "≈"
+    assert spec.options.tooltip.mode == "rich"
+    assert spec.options.labels.threshold == 5
+
+
+def test_v2_options_default_empty() -> None:
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {"metric_refs": ["sales.total"]},
+            "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+        }
+    )
+    assert spec.options.legend.show is True
+    assert spec.options.tooltip.mode == "axis"
+    assert spec.options.labels.show is False
+    assert spec.options.type_options is None
+
+
+def test_v2_rejects_legacy_flat_options() -> None:
+    # Legacy flat fields are gone; Pydantic ignores unknown keys by default, so assert
+    # the model has no such attribute rather than expecting an error.
+    spec = ChartSpec.model_validate(
+        {
+            "type": "bar",
+            "query": {"metric_refs": ["sales.total"]},
+            "encoding": {"x": "sales.region", "series": [{"field": "sales.total"}]},
+            "options": {"stacked": True},
+        }
+    )
+    assert not hasattr(spec.options, "stacked")
 
 
 def test_invalid_palette_colour_is_rejected() -> None:

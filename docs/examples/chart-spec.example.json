@@ -1,5 +1,5 @@
 {
-  "version": "1",
+  "version": "2",
   "type": "bar",
   "query": {
     "dataset_id": "3f8c8b1e-7c2a-4e5d-9a1b-2c3d4e5f6a7b",
@@ -29,18 +29,14 @@
   },
   "options": {
     "title": "Monthly sales vs returns",
-    "stacked": false,
-    "percent": false,
-    "show_legend": true,
-    "legend_position": "top",
-    "x_axis_label": "Month",
-    "y_axis_label": "Amount",
-    "y_min": null,
-    "y_max": null,
-    "log_scale": false,
-    "data_labels": false,
+    "color_scheme": null,
+    "palette": [],
+    "legend": { "show": true, "position": "top", "type": "scroll", "margin": null, "sort": "none" },
+    "number_format": { "style": "plain", "decimals": null, "compact": false, "currency": null, "prefix": null, "suffix": null },
+    "date_format": null,
+    "labels": { "show": false, "position": null, "template": null, "threshold": null },
+    "tooltip": { "mode": "axis", "sort_by_metric": false, "show_total": false, "show_percentage": false, "time_format": null },
     "sort": "none",
-    "number_format": { "style": "plain", "decimals": null, "compact": false, "currency": null },
-    "palette": []
+    "type_options": null
   }
 }

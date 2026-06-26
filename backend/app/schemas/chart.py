@@ -34,7 +34,7 @@ from app.schemas.semantic import OrderDir, SemanticFilter, SemanticRef, Semantic
 
 # The current contract version. Bump when the shape changes in a breaking way so
 # stored specs and AI-emitted specs can be migrated rather than silently misread.
-CHART_SPEC_VERSION = "1"
+CHART_SPEC_VERSION = "2"
 
 # A reference to a column in a ``QueryResponse`` (or a semantic metric/dimension
 # name). Bounded and pattern-checked so a spec can't smuggle arbitrary text into a
@@ -157,30 +157,55 @@ class NumberFormat(BaseModel):
     compact: bool = False
     # Currency symbol/code for the ``currency`` style (e.g. "$", "€", "USD").
     currency: str | None = Field(default=None, max_length=8)
+    # Optional prefix/suffix rendered around the formatted value (e.g. "≈", " net").
+    prefix: str | None = Field(default=None, max_length=8)
+    suffix: str | None = Field(default=None, max_length=8)
+
+
+class LegendOptions(BaseModel):
+    show: bool = True
+    position: Literal["top", "bottom", "left", "right"] = "top"
+    type: Literal["scroll", "plain"] = "scroll"
+    margin: int | None = Field(default=None, ge=0, le=200)
+    sort: Literal["none", "asc", "desc"] = "none"
+
+
+class LabelOptions(BaseModel):
+    show: bool = False
+    position: str | None = None
+    template: str | None = Field(default=None, max_length=200)
+    threshold: float | None = Field(default=None, ge=0)
+
+
+class TooltipOptions(BaseModel):
+    mode: Literal["item", "axis", "rich"] = "axis"
+    sort_by_metric: bool = False
+    show_total: bool = False
+    show_percentage: bool = False
+    time_format: str | None = Field(default=None, max_length=64)
+
+
+# Placeholder so ChartOptions.type_options forward-ref resolves within this task.
+# Task 2 expands this with per-type family fields and calls model_rebuild().
+class TypeOptions(BaseModel):
+    pass
 
 
 class ChartOptions(BaseModel):
-    """Display-only options (#8). None of these affect the query or the data."""
+    """Display-only options (v2). Cross-type chrome here; per-type options in type_options."""
 
     title: str | None = None
-    stacked: bool = False
-    # 100%-stacked (proportions) — only meaningful with ``stacked``.
-    percent: bool = False
-    show_legend: bool = True
-    legend_position: Literal["top", "bottom", "left", "right"] = "top"
-    x_axis_label: str | None = None
-    y_axis_label: str | None = None
-    # Value-axis bounds + scale (None = auto).
-    y_min: float | None = None
-    y_max: float | None = None
-    log_scale: bool = False
-    # Render the value on each data point.
-    data_labels: bool = False
-    # Client-side sort of the plotted categories.
-    sort: Literal["none", "value_desc", "value_asc", "label_asc", "label_desc"] = "none"
-    number_format: NumberFormat = Field(default_factory=NumberFormat)
+    color_scheme: str | None = Field(default=None, max_length=64)
     # Optional palette overriding the theme's default colours.
     palette: list[HexColor] = Field(default_factory=list, max_length=24)
+    legend: LegendOptions = Field(default_factory=LegendOptions)
+    number_format: NumberFormat = Field(default_factory=NumberFormat)
+    date_format: str | None = Field(default=None, max_length=64)
+    labels: LabelOptions = Field(default_factory=LabelOptions)
+    tooltip: TooltipOptions = Field(default_factory=TooltipOptions)
+    # Client-side category reorder (distinct from query.order server sort).
+    sort: Literal["none", "value_desc", "value_asc", "label_asc", "label_desc"] = "none"
+    type_options: TypeOptions | None = None
 
 
 class ChartSpec(BaseModel):
