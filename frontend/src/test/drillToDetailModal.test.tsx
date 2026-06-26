@@ -96,4 +96,15 @@ describe("DrillToDetailModal", () => {
       values: ["east"],
     });
   });
+
+  it("excludes the breakdown dimension from the detail breakdown", () => {
+    const heatmapSpec: ChartSpec = {
+      type: "heatmap",
+      query: { metric_refs: ["regional_sales.total_amount"], dimensions: ["regional_sales.region"] },
+      encoding: { x: "regional_sales.region", series: [{ field: "regional_sales.total_amount" }], breakdown: ["regional_sales.product"] },
+    };
+    const req = buildDetailRequest(heatmapSpec, models, null, []);
+    expect(req?.dimensions).not.toContain("regional_sales.region");
+    expect(req?.dimensions).not.toContain("regional_sales.product");
+  });
 });

@@ -33,6 +33,7 @@ export function buildDetailRequest(
   if (!model || measures.length === 0) return null;
   const encoded = new Set<string>([
     ...(spec.query.dimensions ?? []),
+    ...(spec.encoding.breakdown ?? []),
     ...(spec.encoding.x ? [spec.encoding.x] : []),
   ]);
   const dimensions = model.dimensions.map((d) => d.name).filter((n) => !encoded.has(n));

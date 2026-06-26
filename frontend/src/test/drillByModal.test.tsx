@@ -131,4 +131,17 @@ describe("DrillByModal", () => {
       values: ["west"],
     });
   });
+
+  it("excludes both encoded dimensions for a heatmap (x and breakdown)", () => {
+    const heatmapSpec: ChartSpec = {
+      type: "heatmap",
+      query: { metric_refs: ["regional_sales.total_amount"], dimensions: ["regional_sales.region", "regional_sales.product"] },
+      encoding: { x: "regional_sales.region", series: [{ field: "regional_sales.total_amount" }], breakdown: ["regional_sales.product"] },
+    };
+    render(<DrillByModal open onOpenChange={vi.fn()} spec={heatmapSpec} tileFilters={[]} data={tileData} />);
+    const dim = screen.getByLabelText("Dimension");
+    // Neither encoded dimension is offered as a re-pivot target.
+    expect(within(dim).queryByRole("option", { name: "Region" })).not.toBeInTheDocument();
+    expect(within(dim).queryByRole("option", { name: "Product" })).not.toBeInTheDocument();
+  });
 });

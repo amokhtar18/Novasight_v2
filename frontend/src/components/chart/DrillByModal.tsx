@@ -64,11 +64,16 @@ export function DrillByModal({ open, onOpenChange, spec, tileFilters, data }: Pr
   const baseCube = cubeOf((spec.query.metric_refs ?? [])[0]);
   const baseX = spec.encoding.x;
 
-  // Other governed dimensions on the same cube (excluding the current x axis).
+  // Other governed dimensions on the same cube (excluding all encoded dims).
   const dimensionOptions = useMemo(() => {
     const model = (models ?? []).find((m) => m.name === baseCube);
-    return (model?.dimensions ?? []).filter((d) => d.name !== baseX);
-  }, [models, baseCube, baseX]);
+    const encoded = new Set<string>([
+      ...(baseX ? [baseX] : []),
+      ...(spec.encoding.breakdown ?? []),
+      ...(spec.query.dimensions ?? []),
+    ]);
+    return (model?.dimensions ?? []).filter((d) => !encoded.has(d.name));
+  }, [models, baseCube, baseX, spec.encoding.breakdown, spec.query.dimensions]);
 
   const [dimension, setDimension] = useState("");
   const [focus, setFocus] = useState(""); // "" = all points
