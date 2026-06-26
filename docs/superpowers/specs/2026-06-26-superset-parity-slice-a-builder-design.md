@@ -22,14 +22,17 @@ spec → plan → build cycle:
 | Slice | Theme | Status |
 |-------|-------|--------|
 | **A** | **Chart-builder (Explore) parity** — query shaping + chart actions | **this spec** |
-| B | Dashboard layout — free-resize tiles, nested rows/columns, tabs, header, fullscreen, auto-refresh | later |
+| A2 | Per-type formatting parity — Superset "Customize" panel | spec done |
 | C | Native filters — typed filter panel (value/time/numeric), per-tile scoping, cascading, drill-by/drill-to-detail | later |
+| B | Dashboard layout — free-resize tiles, nested rows/columns, tabs, header, fullscreen, auto-refresh | later |
 | D | More viz types & options — pivot table, big-number-with-trend, heatmap, box plot, conditional table formatting, color schemes, annotations | later |
 
 Sequence rationale: A introduces the **query-filter primitives** (time-range, value,
-numeric) at the query layer; C reuses them for dashboard-level native filters, so it
-becomes mostly UI + scoping. B is a structural layout refactor independent of
-filters. D is purely additive breadth.
+numeric) at the query layer; **A2** makes formatting type-aware (both A and A2 edit the
+builder configure panel, so they run back-to-back to minimise churn); C reuses A's
+primitives for dashboard-level native filters, so it becomes mostly UI + scoping; B is
+a structural layout refactor independent of filters; D is purely additive breadth.
+A2 is the program's single breaking-change checkpoint (`ChartSpec` v1 → v2).
 
 Deliberately **excluded from the whole program** (would violate golden rule #3):
 adhoc *SQL* metrics, raw-dataset/SQL-Lab access, any path that reaches ungoverned
