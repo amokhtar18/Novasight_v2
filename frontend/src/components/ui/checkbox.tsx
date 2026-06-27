@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
+import { focusRing } from "@/components/ui/_shared";
 
 export type CheckboxProps = React.InputHTMLAttributes<HTMLInputElement>;
 
@@ -15,7 +16,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       type="checkbox"
       className={cn(
         "h-4 w-4 shrink-0 cursor-pointer rounded border-input accent-primary",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        focusRing,
         "disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}

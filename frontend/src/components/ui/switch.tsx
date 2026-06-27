@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { focusRing } from "@/components/ui/_shared";
 
 interface SwitchProps {
   checked: boolean;
@@ -27,7 +28,8 @@ export function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50",
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
+        focusRing,
         checked ? "bg-primary" : "bg-input",
         className
       )}
