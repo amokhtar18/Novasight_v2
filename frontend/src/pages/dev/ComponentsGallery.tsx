@@ -59,8 +59,8 @@ export function ComponentsGallery() {
           Component Gallery
         </h1>
         <p className="text-muted-foreground">
-          Slice 1 — core control set. Toggle the app theme (Settings) to inspect
-          light and dark.
+          Slices 1 + 2 — hardened control set. Toggle the app theme (Settings) to
+          inspect light and dark.
         </p>
       </header>
 
