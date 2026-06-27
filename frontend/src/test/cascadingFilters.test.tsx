@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { DashboardFilterDrawer } from "@/components/dashboard/DashboardFilterDrawer";
+import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
 import type { NativeFilter } from "@/types/api";
 
 const calls: unknown[] = [];
@@ -22,7 +22,7 @@ describe("cascading", () => {
     const qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
-        <DashboardFilterDrawer
+        <DashboardFilterBar
           filters={filters}
           selections={{ country: { kind: "value", values: ["US"] }, city: { kind: "value", values: [] } }}
           onSelectionChange={() => {}} onClearAll={() => {}} editing={false}
