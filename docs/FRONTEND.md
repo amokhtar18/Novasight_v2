@@ -271,6 +271,11 @@ The core controls share one contract, backed by tokens in `src/index.css`:
 - **Checkboxes:** the chart-format panels and the pipeline/schedule wizards use
   the hardened `Checkbox` (themed `accent-primary` + shared ring) — no more bare
   browser-native checkboxes (slice 4).
+- **Layout stacking + elevation:** the sticky topbar, mobile sidebar overlay,
+  skip-nav, and the chart/tile popovers use the `--z-*` / `--elevation-*` tokens
+  (one global order: dropdown < sticky < overlay < modal < popover < toast),
+  rather than hardcoded `z-30`/`z-50`/`shadow-md` (slice 5). Visual layering is
+  validated by a manual browser smoke — jsdom can't test stacking.
 
 New composite layers live in `src/components/molecules/` and
 `src/components/organisms/` (atoms stay in `src/components/ui/`).
