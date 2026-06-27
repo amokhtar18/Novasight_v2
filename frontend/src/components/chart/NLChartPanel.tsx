@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type { NLChartResponse } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -130,7 +131,7 @@ export function NLChartPanel({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor="nl-chart-prompt">Chart description</Label>
-            <textarea
+            <Textarea
               id="nl-chart-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -139,7 +140,7 @@ export function NLChartPanel({
               rows={3}
               disabled={isPending}
               aria-describedby="nl-chart-hint"
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 resize-none"
+              className="resize-none"
             />
             <span
               id="nl-chart-hint"

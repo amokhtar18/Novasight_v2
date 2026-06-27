@@ -330,3 +330,16 @@ describe("NLChartPanel — input validation", () => {
     ).not.toBeDisabled();
   });
 });
+
+describe("NLChartPanel — hardened textarea", () => {
+  it("uses the shared Textarea primitive (focus ring + resize-none)", () => {
+    mockUseNLChart.mockReturnValue(
+      // @ts-expect-error: partial mock
+      makeMutationReturn({})
+    );
+    render(<NLChartPanel />);
+    const textarea = screen.getByRole("textbox", { name: /chart description/i });
+    expect(textarea).toHaveClass("focus-visible:ring-offset-2");
+    expect(textarea).toHaveClass("resize-none");
+  });
+});
