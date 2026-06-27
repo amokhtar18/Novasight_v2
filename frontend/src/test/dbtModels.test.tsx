@@ -183,6 +183,14 @@ describe("DbtModels wizard", () => {
     expect(runMutate).toHaveBeenCalledWith("m1", expect.any(Object));
   });
 
+  it("uses the shared Textarea primitive for the SQL field (mono + focus ring)", () => {
+    render(<DbtModels />);
+    fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);
+    const sql = document.querySelector("#dm-sql")!;
+    expect(sql).toHaveClass("focus-visible:ring-offset-2");
+    expect(sql).toHaveClass("font-mono");
+  });
+
   it("includes incremental settings when materialization is incremental", async () => {
     render(<DbtModels />);
     fireEvent.click(screen.getAllByRole("button", { name: /new model/i })[0]);

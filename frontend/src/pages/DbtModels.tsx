@@ -34,6 +34,7 @@ import { LineageView } from "@/components/dbt/LineageView";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -403,13 +404,13 @@ export function DbtModels() {
 
           <div className="space-y-1.5">
             <Label htmlFor="dm-sql">SQL</Label>
-            <textarea
+            <Textarea
               id="dm-sql"
               value={sql}
               onChange={(e) => setSql(e.target.value)}
               rows={6}
               placeholder="select region, sum(amount) as total from {{ ref('stg_orders') }} group by 1"
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="font-mono"
             />
           </div>
 
