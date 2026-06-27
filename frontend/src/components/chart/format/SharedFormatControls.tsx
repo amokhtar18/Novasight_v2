@@ -14,6 +14,7 @@ import type { ChartOptions, ChartSort, LegendOptions, NumberFormat, LabelOptions
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { humanize } from "@/lib/format";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
 
@@ -129,9 +130,8 @@ export function SharedFormatControls({ options, setOptions }: Props) {
         <summary className="cursor-pointer text-sm font-medium">Legend</summary>
         <div className="mt-3 space-y-3">
           <div className="flex items-center gap-2">
-            <input
+            <Checkbox
               id="sf-legend-show"
-              type="checkbox"
               checked={legend.show !== false}
               onChange={(e) => setLegend({ show: e.target.checked })}
             />
@@ -264,9 +264,8 @@ export function SharedFormatControls({ options, setOptions }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <input
+            <Checkbox
               id="sf-nf-compact"
-              type="checkbox"
               checked={nf.compact ?? false}
               onChange={(e) => setNf({ compact: e.target.checked })}
             />
@@ -298,9 +297,8 @@ export function SharedFormatControls({ options, setOptions }: Props) {
         <summary className="cursor-pointer text-sm font-medium">Data labels</summary>
         <div className="mt-3 space-y-3">
           <div className="flex items-center gap-2">
-            <input
+            <Checkbox
               id="sf-labels-show"
-              type="checkbox"
               checked={labels.show ?? false}
               onChange={(e) => setLabels({ show: e.target.checked })}
             />
@@ -370,24 +368,21 @@ export function SharedFormatControls({ options, setOptions }: Props) {
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
             <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={tooltip.sort_by_metric ?? false}
                 onChange={(e) => setTooltip({ sort_by_metric: e.target.checked })}
               />
               Sort by metric
             </label>
             <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={tooltip.show_total ?? false}
                 onChange={(e) => setTooltip({ show_total: e.target.checked })}
               />
               Show total
             </label>
             <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={tooltip.show_percentage ?? false}
                 onChange={(e) => setTooltip({ show_percentage: e.target.checked })}
               />

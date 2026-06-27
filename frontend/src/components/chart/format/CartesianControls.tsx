@@ -11,6 +11,7 @@ import type { ChartOptions, CartesianOptions } from "@/types/api";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { humanize } from "@/lib/format";
 import { setFamily } from "./helpers";
 
@@ -165,72 +166,63 @@ export function CartesianControls({ options, setOptions }: Props) {
         {/* Checkboxes */}
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.stacked ?? false}
               onChange={(e) => set({ stacked: e.target.checked })}
             />
             Stacked
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.percent ?? false}
               onChange={(e) => set({ percent: e.target.checked })}
             />
             Percent
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.only_total ?? false}
               onChange={(e) => set({ only_total: e.target.checked })}
             />
             Only total
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.markers ?? false}
               onChange={(e) => set({ markers: e.target.checked })}
             />
             Markers
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.smooth ?? false}
               onChange={(e) => set({ smooth: e.target.checked })}
             />
             Smooth
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.log_scale ?? false}
               onChange={(e) => set({ log_scale: e.target.checked })}
             />
             Log scale
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.minor_ticks ?? false}
               onChange={(e) => set({ minor_ticks: e.target.checked })}
             />
             Minor ticks
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.minor_split_line ?? false}
               onChange={(e) => set({ minor_split_line: e.target.checked })}
             />
             Minor split line
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={co.data_zoom ?? false}
               onChange={(e) => set({ data_zoom: e.target.checked })}
             />

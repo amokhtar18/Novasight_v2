@@ -23,4 +23,10 @@ describe("FormatControls type-awareness", () => {
     expect(screen.getByText(/inner radius/i)).toBeInTheDocument();
     expect(screen.queryByText(/^stacked$/i)).not.toBeInTheDocument();
   });
+  it("renders the cartesian 'Stacked' toggle as the hardened Checkbox", () => {
+    render(<FormatControls options={base} setOptions={noop} chartType="bar" />);
+    expect(screen.getByRole("checkbox", { name: "Stacked" })).toHaveClass(
+      "accent-primary"
+    );
+  });
 });

@@ -13,6 +13,7 @@
 import type { ChartOptions, GaugeOptions } from "@/types/api";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { setFamily } from "./helpers";
 
 interface Props {
@@ -108,48 +109,42 @@ export function GaugeControls({ options, setOptions }: Props) {
         {/* Checkboxes */}
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={go.show_pointer ?? true}
               onChange={(e) => set({ show_pointer: e.target.checked })}
             />
             Show pointer
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={go.show_progress ?? false}
               onChange={(e) => set({ show_progress: e.target.checked })}
             />
             Show progress
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={go.round_cap ?? false}
               onChange={(e) => set({ round_cap: e.target.checked })}
             />
             Round cap
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={go.show_axis_tick ?? false}
               onChange={(e) => set({ show_axis_tick: e.target.checked })}
             />
             Show axis tick
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={go.show_split_line ?? false}
               onChange={(e) => set({ show_split_line: e.target.checked })}
             />
             Show split line
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={go.animation ?? true}
               onChange={(e) => set({ animation: e.target.checked })}
             />

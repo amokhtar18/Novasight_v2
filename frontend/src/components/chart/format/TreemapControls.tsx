@@ -8,6 +8,7 @@
 import type { ChartOptions, TreemapOptions } from "@/types/api";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { humanize } from "@/lib/format";
 import { setFamily } from "./helpers";
 
@@ -49,16 +50,14 @@ export function TreemapControls({ options, setOptions }: Props) {
 
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={to.show_labels ?? true}
               onChange={(e) => set({ show_labels: e.target.checked })}
             />
             Show labels
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={to.show_upper_labels ?? false}
               onChange={(e) => set({ show_upper_labels: e.target.checked })}
             />

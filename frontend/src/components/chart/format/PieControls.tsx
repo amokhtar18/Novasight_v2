@@ -10,6 +10,7 @@ import type { ChartOptions, PieOptions } from "@/types/api";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { humanize } from "@/lib/format";
 import { setFamily } from "./helpers";
 
@@ -124,24 +125,21 @@ export function PieControls({ options, setOptions }: Props) {
         {/* Checkboxes */}
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={po.labels_outside ?? false}
               onChange={(e) => set({ labels_outside: e.target.checked })}
             />
             Labels outside
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={po.label_line ?? false}
               onChange={(e) => set({ label_line: e.target.checked })}
             />
             Label line
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={po.show_total ?? false}
               onChange={(e) => set({ show_total: e.target.checked })}
             />
