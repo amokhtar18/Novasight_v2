@@ -27,17 +27,6 @@ vi.mock("@/api/hooks", () => ({
   useUpdateDashboardTile: vi.fn(() => ({ mutate: vi.fn() })),
   useDeleteDashboardTile: vi.fn(() => ({ mutate: vi.fn() })),
 }));
-vi.mock("@dnd-kit/sortable", () => ({
-  useSortable: () => ({
-    attributes: {},
-    listeners: {},
-    setNodeRef: vi.fn(),
-    transform: null,
-    transition: undefined,
-    isDragging: false,
-  }),
-}));
-vi.mock("@dnd-kit/utilities", () => ({ CSS: { Transform: { toString: () => "" } } }));
 vi.mock("@/components/chart/ChartRenderer", () => ({
   ChartRenderer: ({
     title,

@@ -14,6 +14,7 @@ import { loadConfig } from "@/lib/config";
 import { ThemeProvider } from "@/lib/theme";
 import { App } from "./App";
 import "./index.css";
+import "gridstack/dist/gridstack.css";
 
 // ---- Runtime config bootstrap -----------------------------------------------
 // loadConfig() throws if window.__APP_CONFIG__ is absent or malformed.

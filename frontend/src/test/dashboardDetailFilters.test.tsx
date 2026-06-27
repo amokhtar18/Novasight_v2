@@ -68,30 +68,15 @@ vi.mock("@/components/chart/ChartRenderer", () => ({
   ),
 }));
 
-// dnd-kit stubs — DashboardGrid uses these; they must not throw in JSDOM.
-vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  PointerSensor: class {},
-  KeyboardSensor: class {},
-  closestCenter: vi.fn(),
-  useSensor: vi.fn(),
-  useSensors: vi.fn(() => []),
+// gridstack stub — DashboardGrid initializes it; it must be inert in JSDOM.
+vi.mock("gridstack", () => ({
+  GridStack: {
+    init: () => ({
+      on: () => {}, off: () => {}, save: () => [], destroy: () => {},
+      enableMove: () => {}, enableResize: () => {}, update: () => {},
+    }),
+  },
 }));
-vi.mock("@dnd-kit/sortable", () => ({
-  SortableContext: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  arrayMove: vi.fn(),
-  rectSortingStrategy: vi.fn(),
-  sortableKeyboardCoordinates: vi.fn(),
-  useSortable: () => ({
-    attributes: {},
-    listeners: {},
-    setNodeRef: vi.fn(),
-    transform: null,
-    transition: undefined,
-    isDragging: false,
-  }),
-}));
-vi.mock("@dnd-kit/utilities", () => ({ CSS: { Transform: { toString: () => "" } } }));
 
 // ---------------------------------------------------------------------------
 // Helper

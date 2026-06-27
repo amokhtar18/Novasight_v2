@@ -12,8 +12,6 @@
  */
 
 import { useRef, useState } from "react";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
 
 import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/ChartRenderer";
@@ -22,31 +20,13 @@ import { DrillByModal } from "@/components/chart/DrillByModal";
 import { DrillToDetailModal } from "@/components/chart/DrillToDetailModal";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { useDeleteDashboardTile, useUpdateDashboardTile } from "@/api/hooks";
+import { useDeleteDashboardTile } from "@/api/hooks";
 import { useChartData } from "@/lib/useChartData";
 import { renderMarkdown } from "@/lib/markdown";
-import { cn } from "@/lib/cn";
 import { resolveTileFilters, cubeOf } from "@/lib/dashboardFilters";
 import type { FilterSelections } from "@/lib/dashboardFilters";
 import type { DashboardTileRead, NativeFilter, SemanticFilter, SelectionPair } from "@/types/api";
-
-type TileSize = "sm" | "md" | "lg";
-
-const SIZE_TO_W: Record<TileSize, number> = { sm: 3, md: 6, lg: 12 };
-
-function sizeFromW(w: number): TileSize {
-  if (w >= 12) return "lg";
-  if (w >= 6) return "md";
-  return "sm";
-}
-
-function spanForW(w: number): string {
-  if (w >= 12) return "lg:col-span-4";
-  if (w >= 6) return "lg:col-span-2";
-  return "lg:col-span-1";
-}
 
 const KIND_LABEL: Record<string, string> = {
   text: "Text",
@@ -77,41 +57,19 @@ export function DashboardCardTile({
   crossFilter = [],
   onCrossFilter,
 }: TileProps) {
-  const updateTile = useUpdateDashboardTile(dashboardId);
   const deleteTile = useDeleteDashboardTile(dashboardId);
-
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: tile.id,
-    disabled: !editing,
-  });
 
   const title =
     tile.title ?? (tile.kind === "chart" ? tile.chart?.name ?? "Chart" : KIND_LABEL[tile.kind] ?? "Tile");
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 20 : undefined,
-  };
-
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "flex flex-col rounded-xl border bg-card/70 p-4 shadow-sm",
-        spanForW(tile.w),
-        isDragging && "opacity-70 ring-2 ring-primary"
-      )}
-    >
+    <div className="flex h-full flex-col rounded-xl border bg-card/70 p-4 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
         {editing && (
           <button
             type="button"
-            className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+            className="tile-drag-handle cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
             aria-label={`Drag ${title}`}
-            {...attributes}
-            {...listeners}
           >
             <GripVertical className="h-4 w-4" />
           </button>
@@ -123,31 +81,14 @@ export function DashboardCardTile({
         )}
         {tile.kind === "divider" && <span className="flex-1" />}
         {editing && (
-          <>
-            <Select
-              aria-label={`Size of ${title}`}
-              value={sizeFromW(tile.w)}
-              onChange={(e) =>
-                updateTile.mutate({
-                  tileId: tile.id,
-                  patch: { w: SIZE_TO_W[e.target.value as TileSize] },
-                })
-              }
-              className="h-7 w-20 text-xs"
-            >
-              <option value="sm">Small</option>
-              <option value="md">Medium</option>
-              <option value="lg">Large</option>
-            </Select>
-            <button
-              type="button"
-              onClick={() => deleteTile.mutate(tile.id)}
-              aria-label={`Remove ${title}`}
-              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => deleteTile.mutate(tile.id)}
+            aria-label={`Remove ${title}`}
+            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         )}
       </div>
 
@@ -313,7 +254,7 @@ function ChartTileBody({
             spec={spec}
             data={data}
             title={title}
-            className="h-64"
+            className="h-full"
             onSelectPoints={editing ? undefined : onCrossFilter}
           />
         </div>
