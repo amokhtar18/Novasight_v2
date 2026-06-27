@@ -55,6 +55,16 @@ const Settings = lazy(() =>
   import("@/pages/Settings").then((m) => ({ default: m.Settings }))
 );
 
+// Dev-only component gallery. import.meta.env.DEV is statically false in prod
+// builds, so this branch (and its dynamic import) is tree-shaken out entirely.
+const ComponentsGallery = import.meta.env.DEV
+  ? lazy(() =>
+      import("@/pages/dev/ComponentsGallery").then((m) => ({
+        default: m.ComponentsGallery,
+      }))
+    )
+  : null;
+
 /** Gate: redirect unauthenticated visitors to /login, preserving their target. */
 function RequireAuth() {
   const authed = useAuthStore((s) => s.accessToken !== null);
@@ -106,6 +116,9 @@ export function App() {
           <Route path="dashboards/:dashboardId" element={<DashboardDetail />} />
           <Route path="admin" element={<Admin />} />
           <Route path="settings" element={<Settings />} />
+          {import.meta.env.DEV && ComponentsGallery && (
+            <Route path="dev/components" element={<ComponentsGallery />} />
+          )}
           <Route path="*" element={<NotFound />} />
         </Route>
       </Route>
