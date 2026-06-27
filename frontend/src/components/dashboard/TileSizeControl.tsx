@@ -63,7 +63,7 @@ export function TileSizeControl({
         type="button"
         aria-label={`Size of ${title}`}
         aria-expanded={open}
-        aria-haspopup="dialog"
+        aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}
         className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
