@@ -42,7 +42,7 @@ export function TopBar() {
   const logout = useLogout();
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/60 bg-background/70 px-3 backdrop-blur md:px-5">
+    <header className="sticky top-0 z-[var(--z-sticky)] flex h-14 items-center gap-2 border-b border-border/60 bg-background/70 px-3 backdrop-blur md:px-5">
       {/* Mobile nav trigger */}
       <button
         type="button"

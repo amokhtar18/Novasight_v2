@@ -418,7 +418,7 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
 
       <DragOverlay>
         {dragLabel ? (
-          <span className="rounded-md border bg-card px-2 py-1 text-xs shadow-lg">{dragLabel}</span>
+          <span className="rounded-md border bg-card px-2 py-1 text-xs shadow-[var(--elevation-3)]">{dragLabel}</span>
         ) : null}
       </DragOverlay>
     </DndContext>

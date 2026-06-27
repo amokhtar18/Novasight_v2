@@ -178,13 +178,13 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-[var(--z-overlay)] md:hidden">
           <div
             className="absolute inset-0 bg-background/70 backdrop-blur-sm"
             onClick={() => setMobileNav(false)}
             aria-hidden
           />
-          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col gap-4 border-r bg-card p-3 shadow-2xl animate-in-up">
+          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col gap-4 border-r bg-card p-3 shadow-[var(--elevation-4)] animate-in-up">
             <div className="flex items-center justify-between">
               <Brand collapsed={false} />
               <button
