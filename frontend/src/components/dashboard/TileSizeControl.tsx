@@ -30,6 +30,17 @@ export function TileSizeControl({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  const [draftW, setDraftW] = useState(w);
+  const [draftH, setDraftH] = useState(h);
+  const [lastW, setLastW] = useState(w);
+  const [lastH, setLastH] = useState(h);
+  if (lastW !== w) { setLastW(w); setDraftW(w); }
+  if (lastH !== h) { setLastH(h); setDraftH(h); }
+
+  function commit() {
+    onResize(clamp(Number(draftW)), clamp(Number(draftH)));
+  }
+
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -52,22 +63,29 @@ export function TileSizeControl({
         type="button"
         aria-label={`Size of ${title}`}
         aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
         className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <Maximize2 className="h-4 w-4" />
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-44 space-y-2 rounded-md border bg-popover p-3 text-popover-foreground shadow-md">
+        <div
+          role="group"
+          aria-label={`Resize ${title}`}
+          className="absolute right-0 z-20 mt-1 w-44 space-y-2 rounded-md border bg-popover p-3 text-popover-foreground shadow-md"
+        >
           <label className="flex items-center justify-between gap-2 text-xs">
             Width
             <input
               type="number"
               min={MIN}
               max={MAX}
-              value={w}
+              value={draftW}
               aria-label={`Width of ${title}`}
-              onChange={(e) => onResize(clamp(Number(e.target.value)), h)}
+              onChange={(e) => setDraftW(Number(e.target.value))}
+              onBlur={commit}
+              onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
               className="h-7 w-16 rounded border bg-transparent px-2 text-right text-sm"
             />
           </label>
@@ -77,9 +95,11 @@ export function TileSizeControl({
               type="number"
               min={MIN}
               max={MAX}
-              value={h}
+              value={draftH}
               aria-label={`Height of ${title}`}
-              onChange={(e) => onResize(w, clamp(Number(e.target.value)))}
+              onChange={(e) => setDraftH(Number(e.target.value))}
+              onBlur={commit}
+              onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
               className="h-7 w-16 rounded border bg-transparent px-2 text-right text-sm"
             />
           </label>
