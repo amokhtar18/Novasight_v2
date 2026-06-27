@@ -73,7 +73,7 @@ export function TileSizeControl({
         <div
           role="group"
           aria-label={`Resize ${title}`}
-          className="absolute right-0 z-20 mt-1 w-44 space-y-2 rounded-md border bg-popover p-3 text-popover-foreground shadow-md"
+          className="absolute right-0 z-[var(--z-dropdown)] mt-1 w-44 space-y-2 rounded-md border bg-popover p-3 text-popover-foreground shadow-[var(--elevation-2)]"
         >
           <label className="flex items-center justify-between gap-2 text-xs">
             Width

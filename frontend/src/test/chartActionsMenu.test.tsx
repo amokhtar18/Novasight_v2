@@ -73,4 +73,12 @@ describe("ChartActionsMenu", () => {
     fireEvent.mouseDown(within(menu).getByText(/view as table/i));
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
+
+  it("renders the menu with token-driven stacking + elevation", () => {
+    render(<ChartActionsMenu spec={specOfType("bar")} data={data} title="Sales" />);
+    fireEvent.click(screen.getByRole("button", { name: /chart actions/i }));
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveClass("z-[var(--z-dropdown)]");
+    expect(menu).toHaveClass("shadow-[var(--elevation-2)]");
+  });
 });

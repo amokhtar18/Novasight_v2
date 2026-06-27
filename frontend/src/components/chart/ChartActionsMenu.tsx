@@ -93,7 +93,7 @@ export function ChartActionsMenu({ spec, data, chartHandle, title = "chart", onD
           <div
             id={menuId}
             role="menu"
-            className="absolute right-0 z-30 mt-1 w-44 rounded-md border bg-popover p-1 shadow-md"
+            className="absolute right-0 z-[var(--z-dropdown)] mt-1 w-44 rounded-md border bg-popover p-1 shadow-[var(--elevation-2)]"
           >
             <MenuItem onClick={() => { setShowTable(true); setOpen(false); }}>View as table</MenuItem>
             <MenuItem onClick={() => { setShowQuery(true); setOpen(false); }}>View query</MenuItem>

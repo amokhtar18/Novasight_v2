@@ -37,4 +37,12 @@ describe("TileSizeControl", () => {
     fireEvent.blur(screen.getByLabelText("Width of Revenue"));
     expect(onResize).toHaveBeenCalledWith(12, 4);
   });
+
+  it("renders the panel with token-driven stacking + elevation", () => {
+    render(<TileSizeControl title="Revenue" w={6} h={4} onResize={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Size of Revenue" }));
+    const panel = screen.getByRole("group");
+    expect(panel).toHaveClass("z-[var(--z-dropdown)]");
+    expect(panel).toHaveClass("shadow-[var(--elevation-2)]");
+  });
 });
