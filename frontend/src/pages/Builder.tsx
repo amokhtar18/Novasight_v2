@@ -24,6 +24,7 @@ import { QueryControls } from "@/components/chart/QueryControls";
 import { SavedChartsList } from "@/components/chart/SavedChartsList";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -79,6 +80,10 @@ export function Builder() {
   const semantic = useSemanticBuilder();
 
   const [aiResult, setAiResult] = useState<NLChartResponse | null>(null);
+  // Which configuration tab is showing: the data shaping ("Query & Model") or
+  // the presentation controls ("Formatting"). All builder state lives in the
+  // useSemanticBuilder hook, so switching tabs never loses in-progress edits.
+  const [configTab, setConfigTab] = useState<"data" | "format">("data");
 
   return (
     <div className="animate-in-up">
@@ -94,12 +99,22 @@ export function Builder() {
               <SlidersHorizontal className="h-4 w-4" aria-hidden />
               Configure
             </CardTitle>
-            <CardDescription>Drag fields onto the shelves, then format the chart.</CardDescription>
+            <CardDescription>Shape the query and pick a model, then switch to Formatting to style the chart.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <SemanticQueryBuilder s={semantic} />
-            <QueryControls s={semantic} />
-            <FormatControls options={semantic.options} setOptions={semantic.setOptions} chartType={semantic.chartType} />
+          <CardContent>
+            <Tabs value={configTab} onValueChange={(v) => setConfigTab(v as "data" | "format")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="data">Query &amp; Model</TabsTrigger>
+                <TabsTrigger value="format">Formatting</TabsTrigger>
+              </TabsList>
+              <TabsContent value="data" className="space-y-4 pt-4">
+                <SemanticQueryBuilder s={semantic} />
+                <QueryControls s={semantic} />
+              </TabsContent>
+              <TabsContent value="format" className="pt-4">
+                <FormatControls options={semantic.options} setOptions={semantic.setOptions} chartType={semantic.chartType} />
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 

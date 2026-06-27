@@ -120,6 +120,21 @@ describe("Builder — semantic path (semantic-only, #8)", () => {
     expect(screen.getByRole("button", { name: /save chart/i })).toBeInTheDocument();
   });
 
+  it("splits configuration into Query & Model and Formatting tabs", () => {
+    renderBuilder();
+
+    // The data tab is active by default: model/query controls are visible and the
+    // formatting controls are not yet mounted.
+    expect(screen.getByLabelText(/^model$/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/chart title/i)).not.toBeInTheDocument();
+
+    // Switching to the Formatting tab reveals the format controls and unmounts the
+    // model/query controls.
+    fireEvent.click(screen.getByRole("tab", { name: /formatting/i }));
+    expect(screen.getByLabelText(/chart title/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^model$/i)).not.toBeInTheDocument();
+  });
+
   it("runs the semantic query with the selected measure + dimension", () => {
     renderBuilder();
     expect(mockSemanticQuery).toHaveBeenCalledWith(
