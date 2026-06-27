@@ -22,6 +22,7 @@ import { SaveChartButton } from "@/components/chart/SaveChartButton";
 import { BuilderDnd, FieldsPalette, Shelves, ChartTypeSelect } from "@/components/chart/SemanticQueryBuilder";
 import { QueryControls } from "@/components/chart/QueryControls";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
+import { SavedChartsDrawer } from "@/components/chart/builder/SavedChartsDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
@@ -83,6 +84,7 @@ export function Builder() {
       <PageHeader
         title="Chart builder"
         description="Drag governed fields onto the shelves to build a chart — or describe one in plain English — then format and save it."
+        actions={<SavedChartsDrawer onEdit={semantic.loadSpec} />}
       />
 
       <BuilderDnd s={semantic}>
