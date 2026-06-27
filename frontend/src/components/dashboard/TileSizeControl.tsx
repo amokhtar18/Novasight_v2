@@ -85,7 +85,7 @@ export function TileSizeControl({
               aria-label={`Width of ${title}`}
               onChange={(e) => setDraftW(Number(e.target.value))}
               onBlur={commit}
-              onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
               className="h-7 w-16 rounded border bg-transparent px-2 text-right text-sm"
             />
           </label>
@@ -99,7 +99,7 @@ export function TileSizeControl({
               aria-label={`Height of ${title}`}
               onChange={(e) => setDraftH(Number(e.target.value))}
               onBlur={commit}
-              onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
               className="h-7 w-16 rounded border bg-transparent px-2 text-right text-sm"
             />
           </label>
