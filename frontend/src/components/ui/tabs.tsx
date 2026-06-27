@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
+import { focusRing } from "@/components/ui/_shared";
 
 interface TabsContextValue {
   value: string;
@@ -40,7 +41,7 @@ export function TabsList({
     <div
       role="tablist"
       className={cn(
-        "inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-muted/60 p-1 text-muted-foreground",
+        "inline-flex h-[var(--control-h-md)] items-center justify-center gap-1 rounded-lg bg-muted/60 p-1 text-muted-foreground",
         className
       )}
       {...props}
@@ -64,9 +65,10 @@ export function TabsTrigger({ value, className, ...props }: TabsTriggerProps) {
       data-state={selected ? "active" : "inactive"}
       onClick={() => setValue(value)}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
+        focusRing,
         selected
-          ? "bg-card text-foreground shadow-sm"
+          ? "bg-card text-foreground shadow-[var(--elevation-1)]"
           : "text-muted-foreground hover:text-foreground",
         className
       )}
