@@ -18,6 +18,11 @@ describe("Card", () => {
     expect(screen.getByTestId("card")).toHaveClass("shadow-[var(--elevation-3)]");
   });
 
+  it("applies md elevation (elevation-2)", () => {
+    render(<Card data-testid="card" elevation="md">body</Card>);
+    expect(screen.getByTestId("card")).toHaveClass("shadow-[var(--elevation-2)]");
+  });
+
   it("renders no shadow when elevation=none", () => {
     render(
       <Card data-testid="card" elevation="none">
@@ -26,5 +31,6 @@ describe("Card", () => {
     );
     const el = screen.getByTestId("card");
     expect(el).not.toHaveClass("shadow-[var(--elevation-1)]");
+    expect(el.className).not.toMatch(/shadow-/);
   });
 });

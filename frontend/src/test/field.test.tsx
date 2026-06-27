@@ -46,4 +46,16 @@ describe("Field", () => {
     expect(screen.queryByText("We never share it")).not.toBeInTheDocument();
     expect(screen.getByText("Required")).toBeInTheDocument();
   });
+
+  it("links only the error (not the hint) when both are present", () => {
+    render(
+      <Field label="Email" hint="We never share it" error="Required">
+        <Input />
+      </Field>
+    );
+    const input = screen.getByLabelText("Email");
+    const describedBy = input.getAttribute("aria-describedby");
+    expect(screen.getByText("Required").id).toBe(describedBy);
+    expect(screen.queryByText("We never share it")).not.toBeInTheDocument();
+  });
 });

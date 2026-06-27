@@ -14,6 +14,11 @@ describe("Input", () => {
     expect(screen.getByLabelText("name")).toHaveClass("h-[var(--control-h-sm)]");
   });
 
+  it("applies the lg height when size=lg", () => {
+    render(<Input aria-label="name" size="lg" />);
+    expect(screen.getByLabelText("name")).toHaveClass("h-[var(--control-h-lg)]");
+  });
+
   it("sets aria-invalid when invalid", () => {
     render(<Input aria-label="name" invalid />);
     expect(screen.getByLabelText("name")).toHaveAttribute("aria-invalid", "true");

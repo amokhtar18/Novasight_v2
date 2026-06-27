@@ -22,6 +22,16 @@ describe("Select", () => {
     expect(screen.getByLabelText("pick")).toHaveClass("h-[var(--control-h-md)]");
   });
 
+  it("applies the sm height when size=sm", () => {
+    render(<Select aria-label="pick" size="sm" defaultValue="a">{options()}</Select>);
+    expect(screen.getByLabelText("pick")).toHaveClass("h-[var(--control-h-sm)]");
+  });
+
+  it("applies the lg height when size=lg", () => {
+    render(<Select aria-label="pick" size="lg" defaultValue="a">{options()}</Select>);
+    expect(screen.getByLabelText("pick")).toHaveClass("h-[var(--control-h-lg)]");
+  });
+
   it("sets aria-invalid when invalid", () => {
     render(
       <Select aria-label="pick" invalid defaultValue="a">

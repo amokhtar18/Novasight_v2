@@ -37,4 +37,20 @@ describe("Button", () => {
     await user.click(screen.getByRole("button"));
     expect(clicks).toBe(0);
   });
+
+  it("renders as a child element when asChild is set (no spinner injected)", () => {
+    render(
+      <Button asChild>
+        <a href="/x">link</a>
+      </Button>
+    );
+    const link = screen.getByRole("link", { name: "link" });
+    expect(link).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("uses a custom loadingLabel for the spinner", () => {
+    render(<Button loading loadingLabel="Saving…">Save</Button>);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-label", "Saving…");
+  });
 });

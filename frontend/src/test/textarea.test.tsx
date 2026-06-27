@@ -15,6 +15,11 @@ describe("Textarea", () => {
     expect(screen.getByLabelText("notes")).toHaveAttribute("aria-invalid", "true");
   });
 
+  it("omits aria-invalid when not invalid", () => {
+    render(<Textarea aria-label="notes" />);
+    expect(screen.getByLabelText("notes")).not.toHaveAttribute("aria-invalid");
+  });
+
   it("accepts typed input", async () => {
     const user = userEvent.setup();
     render(<Textarea aria-label="notes" />);
