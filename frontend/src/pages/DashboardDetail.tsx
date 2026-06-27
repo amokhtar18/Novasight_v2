@@ -24,6 +24,7 @@ import { DashboardFilterDrawer } from "@/components/dashboard/DashboardFilterDra
 import { NativeFilterEditor } from "@/components/dashboard/NativeFilterEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -356,13 +357,12 @@ function AddObjectDialog({
         {(kind === "text" || kind === "markdown") && (
           <div className="space-y-1.5">
             <Label htmlFor="ao-text">{kind === "markdown" ? "Markdown" : "Text"}</Label>
-            <textarea
+            <Textarea
               id="ao-text"
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={5}
               placeholder={kind === "markdown" ? "## Heading\n**bold** text" : "Your note…"}
-              className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
         )}
