@@ -13,6 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/molecules/Field";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Size = "sm" | "md" | "lg";
 const SIZES: Size[] = ["sm", "md", "lg"];
@@ -45,6 +50,8 @@ function Section({
 }
 
 export function ComponentsGallery() {
+  const [on, setOn] = React.useState(false);
+  const [tab, setTab] = React.useState("a");
   return (
     <div className="mx-auto max-w-5xl space-y-10 py-10">
       <header className="space-y-1">
@@ -131,6 +138,45 @@ export function ComponentsGallery() {
             <Textarea placeholder="Optional notes" />
           </Field>
         </div>
+      </Section>
+
+      <Section title="Switch">
+        <Switch checked={on} onCheckedChange={setOn} aria-label="demo switch" />
+        <Switch checked={false} onCheckedChange={() => {}} disabled aria-label="disabled switch" />
+      </Section>
+
+      <Section title="Checkbox">
+        <Checkbox aria-label="unchecked" />
+        <Checkbox aria-label="checked" defaultChecked />
+        <Checkbox aria-label="disabled" disabled />
+      </Section>
+
+      <Section title="Badge">
+        {(["default", "secondary", "outline", "success", "warning", "danger", "info"] as const).map(
+          (variant) => (
+            <Badge key={variant} variant={variant}>
+              {variant}
+            </Badge>
+          )
+        )}
+      </Section>
+
+      <Section title="Tabs">
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="a">Overview</TabsTrigger>
+            <TabsTrigger value="b">Details</TabsTrigger>
+          </TabsList>
+          <TabsContent value="a">Overview panel</TabsContent>
+          <TabsContent value="b">Details panel</TabsContent>
+        </Tabs>
+      </Section>
+
+      <Section title="Dropdown">
+        <DropdownMenu trigger={<Button variant="outline">Open menu</Button>} label="Demo menu">
+          <DropdownItem>First action</DropdownItem>
+          <DropdownItem>Second action</DropdownItem>
+        </DropdownMenu>
       </Section>
     </div>
   );

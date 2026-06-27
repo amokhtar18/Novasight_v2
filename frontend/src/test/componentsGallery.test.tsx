@@ -20,4 +20,13 @@ describe("ComponentsGallery", () => {
       .filter((b) => b.getAttribute("aria-busy") === "true");
     expect(busy.length).toBeGreaterThan(0);
   });
+
+  it("renders the rolled-out primitive sections", () => {
+    render(<ComponentsGallery />);
+    for (const name of ["Switch", "Tabs", "Dropdown", "Badge", "Checkbox"]) {
+      expect(
+        screen.getByRole("heading", { name: new RegExp(`^${name}$`, "i") })
+      ).toBeInTheDocument();
+    }
+  });
 });
