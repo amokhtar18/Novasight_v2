@@ -350,59 +350,80 @@ export function Shelves({ s }: { s: SemanticBuilder }) {
 
   return (
     <>
-      {/* Shelves. */}
-      <Shelf id="x" label="X-axis" hint="Drop one dimension" empty={!s.xDim}>
-        {s.xDim && (
-          <PlacedChip label={fieldTitle(dims, s.xDim)} onRemove={() => s.setXDim("")} />
-        )}
-      </Shelf>
-
-      {s.isTimeX && (
+      {/* Shelves — responsive horizontal pills bar. */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="space-y-1.5">
-          <Label htmlFor="b-sem-gran">Granularity</Label>
-          <Select
-            id="b-sem-gran"
-            value={s.granularity}
-            onChange={(e) => s.setGranularity(e.target.value as (typeof GRANULARITIES)[number])}
-          >
-            {GRANULARITIES.map((g) => (
-              <option key={g} value={g}>
-                {humanize(g)}
-              </option>
-            ))}
-          </Select>
+          <Shelf id="x" label="X-axis" hint="Drop one dimension" empty={!s.xDim}>
+            {s.xDim && (
+              <PlacedChip label={fieldTitle(dims, s.xDim)} onRemove={() => s.setXDim("")} />
+            )}
+          </Shelf>
+          {s.isTimeX && (
+            <div className="space-y-1.5">
+              <Label htmlFor="b-sem-gran">Granularity</Label>
+              <Select
+                id="b-sem-gran"
+                value={s.granularity}
+                onChange={(e) => s.setGranularity(e.target.value as (typeof GRANULARITIES)[number])}
+              >
+                {GRANULARITIES.map((g) => (
+                  <option key={g} value={g}>
+                    {humanize(g)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
         </div>
-      )}
 
-      <Shelf
-        id="breakdown"
-        label="Breakdown (series)"
-        hint="Drop dimensions to split into series"
-        empty={s.breakdown.length === 0}
-      >
-        {s.breakdown.map((b) => (
-          <PlacedChip
-            key={b}
-            label={fieldTitle(dims, b)}
-            onRemove={() => s.removeBreakdown(b)}
-          />
-        ))}
-      </Shelf>
+        <Shelf
+          id="breakdown"
+          label="Breakdown (series)"
+          hint="Drop dimensions to split into series"
+          empty={s.breakdown.length === 0}
+        >
+          {s.breakdown.map((b) => (
+            <PlacedChip
+              key={b}
+              label={fieldTitle(dims, b)}
+              onRemove={() => s.removeBreakdown(b)}
+            />
+          ))}
+        </Shelf>
 
-      <Shelf
-        id="metrics"
-        label="Metrics"
-        hint="Drop one or more measures"
-        empty={s.measures.length === 0}
-      >
-        {s.measures.map((m) => (
-          <PlacedChip
-            key={m}
-            label={fieldTitle(measures, m)}
-            onRemove={() => s.removeMeasure(m)}
-          />
-        ))}
-      </Shelf>
+        <Shelf
+          id="metrics"
+          label="Metrics"
+          hint="Drop one or more measures"
+          empty={s.measures.length === 0}
+        >
+          {s.measures.map((m) => (
+            <PlacedChip
+              key={m}
+              label={fieldTitle(measures, m)}
+              onRemove={() => s.removeMeasure(m)}
+            />
+          ))}
+        </Shelf>
+
+        <Shelf
+          id="filters"
+          label="Filters"
+          hint="Drop a field to filter on it"
+          empty={s.filters.length === 0}
+        >
+          {s.filters.map((f) => (
+            <FilterRow
+              key={f.member}
+              filter={f}
+              onChange={(next) =>
+                s.setFilters(s.filters.map((x) => (x.member === f.member ? next : x)))
+              }
+              onRemove={() => s.setFilters(s.filters.filter((x) => x.member !== f.member))}
+            />
+          ))}
+        </Shelf>
+      </div>
 
       {s.breakdown.length > 0 && s.measures.length > 1 && (
         <p className="text-[0.7rem] text-muted-foreground">
@@ -410,24 +431,6 @@ export function Shelves({ s }: { s: SemanticBuilder }) {
           plotted as series.
         </p>
       )}
-
-      <Shelf
-        id="filters"
-        label="Filters"
-        hint="Drop a field to filter on it"
-        empty={s.filters.length === 0}
-      >
-        {s.filters.map((f) => (
-          <FilterRow
-            key={f.member}
-            filter={f}
-            onChange={(next) =>
-              s.setFilters(s.filters.map((x) => (x.member === f.member ? next : x)))
-            }
-            onRemove={() => s.setFilters(s.filters.filter((x) => x.member !== f.member))}
-          />
-        ))}
-      </Shelf>
     </>
   );
 }

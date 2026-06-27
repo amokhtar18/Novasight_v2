@@ -311,7 +311,7 @@ function SemanticPreview({ s }: { s: SemanticBuilder }) {
   const chartHandle = useRef<ChartRendererHandle>(null);
 
   return (
-    <Card className="bg-card/70">
+    <Card className="bg-card/70" elevation="md">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base">Preview</CardTitle>
         {s.ready && hasData && (
@@ -357,7 +357,7 @@ function SemanticPreview({ s }: { s: SemanticBuilder }) {
             spec={s.spec}
             data={data}
             title={s.spec.options?.title ?? undefined}
-            className="h-80"
+            className="h-[420px]"
           />
         ) : (
           <EmptyState
