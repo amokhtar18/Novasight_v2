@@ -25,6 +25,7 @@ import { ChartRenderer } from "@/components/chart/ChartRenderer";
 import { SaveChartButton } from "@/components/chart/SaveChartButton";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -205,13 +206,12 @@ export function Assistant() {
           send(input);
         }}
       >
-        <input
+        <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask, chart, or summarize…"
           aria-label="Message"
           maxLength={2000}
-          className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
         <Button type="submit" disabled={!input.trim() || assistant.isPending}>
           <Send className="h-4 w-4" aria-hidden />

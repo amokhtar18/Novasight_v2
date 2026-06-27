@@ -98,4 +98,10 @@ describe("Assistant page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Chart total amount by region." }));
     expect(screen.getByRole("button", { name: /build dashboard \(1\)/i })).toBeInTheDocument();
   });
+
+  it("uses the shared Input primitive for the message box", () => {
+    renderAssistant();
+    const message = screen.getByRole("textbox", { name: "Message" });
+    expect(message).toHaveClass("focus-visible:ring-offset-2");
+  });
 });
