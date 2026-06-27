@@ -237,10 +237,40 @@ enforced by the backend — the client decode only affects what the UI *shows*.
 - `ThemeProvider` (`src/lib/theme.tsx`) is **dark-first**: it defaults to dark,
   persists the choice in `localStorage`, and follows the OS in "system" mode.
 - UI primitives in `src/components/ui/` are hand-rolled shadcn-style components
-  (button, card, alert, badge, input, select, switch, tabs, dialog,
+  (button, card, alert, badge, input, textarea, select, switch, tabs, dialog,
   dropdown-menu, skeleton, spinner, separator, empty-state).
 - The brand is the infinity/Möbius mark (`src/components/BrandMark.tsx`, themed
   via a gradient) and the matching favicon.
+
+### Control contract (core primitives)
+
+The core controls share one contract, backed by tokens in `src/index.css`:
+
+- **Sizes:** `Button`, `Input`, `Select` take `size="sm" | "md" | "lg"` (default
+  `md` = `--control-h-md`, 2.25rem / h-9). Heights come from the `--control-h-*`
+  tokens via `src/components/ui/_shared.ts` (`controlHeight`), so buttons and
+  inputs always align.
+- **Focus:** every control uses the shared `focusRing` class (`_shared.ts`) — one
+  focus-visible ring everywhere.
+- **Invalid:** `Input`, `Select`, `Textarea` accept `invalid` (sets `aria-invalid`
+  + a destructive ring).
+- **Loading:** `Button` accepts `loading` (spinner overlay + `aria-busy` +
+  disabled, with zero layout shift — the label stays laid out).
+- **Elevation:** `Card` accepts `elevation="none" | "sm" | "md" | "lg"` (default
+  `sm` = `--elevation-1`); shadows are theme-aware.
+- **Field molecule:** `src/components/molecules/Field.tsx` composes
+  label + control + hint/error and auto-wires `htmlFor`/`id`/`aria-describedby`/
+  `aria-invalid`. Pass exactly one control as the child.
+
+New composite layers live in `src/components/molecules/` and
+`src/components/organisms/` (atoms stay in `src/components/ui/`).
+
+### Component gallery (dev only)
+
+`/dev/components` renders every core primitive across its variants and states in
+the live theme. It is registered only when `import.meta.env.DEV` and lazy-loaded,
+so it never ships in production. Use it as the visual-regression surface when
+changing a primitive.
 
 ## Dashboards (server-persisted)
 
