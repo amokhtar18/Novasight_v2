@@ -19,12 +19,10 @@ import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/Char
 import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import { NLChartPanel } from "@/components/chart/NLChartPanel";
 import { SaveChartButton } from "@/components/chart/SaveChartButton";
-import { SemanticQueryBuilder } from "@/components/chart/SemanticQueryBuilder";
+import { BuilderDnd, FieldsPalette, Shelves, ChartTypeSelect } from "@/components/chart/SemanticQueryBuilder";
 import { QueryControls } from "@/components/chart/QueryControls";
-import { SavedChartsList } from "@/components/chart/SavedChartsList";
 import { AddToDashboard } from "@/components/dashboard/AddToDashboard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -78,70 +76,61 @@ const NO_X_TYPES: ChartType[] = ["table", "number", "gauge"];
 
 export function Builder() {
   const semantic = useSemanticBuilder();
-
   const [aiResult, setAiResult] = useState<NLChartResponse | null>(null);
-  // Which configuration tab is showing: the data shaping ("Query & Model") or
-  // the presentation controls ("Formatting"). All builder state lives in the
-  // useSemanticBuilder hook, so switching tabs never loses in-progress edits.
-  const [configTab, setConfigTab] = useState<"data" | "format">("data");
 
   return (
     <div className="animate-in-up">
       <PageHeader
         title="Chart builder"
-        description="Drag governed dimensions and measures onto the shelves to build a chart — add a breakdown to split it into series — or describe one in plain English. Format it, then save the result."
+        description="Drag governed fields onto the shelves to build a chart — or describe one in plain English — then format and save it."
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
-        <Card className="bg-card/70 lg:sticky lg:top-20 lg:self-start">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <SlidersHorizontal className="h-4 w-4" aria-hidden />
-              Configure
-            </CardTitle>
-            <CardDescription>Shape the query and pick a model, then switch to Formatting to style the chart.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={configTab} onValueChange={(v) => setConfigTab(v as "data" | "format")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="data">Query &amp; Model</TabsTrigger>
-                <TabsTrigger value="format">Formatting</TabsTrigger>
-              </TabsList>
-              <TabsContent value="data" className="space-y-4 pt-4">
-                <SemanticQueryBuilder s={semantic} />
-                <QueryControls s={semantic} />
-              </TabsContent>
-              <TabsContent value="format" className="pt-4">
-                <FormatControls options={semantic.options} setOptions={semantic.setOptions} chartType={semantic.chartType} />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+      <BuilderDnd s={semantic}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr_220px]">
+          {/* LEFT — Fields */}
+          <Card className="bg-card/70 lg:sticky lg:top-20 lg:self-start" elevation="sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Layers className="h-4 w-4" aria-hidden /> Fields
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FieldsPalette s={semantic} />
+            </CardContent>
+          </Card>
 
-        <div className="space-y-6">
-          <SemanticPreview s={semantic} />
+          {/* CENTER — shelves + preview + AI */}
+          <div className="space-y-4">
+            <Card className="bg-card/70" elevation="sm">
+              <CardContent className="pt-6">
+                <Shelves s={semantic} />
+              </CardContent>
+            </Card>
+            <SemanticPreview s={semantic} />
+            <NLChartPanel onResult={setAiResult} />
+            {aiResult && (
+              <div className="flex flex-wrap justify-end gap-2">
+                <SaveChartButton spec={aiResult.spec} defaultName={aiResult.spec.options?.title ?? "AI chart"} sourceKind="semantic" />
+                <AddToDashboard spec={aiResult.spec} title={aiResult.spec.options?.title ?? "AI chart"} data={aiResult.data} />
+              </div>
+            )}
+          </div>
 
-          {/* AI path */}
-          <NLChartPanel onResult={setAiResult} />
-          {aiResult && (
-            <div className="flex flex-wrap justify-end gap-2">
-              <SaveChartButton
-                spec={aiResult.spec}
-                defaultName={aiResult.spec.options?.title ?? "AI chart"}
-                sourceKind="semantic"
-              />
-              <AddToDashboard
-                spec={aiResult.spec}
-                title={aiResult.spec.options?.title ?? "AI chart"}
-                data={aiResult.data}
-              />
-            </div>
-          )}
-
-          {/* Saved charts — a list (not tiles) you can load back into the builder. */}
-          <SavedChartsList onEdit={semantic.loadSpec} />
+          {/* RIGHT — type + format + query */}
+          <Card className="bg-card/70 lg:sticky lg:top-20 lg:self-start" elevation="sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <SlidersHorizontal className="h-4 w-4" aria-hidden /> Chart
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ChartTypeSelect s={semantic} />
+              <FormatControls options={semantic.options} setOptions={semantic.setOptions} chartType={semantic.chartType} />
+              <QueryControls s={semantic} />
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </BuilderDnd>
     </div>
   );
 }
