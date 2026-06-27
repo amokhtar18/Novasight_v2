@@ -18,7 +18,6 @@ import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/Char
 import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import { DrillByModal } from "@/components/chart/DrillByModal";
 import { DrillToDetailModal } from "@/components/chart/DrillToDetailModal";
-import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { useDeleteDashboardTile } from "@/api/hooks";
@@ -65,7 +64,7 @@ export function DashboardCardTile({
     tile.title ?? (tile.kind === "chart" ? tile.chart?.name ?? "Chart" : KIND_LABEL[tile.kind] ?? "Tile");
 
   return (
-    <div className="flex h-full flex-col rounded-xl border bg-card/70 p-4 shadow-sm">
+    <div className="group/tile flex h-full flex-col rounded-xl border bg-card/70 p-4 shadow-[var(--elevation-1)] transition-shadow hover:shadow-[var(--elevation-3)]">
       <div className="mb-2 flex items-center gap-2">
         {editing && (
           <button
@@ -245,9 +244,7 @@ function ChartTileBody({
         </Badge>
       )}
       {isLoading ? (
-        <div className="flex h-56 items-center justify-center">
-          <Spinner label="Loading chart" />
-        </div>
+        <div className="h-56 w-full animate-pulse rounded-md bg-muted/50" />
       ) : data && data.row_count > 0 ? (
         <div className="relative h-full">
           {!editing && (

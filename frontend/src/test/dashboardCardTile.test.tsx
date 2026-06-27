@@ -216,4 +216,11 @@ describe("DashboardCardTile", () => {
     expect(mockUseChartData).toHaveBeenCalledWith(spec, undefined, undefined);
     expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
   });
+
+  it("uses the elevation-token chrome (not a flat shadow-sm)", () => {
+    render(<DashboardCardTile tile={tile} dashboardId="dash-1" editing={false} />);
+    const heading = screen.getByText(/region totals/i);
+    const wrapper = heading.closest("div.flex.h-full");
+    expect(wrapper?.className).toMatch(/shadow-\[var\(--elevation-1\)\]/);
+  });
 });
