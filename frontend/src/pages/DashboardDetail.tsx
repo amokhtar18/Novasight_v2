@@ -197,7 +197,7 @@ export function DashboardDetail() {
 
       {editing && (
         <Badge variant="info" className="mb-4">
-          Drag tiles to reorder · resize or remove with the tile controls
+          Drag tiles to move · drag a tile's edge to resize · use the size control or remove
         </Badge>
       )}
 

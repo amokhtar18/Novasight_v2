@@ -211,3 +211,25 @@ Heatmap and sankey participate in cross-filtering: clicking a **heatmap cell** e
 filters (its x value AND its y value); clicking a **sankey node** emits one filter on that
 node's dimension. As with other charts, a cross-filter only applies to tiles whose cube
 contains the filtered member. Only the most recently clicked chart's filter(s) form the cross-filter overlay — clicking a new point (or cell) replaces any prior overlay rather than accumulating across charts.
+
+## Dashboard layout (free resizable grid)
+
+Dashboards render on a **12-column gridstack grid**. Each tile stores its placement as
+`x`, `y`, `w`, `h` (grid units, `w`/`h` ∈ [1,12]) — the same fields the
+`PUT /dashboards/{id}/layout` endpoint persists; this slice added no backend change.
+
+- **View mode** renders tiles static at their stored `x/y/w/h`.
+- **Edit mode** enables drag-to-move (from the tile's grip handle) and drag-to-resize.
+  A keyboard-accessible **Size** control on each tile sets width/height for users who
+  cannot drag; full keyboard *drag* is a known gridstack limitation.
+- **Persistence:** gridstack's `change` event maps to `{ id, x, y, w, h }` plus a
+  row-major `position` (top-to-bottom, then left-to-right), applied optimistically and
+  saved via the layout endpoint (debounced).
+- **Responsive:** one 12-column layout is persisted; below ~768px the grid collapses
+  toward a single column. That collapsed arrangement is not written back.
+- **Integration:** gridstack lives entirely inside `DashboardGrid`; tile content
+  (`DashboardCardTile`: charts, drill, cross-filter) is ordinary React. The mapping
+  lives in `frontend/src/lib/dashboardLayout.ts` (`nodesToLayoutTiles`).
+
+Not yet supported (follow-ups): tabs, nested row/column containers, per-tile styling,
+fullscreen, per-breakpoint persisted layouts.
