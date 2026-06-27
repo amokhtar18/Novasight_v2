@@ -32,6 +32,7 @@ import { GripVertical, Hash, Ruler, Tag, X } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { humanize } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { ChartType, SemanticField, SemanticFilter, SemanticFilterOperator } from "@/types/api";
@@ -260,7 +261,7 @@ export function BuilderDnd({ s, children }: { s: SemanticBuilder; children: Reac
 // ---------------------------------------------------------------------------
 
 export function FieldsPalette({ s }: { s: SemanticBuilder }) {
-  if (s.modelsLoading) return null;
+  if (s.modelsLoading) return <Spinner label="Loading fields" />;
   if (!s.models || s.models.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -462,31 +463,6 @@ export function ChartTypeSelect({ s }: { s: SemanticBuilder }) {
         </p>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SemanticQueryBuilder — compat thin wrapper (removed in Task 2)
-// ---------------------------------------------------------------------------
-
-export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
-  if (s.modelsLoading) return null;
-  if (!s.models || s.models.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No semantic models are available yet. Create one over a data mart, then come back
-        to build a chart on it.
-      </p>
-    );
-  }
-  return (
-    <BuilderDnd s={s}>
-      <div className="space-y-4">
-        <FieldsPalette s={s} />
-        <Shelves s={s} />
-        <ChartTypeSelect s={s} />
-      </div>
-    </BuilderDnd>
   );
 }
 
