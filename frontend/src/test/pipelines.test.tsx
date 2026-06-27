@@ -283,6 +283,7 @@ describe("Pipelines page", () => {
 
     // Both columns introspected and included by default.
     await screen.findByLabelText("Include id");
+    expect(screen.getByLabelText("Include id")).toHaveClass("accent-primary");
     fireEvent.click(screen.getByRole("button", { name: /^next$/i })); // → Load mode
 
     fireEvent.change(screen.getByLabelText(/load mode/i), { target: { value: "merge" } });

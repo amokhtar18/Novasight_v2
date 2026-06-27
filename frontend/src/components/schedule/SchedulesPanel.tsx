@@ -23,6 +23,7 @@ import { useIdentity } from "@/lib/identity";
 import { CronBuilder } from "@/components/schedule/CronBuilder";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
@@ -308,8 +309,7 @@ function ScheduleFormDialog({
                   key={p.id}
                   className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-accent/40"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={selected.includes(p.id)}
                     onChange={() => toggle(p.id)}
                     aria-label={`Attach ${p.name}`}

@@ -48,6 +48,7 @@ import { PipelineWizard } from "@/components/pipeline/PipelineWizard";
 import { CronBuilder } from "@/components/schedule/CronBuilder";
 import { SchedulesPanel } from "@/components/schedule/SchedulesPanel";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -668,8 +669,7 @@ function EditPipelineDialog({
           <Input id="ep-target" value={target} onChange={(e) => setTarget(e.target.value)} />
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+          <Checkbox
             aria-label="Enabled"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}

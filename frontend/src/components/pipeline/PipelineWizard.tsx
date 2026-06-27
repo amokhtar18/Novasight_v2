@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { useCreatePipeline, useIntrospectSource } from "@/api/hooks";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -364,8 +365,7 @@ export function PipelineWizard({
                 {fields.map((f) => (
                   <tr key={f.source_name} className="border-t border-border/50">
                     <td className="py-1.5">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={`Include ${f.source_name}`}
                         checked={f.included}
                         onChange={(e) => patchField(f.source_name, { included: e.target.checked })}
@@ -443,8 +443,7 @@ export function PipelineWizard({
               <div className="flex flex-wrap gap-2">
                 {includedFields.map((f) => (
                   <label key={f.target_name} className="flex items-center gap-1.5 text-xs">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`Primary key ${f.target_name}`}
                       checked={primaryKey.includes(f.target_name)}
                       onChange={() => setPrimaryKey((pk) => toggleIn(pk, f.target_name))}
@@ -460,8 +459,7 @@ export function PipelineWizard({
               <div className="flex flex-wrap gap-2">
                 {includedFields.map((f) => (
                   <label key={f.target_name} className="flex items-center gap-1.5 text-xs">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`Partition by ${f.target_name}`}
                       checked={partitionBy.includes(f.target_name)}
                       onChange={() => setPartitionBy((p) => toggleIn(p, f.target_name))}
