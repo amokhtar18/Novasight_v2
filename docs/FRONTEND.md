@@ -268,6 +268,9 @@ The core controls share one contract, backed by tokens in `src/index.css`:
   prompt (`NLChartPanel`), the dbt SQL field (`DbtModels`), and the dashboard
   add-object text (`DashboardDetail`) use the hardened `Input`/`Textarea` — no
   more hand-rolled `focus-visible:ring-1` text controls in those screens (slice 3).
+- **Checkboxes:** the chart-format panels and the pipeline/schedule wizards use
+  the hardened `Checkbox` (themed `accent-primary` + shared ring) — no more bare
+  browser-native checkboxes (slice 4).
 
 New composite layers live in `src/components/molecules/` and
 `src/components/organisms/` (atoms stay in `src/components/ui/`).
