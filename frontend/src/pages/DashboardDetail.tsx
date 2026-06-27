@@ -20,7 +20,7 @@ import { defaultSelection } from "@/lib/dashboardFilters";
 import type { FilterSelection, FilterSelections } from "@/lib/dashboardFilters";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
-import { DashboardFilterDrawer } from "@/components/dashboard/DashboardFilterDrawer";
+import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
 import { NativeFilterEditor } from "@/components/dashboard/NativeFilterEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,9 +217,9 @@ export function DashboardDetail() {
           }
         />
       ) : (
-        <div className="flex gap-4">
-          {filters.length > 0 || editing ? (
-            <DashboardFilterDrawer
+        <div className="min-w-0">
+          {(filters.length > 0 || editing) && (
+            <DashboardFilterBar
               filters={filters}
               selections={selections}
               onSelectionChange={onSelectionChange}
@@ -228,18 +228,16 @@ export function DashboardDetail() {
               onAddFilter={() => setEditorFor({ open: true, id: null })}
               onEditFilter={(id) => setEditorFor({ open: true, id })}
             />
-          ) : null}
-          <div className="min-w-0 flex-1">
-            <DashboardGrid
-              tiles={board.tiles}
-              dashboardId={board.id}
-              editing={editing}
-              filters={filters}
-              selections={selections}
-              crossFilter={editing ? [] : crossFilter}
-              onCrossFilter={editing ? undefined : handleCrossFilter}
-            />
-          </div>
+          )}
+          <DashboardGrid
+            tiles={board.tiles}
+            dashboardId={board.id}
+            editing={editing}
+            filters={filters}
+            selections={selections}
+            crossFilter={editing ? [] : crossFilter}
+            onCrossFilter={editing ? undefined : handleCrossFilter}
+          />
         </div>
       )}
 
