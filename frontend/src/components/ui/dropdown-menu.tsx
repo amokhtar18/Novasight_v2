@@ -6,6 +6,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/cn";
+import { focusRing } from "@/components/ui/_shared";
 
 interface DropdownMenuProps {
   trigger: React.ReactNode;
@@ -50,7 +51,7 @@ export function DropdownMenu({
         aria-expanded={open}
         aria-label={label}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn("inline-flex items-center rounded-md", focusRing)}
       >
         {trigger}
       </button>
@@ -58,7 +59,7 @@ export function DropdownMenu({
         <div
           role="menu"
           className={cn(
-            "absolute z-50 mt-2 min-w-44 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-xl animate-in-up",
+            "absolute z-[var(--z-dropdown)] mt-2 min-w-44 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-[var(--elevation-3)] animate-in-up",
             align === "end" ? "right-0" : "left-0",
             className
           )}
