@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { FormatControls, FAMILY_FOR_TYPE } from "@/components/chart/format";
 import type { ChartOptions } from "@/types/api";
 
@@ -25,6 +25,9 @@ describe("FormatControls type-awareness", () => {
   });
   it("renders the cartesian 'Stacked' toggle as the hardened Checkbox", () => {
     render(<FormatControls options={base} setOptions={noop} chartType="bar" />);
+    // The cartesian checkboxes live inside a collapsed <details>; open it first
+    // so the assertion reflects a real (interactable) user state.
+    fireEvent.click(screen.getByText("Cartesian axis options"));
     expect(screen.getByRole("checkbox", { name: "Stacked" })).toHaveClass(
       "accent-primary"
     );
