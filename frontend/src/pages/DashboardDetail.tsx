@@ -218,8 +218,7 @@ export function DashboardDetail() {
         />
       ) : (
         <div className="min-w-0">
-          {(filters.length > 0 || editing) && (
-            <DashboardFilterBar
+          <DashboardFilterBar
               filters={filters}
               selections={selections}
               onSelectionChange={onSelectionChange}
@@ -228,7 +227,6 @@ export function DashboardDetail() {
               onAddFilter={() => setEditorFor({ open: true, id: null })}
               onEditFilter={(id) => setEditorFor({ open: true, id })}
             />
-          )}
           <DashboardGrid
             tiles={board.tiles}
             dashboardId={board.id}

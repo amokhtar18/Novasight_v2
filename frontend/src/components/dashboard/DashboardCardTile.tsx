@@ -64,7 +64,7 @@ export function DashboardCardTile({
     tile.title ?? (tile.kind === "chart" ? tile.chart?.name ?? "Chart" : KIND_LABEL[tile.kind] ?? "Tile");
 
   return (
-    <div className="group/tile flex h-full flex-col rounded-xl border bg-card/70 p-4 shadow-[var(--elevation-1)] transition-shadow hover:shadow-[var(--elevation-3)]">
+    <div className="flex h-full flex-col rounded-xl border bg-card/70 p-4 shadow-[var(--elevation-1)] transition-shadow hover:shadow-[var(--elevation-3)]">
       <div className="mb-2 flex items-center gap-2">
         {editing && (
           <button
