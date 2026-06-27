@@ -264,6 +264,10 @@ The core controls share one contract, backed by tokens in `src/index.css`:
 - **Rolled out:** the shared `focusRing` and the `--z-*` / `--elevation-*`
   tokens are also applied to `Switch`, `Tabs`, `DropdownMenu`, `Badge`, and
   `Checkbox` (slice 2). `Dialog` adopts them in a later pass.
+- **Pages consume the primitives:** the chat box (`Assistant`), the NL-chart
+  prompt (`NLChartPanel`), the dbt SQL field (`DbtModels`), and the dashboard
+  add-object text (`DashboardDetail`) use the hardened `Input`/`Textarea` — no
+  more hand-rolled `focus-visible:ring-1` text controls in those screens (slice 3).
 
 New composite layers live in `src/components/molecules/` and
 `src/components/organisms/` (atoms stay in `src/components/ui/`).
