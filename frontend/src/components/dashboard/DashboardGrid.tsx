@@ -104,8 +104,6 @@ export function DashboardGrid({
     const el = elRef.current?.querySelector<HTMLElement>(`[gs-id="${CSS.escape(tileId)}"]`);
     if (grid && el) grid.update(el, { w, h }); // fires "change" → debounced persist
   }
-  // resizeTile is consumed by DashboardCardTile in Task 3; referenced to avoid an unused warning.
-  void resizeTile;
 
   useEffect(() => {
     if (!elRef.current) return;
@@ -158,6 +156,7 @@ export function DashboardGrid({
               selections={selections}
               crossFilter={crossFilter}
               onCrossFilter={onCrossFilter}
+              onResizeTile={resizeTile}
             />
           </div>
         </div>

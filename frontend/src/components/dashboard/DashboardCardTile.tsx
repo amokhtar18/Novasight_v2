@@ -3,7 +3,7 @@
  *
  * A tile is a `kind`: a pinned `chart` (re-runs its grounded query via useChartData so
  * it always shows current data) or a decoration — `text`, `markdown`, `image`, or
- * `divider`. In edit mode every tile exposes a drag handle (gridstack) and a remove button.
+ * `divider`. In edit mode every tile exposes a drag handle (gridstack), a keyboard-accessible size control, and a remove button.
  *
  * Native filters (Slice C): chart tiles resolve their applicable filters via
  * `resolveTileFilters` and pass them + any date-range overrides to `useChartData`.
@@ -13,6 +13,7 @@
 import { useRef, useState } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
 
+import { TileSizeControl } from "./TileSizeControl";
 import { ChartRenderer, type ChartRendererHandle } from "@/components/chart/ChartRenderer";
 import { ChartActionsMenu } from "@/components/chart/ChartActionsMenu";
 import { DrillByModal } from "@/components/chart/DrillByModal";
@@ -45,6 +46,7 @@ interface TileProps {
   /** Transient cross-filter session overlays (empty list = no overlay). */
   crossFilter?: SemanticFilter[];
   onCrossFilter?: (pairs: SelectionPair[]) => void;
+  onResizeTile?: (tileId: string, w: number, h: number) => void;
 }
 
 export function DashboardCardTile({
@@ -55,6 +57,7 @@ export function DashboardCardTile({
   selections = {},
   crossFilter = [],
   onCrossFilter,
+  onResizeTile,
 }: TileProps) {
   const deleteTile = useDeleteDashboardTile(dashboardId);
 
@@ -80,14 +83,22 @@ export function DashboardCardTile({
         )}
         {tile.kind === "divider" && <span className="flex-1" />}
         {editing && (
-          <button
-            type="button"
-            onClick={() => deleteTile.mutate(tile.id)}
-            aria-label={`Remove ${title}`}
-            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <>
+            <TileSizeControl
+              title={title}
+              w={tile.w}
+              h={tile.h}
+              onResize={(w, h) => onResizeTile?.(tile.id, w, h)}
+            />
+            <button
+              type="button"
+              onClick={() => deleteTile.mutate(tile.id)}
+              aria-label={`Remove ${title}`}
+              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
         )}
       </div>
 
