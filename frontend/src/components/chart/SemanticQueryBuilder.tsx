@@ -203,22 +203,22 @@ function Shelf({
 }
 
 // ---------------------------------------------------------------------------
-// Main component
+// BuilderDnd — owns the DndContext, sensors, drag label, and DragOverlay
 // ---------------------------------------------------------------------------
 
-export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
+export function BuilderDnd({ s, children }: { s: SemanticBuilder; children: React.ReactNode }) {
   const [dragLabel, setDragLabel] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const dims = s.model?.dimensions ?? [];
-  const measures = s.model?.measures ?? [];
-  // Dimensions still available in the palette (not already placed on a shelf).
-  const placedDims = new Set([s.xDim, ...s.breakdown].filter(Boolean));
-  const placedMeasures = new Set(s.measures);
-
   function handleDragStart(e: DragStartEvent) {
     const data = e.active.data.current as DragData | undefined;
-    if (data) setDragLabel(fieldTitle(data.kind === "measure" ? measures : dims, data.field));
+    if (data)
+      setDragLabel(
+        fieldTitle(
+          data.kind === "measure" ? s.model?.measures ?? [] : s.model?.dimensions ?? [],
+          data.field
+        )
+      );
   }
 
   function handleDragEnd(e: DragEndEvent) {
@@ -236,6 +236,30 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
     else if (shelf === "metrics") s.addMeasure(data.field);
   }
 
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      {children}
+      <DragOverlay>
+        {dragLabel ? (
+          <span className="rounded-md border bg-card px-2 py-1 text-xs shadow-[var(--elevation-3)]">
+            {dragLabel}
+          </span>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FieldsPalette — model Select + draggable Dimensions/Measures palette
+// ---------------------------------------------------------------------------
+
+export function FieldsPalette({ s }: { s: SemanticBuilder }) {
   if (s.modelsLoading) return null;
   if (!s.models || s.models.length === 0) {
     return (
@@ -246,182 +270,211 @@ export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
     );
   }
 
+  const dims = s.model?.dimensions ?? [];
+  const measures = s.model?.measures ?? [];
+  const placedDims = new Set([s.xDim, ...s.breakdown].filter(Boolean));
+  const placedMeasures = new Set(s.measures);
+
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={pointerWithin}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="b-model">Model</Label>
-          <Select
-            id="b-model"
-            value={s.modelName}
-            onChange={(e) => s.setModelName(e.target.value)}
-          >
-            {s.models.map((m) => (
-              <option key={m.name} value={m.name}>
-                {m.title}
-              </option>
-            ))}
-          </Select>
-        </div>
+    <>
+      <div className="space-y-1.5">
+        <Label htmlFor="b-model">Model</Label>
+        <Select
+          id="b-model"
+          value={s.modelName}
+          onChange={(e) => s.setModelName(e.target.value)}
+        >
+          {s.models.map((m) => (
+            <option key={m.name} value={m.name}>
+              {m.title}
+            </option>
+          ))}
+        </Select>
+      </div>
 
-        {/* Data palette — draggable governed fields. */}
-        <div className="rounded-lg border bg-card/50 p-2">
-          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <GripVertical className="h-3 w-3" aria-hidden /> Data — drag a field onto a shelf
-          </div>
-          <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
-            Dimensions
-          </p>
-          <div className="mb-2 max-h-40 space-y-1 overflow-y-auto pr-1">
-            {dims.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No dimensions</p>
-            ) : (
-              dims
-                .filter((d) => !placedDims.has(d.name))
-                .map((d) => (
-                  <PaletteChip
-                    key={d.name}
-                    field={d}
-                    kind="dimension"
-                    onAdd={() => (s.xDim ? s.addBreakdown(d.name) : s.setXDim(d.name))}
-                  />
-                ))
-            )}
-          </div>
-          <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
-            Measures
-          </p>
-          <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-            {measures.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No measures</p>
-            ) : (
-              measures
-                .filter((m) => !placedMeasures.has(m.name))
-                .map((m) => (
-                  <PaletteChip
-                    key={m.name}
-                    field={m}
-                    kind="measure"
-                    onAdd={() => s.addMeasure(m.name)}
-                  />
-                ))
-            )}
-          </div>
+      {/* Data palette — draggable governed fields. */}
+      <div className="rounded-lg border bg-card/50 p-2">
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <GripVertical className="h-3 w-3" aria-hidden /> Data — drag a field onto a shelf
         </div>
-
-        {/* Shelves. */}
-        <Shelf id="x" label="X-axis" hint="Drop one dimension" empty={!s.xDim}>
-          {s.xDim && (
-            <PlacedChip label={fieldTitle(dims, s.xDim)} onRemove={() => s.setXDim("")} />
+        <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+          Dimensions
+        </p>
+        <div className="mb-2 max-h-40 space-y-1 overflow-y-auto pr-1">
+          {dims.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No dimensions</p>
+          ) : (
+            dims
+              .filter((d) => !placedDims.has(d.name))
+              .map((d) => (
+                <PaletteChip
+                  key={d.name}
+                  field={d}
+                  kind="dimension"
+                  onAdd={() => (s.xDim ? s.addBreakdown(d.name) : s.setXDim(d.name))}
+                />
+              ))
           )}
-        </Shelf>
-
-        {s.isTimeX && (
-          <div className="space-y-1.5">
-            <Label htmlFor="b-sem-gran">Granularity</Label>
-            <Select
-              id="b-sem-gran"
-              value={s.granularity}
-              onChange={(e) => s.setGranularity(e.target.value as (typeof GRANULARITIES)[number])}
-            >
-              {GRANULARITIES.map((g) => (
-                <option key={g} value={g}>
-                  {humanize(g)}
-                </option>
-              ))}
-            </Select>
-          </div>
-        )}
-
-        <Shelf
-          id="breakdown"
-          label="Breakdown (series)"
-          hint="Drop dimensions to split into series"
-          empty={s.breakdown.length === 0}
-        >
-          {s.breakdown.map((b) => (
-            <PlacedChip
-              key={b}
-              label={fieldTitle(dims, b)}
-              onRemove={() => s.removeBreakdown(b)}
-            />
-          ))}
-        </Shelf>
-
-        <Shelf
-          id="metrics"
-          label="Metrics"
-          hint="Drop one or more measures"
-          empty={s.measures.length === 0}
-        >
-          {s.measures.map((m) => (
-            <PlacedChip
-              key={m}
-              label={fieldTitle(measures, m)}
-              onRemove={() => s.removeMeasure(m)}
-            />
-          ))}
-        </Shelf>
-
-        {s.breakdown.length > 0 && s.measures.length > 1 && (
-          <p className="text-[0.7rem] text-muted-foreground">
-            With a breakdown, only the first metric ({fieldTitle(measures, s.measures[0])}) is
-            plotted as series.
-          </p>
-        )}
-
-        <Shelf
-          id="filters"
-          label="Filters"
-          hint="Drop a field to filter on it"
-          empty={s.filters.length === 0}
-        >
-          {s.filters.map((f) => (
-            <FilterRow
-              key={f.member}
-              filter={f}
-              onChange={(next) =>
-                s.setFilters(s.filters.map((x) => (x.member === f.member ? next : x)))
-              }
-              onRemove={() => s.setFilters(s.filters.filter((x) => x.member !== f.member))}
-            />
-          ))}
-        </Shelf>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="b-sem-type">Chart type</Label>
-          <Select
-            id="b-sem-type"
-            value={s.chartType}
-            onChange={(e) => s.setChartType(e.target.value as ChartType)}
-          >
-            {CHART_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {humanize(t)}
-              </option>
-            ))}
-          </Select>
-          {(s.chartType === "heatmap" || s.chartType === "sankey") && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {s.chartType === "heatmap"
-                ? "Add two dimensions (X, Y) and one measure — the measure colours each cell."
-                : "Add two dimensions (Source, Target) and one measure — the measure is the flow weight."}
-            </p>
+        </div>
+        <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+          Measures
+        </p>
+        <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+          {measures.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No measures</p>
+          ) : (
+            measures
+              .filter((m) => !placedMeasures.has(m.name))
+              .map((m) => (
+                <PaletteChip
+                  key={m.name}
+                  field={m}
+                  kind="measure"
+                  onAdd={() => s.addMeasure(m.name)}
+                />
+              ))
           )}
         </div>
       </div>
+    </>
+  );
+}
 
-      <DragOverlay>
-        {dragLabel ? (
-          <span className="rounded-md border bg-card px-2 py-1 text-xs shadow-[var(--elevation-3)]">{dragLabel}</span>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+// ---------------------------------------------------------------------------
+// Shelves — X-axis, Breakdown, Metrics, Filters + granularity select
+// ---------------------------------------------------------------------------
+
+export function Shelves({ s }: { s: SemanticBuilder }) {
+  const dims = s.model?.dimensions ?? [];
+  const measures = s.model?.measures ?? [];
+
+  return (
+    <>
+      {/* Shelves. */}
+      <Shelf id="x" label="X-axis" hint="Drop one dimension" empty={!s.xDim}>
+        {s.xDim && (
+          <PlacedChip label={fieldTitle(dims, s.xDim)} onRemove={() => s.setXDim("")} />
+        )}
+      </Shelf>
+
+      {s.isTimeX && (
+        <div className="space-y-1.5">
+          <Label htmlFor="b-sem-gran">Granularity</Label>
+          <Select
+            id="b-sem-gran"
+            value={s.granularity}
+            onChange={(e) => s.setGranularity(e.target.value as (typeof GRANULARITIES)[number])}
+          >
+            {GRANULARITIES.map((g) => (
+              <option key={g} value={g}>
+                {humanize(g)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      <Shelf
+        id="breakdown"
+        label="Breakdown (series)"
+        hint="Drop dimensions to split into series"
+        empty={s.breakdown.length === 0}
+      >
+        {s.breakdown.map((b) => (
+          <PlacedChip
+            key={b}
+            label={fieldTitle(dims, b)}
+            onRemove={() => s.removeBreakdown(b)}
+          />
+        ))}
+      </Shelf>
+
+      <Shelf
+        id="metrics"
+        label="Metrics"
+        hint="Drop one or more measures"
+        empty={s.measures.length === 0}
+      >
+        {s.measures.map((m) => (
+          <PlacedChip
+            key={m}
+            label={fieldTitle(measures, m)}
+            onRemove={() => s.removeMeasure(m)}
+          />
+        ))}
+      </Shelf>
+
+      {s.breakdown.length > 0 && s.measures.length > 1 && (
+        <p className="text-[0.7rem] text-muted-foreground">
+          With a breakdown, only the first metric ({fieldTitle(measures, s.measures[0])}) is
+          plotted as series.
+        </p>
+      )}
+
+      <Shelf
+        id="filters"
+        label="Filters"
+        hint="Drop a field to filter on it"
+        empty={s.filters.length === 0}
+      >
+        {s.filters.map((f) => (
+          <FilterRow
+            key={f.member}
+            filter={f}
+            onChange={(next) =>
+              s.setFilters(s.filters.map((x) => (x.member === f.member ? next : x)))
+            }
+            onRemove={() => s.setFilters(s.filters.filter((x) => x.member !== f.member))}
+          />
+        ))}
+      </Shelf>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ChartTypeSelect — chart-type Select + heatmap/sankey hint
+// ---------------------------------------------------------------------------
+
+export function ChartTypeSelect({ s }: { s: SemanticBuilder }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="b-sem-type">Chart type</Label>
+      <Select
+        id="b-sem-type"
+        value={s.chartType}
+        onChange={(e) => s.setChartType(e.target.value as ChartType)}
+      >
+        {CHART_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {humanize(t)}
+          </option>
+        ))}
+      </Select>
+      {(s.chartType === "heatmap" || s.chartType === "sankey") && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {s.chartType === "heatmap"
+            ? "Add two dimensions (X, Y) and one measure — the measure colours each cell."
+            : "Add two dimensions (Source, Target) and one measure — the measure is the flow weight."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SemanticQueryBuilder — compat thin wrapper (removed in Task 2)
+// ---------------------------------------------------------------------------
+
+export function SemanticQueryBuilder({ s }: { s: SemanticBuilder }) {
+  return (
+    <BuilderDnd s={s}>
+      <div className="space-y-4">
+        <FieldsPalette s={s} />
+        <Shelves s={s} />
+        <ChartTypeSelect s={s} />
+      </div>
+    </BuilderDnd>
   );
 }
 
