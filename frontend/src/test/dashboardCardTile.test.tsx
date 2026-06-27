@@ -24,7 +24,6 @@ import type { FilterSelections } from "@/lib/dashboardFilters";
 
 vi.mock("@/lib/useChartData", () => ({ useChartData: vi.fn() }));
 vi.mock("@/api/hooks", () => ({
-  useUpdateDashboardTile: vi.fn(() => ({ mutate: vi.fn() })),
   useDeleteDashboardTile: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 vi.mock("@/components/chart/ChartRenderer", () => ({

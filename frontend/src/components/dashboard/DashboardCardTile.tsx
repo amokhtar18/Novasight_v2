@@ -3,8 +3,7 @@
  *
  * A tile is a `kind`: a pinned `chart` (re-runs its grounded query via useChartData so
  * it always shows current data) or a decoration — `text`, `markdown`, `image`, or
- * `divider`. In edit mode every tile exposes a drag handle (dnd-kit), a size control,
- * and remove.
+ * `divider`. In edit mode every tile exposes a drag handle (gridstack) and a remove button.
  *
  * Native filters (Slice C): chart tiles resolve their applicable filters via
  * `resolveTileFilters` and pass them + any date-range overrides to `useChartData`.
