@@ -70,7 +70,7 @@ guardrails **in order**:
 | # | Guardrail | Rejection trigger |
 |---|---|---|
 | 1 | **UNSATISFIABLE sentinel** | LLM returned exactly `UNSATISFIABLE` |
-| 2 | **JSON parse** | LLM output is not valid JSON |
+| 2 | **JSON parse** | LLM output is not valid JSON *after tolerant recovery* (see below); empty/whitespace output is rejected with a distinct "empty response" message |
 | 3 | **JSON object** | Parsed JSON is not a dict (e.g. an array) |
 | 4 | **Strict schema validation** | Output fails `ChartSpec` validation in `extra="forbid"` mode: unknown/extra fields, wrong `type`, empty `series`, missing `x` for axis chart, invalid `FieldName` pattern |
 | 5 | **AI-path gate (inline query)** | Spec has an inline `query.query` (AI path must use `metric_refs` only) |
@@ -83,6 +83,22 @@ guardrails **in order**:
 The grounding allow-list (guardrails 8 and 10) is the hard tenant-safety gate.  Any
 metric or dimension the LLM invented that does not appear in the governed Cube meta
 for the current tenant is rejected before any data query is issued.
+
+#### Tolerant JSON recovery (guardrail 2)
+
+Models routinely ignore the prompt's "return bare JSON" instruction and wrap the
+spec in a markdown code fence (` ```json … ``` `) or surround it with prose
+("Here is your chart: …").  Before parsing, `_extract_json_candidate()` strips a
+leading/trailing code fence and, failing that, extracts the outermost `{ … }`
+object.  This was the cause of the user-facing *"The generated chart spec is not
+valid JSON"* error: a well-formed spec was being rejected purely on formatting.
+
+This recovery only **widens** what can parse — it never relaxes a guardrail.  The
+recovered candidate is still parsed with `json.loads` and then validated strictly
+(schema + grounding), so non-JSON output (e.g. `SELECT * FROM sales`) and any spec
+that is not a valid, governed `ChartSpec` are still rejected.  If the same error
+persists in practice, check the `NL->Chart generate … preview=` log line and the
+provider `stop_reason` to rule out output truncation (`AI__MAX_TOKENS` too low).
 
 After all guardrails pass, a canonical `ChartSpec` (the shared contract — not the
 internal strict subclass) is returned.

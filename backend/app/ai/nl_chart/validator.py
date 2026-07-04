@@ -56,6 +56,49 @@ logger = logging.getLogger(__name__)
 _UNSATISFIABLE = "UNSATISFIABLE"
 
 
+def _extract_json_candidate(text: str) -> str:
+    """Best-effort recovery of a JSON object string from raw LLM output.
+
+    Models routinely ignore the "return bare JSON" instruction and wrap the spec
+    in a markdown code fence (```` ```json … ``` ````) or surround it with prose.
+    This recovers the embedded object so a well-formed spec is not rejected on a
+    formatting technicality.
+
+    This step only *widens* what can parse — it never relaxes a guardrail.  The
+    recovered candidate is still parsed with ``json.loads`` and then validated
+    strictly (schema + grounding) by the caller, so anything that is not a valid,
+    governed ChartSpec is still rejected.
+
+    Args:
+        text: The stripped raw LLM output.
+
+    Returns:
+        The recovered candidate string (unchanged if no fence/prose was found).
+    """
+    candidate = text.strip()
+
+    # Strip a leading markdown code fence (```` ``` ```` optionally + a lang tag)
+    # and its matching trailing fence, if present.
+    if candidate.startswith("```"):
+        newline = candidate.find("\n")
+        if newline != -1:
+            candidate = candidate[newline + 1 :]
+        candidate = candidate.rstrip()
+        if candidate.endswith("```"):
+            candidate = candidate[:-3]
+        candidate = candidate.strip()
+
+    # If prose still surrounds the object, fall back to the outermost braces.
+    # A clean object already starts/ends with braces, so this is a no-op there.
+    if not (candidate.startswith("{") and candidate.endswith("}")):
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start != -1 and end > start:
+            candidate = candidate[start : end + 1]
+
+    return candidate
+
+
 class ChartValidationError(Exception):
     """Raised when the generated chart spec fails any guardrail.
 
@@ -165,10 +208,16 @@ def validate_chart_spec(
         )
 
     # ------------------------------------------------------------------
-    # 2. JSON parse
+    # 2. JSON parse (tolerant of markdown fences / surrounding prose)
     # ------------------------------------------------------------------
+    if not stripped:
+        raise ChartValidationError(
+            "The chart generator returned an empty response. Please try again."
+        )
+
+    candidate = _extract_json_candidate(stripped)
     try:
-        raw_dict: Any = json.loads(stripped)
+        raw_dict: Any = json.loads(candidate)
     except json.JSONDecodeError as exc:
         logger.warning("Chart spec JSON parse error: %s", exc)
         raise ChartValidationError(

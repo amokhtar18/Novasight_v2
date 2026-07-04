@@ -709,6 +709,55 @@ def test_direct_validator_rejects_malformed_json() -> None:
     assert "json" in exc_info.value.reason.lower()
 
 
+def test_direct_validator_accepts_markdown_fenced_json() -> None:
+    """A spec wrapped in a ```json … ``` fence is recovered and accepted.
+
+    Models routinely wrap output in markdown fences even when told not to; the
+    validator must tolerate this without weakening any downstream guardrail.
+    """
+    fenced = "```json\n" + json.dumps(_VALID_SPEC_DICT) + "\n```"
+    result = validate_chart_spec(
+        fenced,
+        allowed_metrics=_ALLOWED_METRICS,
+        allowed_dimensions=_ALLOWED_DIMS,
+    )
+    assert isinstance(result, ChartSpec)
+    assert result.type == "bar"
+
+
+def test_direct_validator_accepts_bare_fenced_json() -> None:
+    """A spec wrapped in a bare ``` … ``` fence (no language tag) is accepted."""
+    fenced = "```\n" + json.dumps(_VALID_SPEC_DICT) + "\n```"
+    result = validate_chart_spec(
+        fenced,
+        allowed_metrics=_ALLOWED_METRICS,
+        allowed_dimensions=_ALLOWED_DIMS,
+    )
+    assert isinstance(result, ChartSpec)
+
+
+def test_direct_validator_accepts_json_with_preamble() -> None:
+    """Surrounding prose is stripped; the embedded JSON object is recovered."""
+    noisy = "Here is your chart spec:\n" + json.dumps(_VALID_SPEC_DICT) + "\nHope that helps!"
+    result = validate_chart_spec(
+        noisy,
+        allowed_metrics=_ALLOWED_METRICS,
+        allowed_dimensions=_ALLOWED_DIMS,
+    )
+    assert isinstance(result, ChartSpec)
+
+
+def test_direct_validator_rejects_empty_output() -> None:
+    """An empty LLM response is rejected with a clear, user-safe message."""
+    with pytest.raises(ChartValidationError) as exc_info:
+        validate_chart_spec(
+            "   ",
+            allowed_metrics=_ALLOWED_METRICS,
+            allowed_dimensions=_ALLOWED_DIMS,
+        )
+    assert "empty" in exc_info.value.reason.lower()
+
+
 def test_direct_validator_rejects_extra_fields() -> None:
     """Extra JSON fields are rejected (no mutation of the shared ChartSpec contract)."""
     spec_with_extra = {**_VALID_SPEC_DICT, "injected": "payload"}
