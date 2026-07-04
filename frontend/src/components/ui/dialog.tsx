@@ -23,11 +23,20 @@ export function Dialog({ open, onOpenChange, children, title }: DialogProps) {
   const contentRef = React.useRef<HTMLDivElement>(null);
   const previouslyFocused = React.useRef<HTMLElement | null>(null);
 
+  // Hold the latest onOpenChange in a ref so the focus effect can depend only on
+  // `open`. Callers pass an inline arrow (new identity each render); keeping it in
+  // the deps would re-run the effect on every keystroke and steal focus from the
+  // field being typed into.
+  const onOpenChangeRef = React.useRef(onOpenChange);
+  React.useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  });
+
   React.useEffect(() => {
     if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
+      if (e.key === "Escape") onOpenChangeRef.current(false);
     };
     document.addEventListener("keydown", onKey);
     // Focus the first focusable element (or the panel itself).
@@ -42,7 +51,7 @@ export function Dialog({ open, onOpenChange, children, title }: DialogProps) {
       document.body.style.overflow = prevOverflow;
       previouslyFocused.current?.focus?.();
     };
-  }, [open, onOpenChange]);
+  }, [open]);
 
   if (!open) return null;
 
