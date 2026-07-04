@@ -39,6 +39,9 @@
   },
   "model": "opus",
   "enabledPlugins": {
-    "superpowers@superpowers-dev": true
+    "superpowers@superpowers-dev": true,
+    "stitch-build@google-labs-code-stitch-skills": true,
+    "stitch-design@google-labs-code-stitch-skills": true,
+    "stitch-utilities@google-labs-code-stitch-skills": true
   }
 }

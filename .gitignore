@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Superpowers local scratch (session ports/tokens — never commit)
+.superpowers/brainstorm/
+
 # Python
 __pycache__/
 *.py[cod]
