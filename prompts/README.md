@@ -28,6 +28,8 @@ self-contained prompt you paste into Claude Code, one at a time.
 - `phase-6-scale-out.md` — Helm/K8s, cloud multi-tenant, UX polish
 - `phase-7-fine-tuning.md` — ingest hub, M:N schedules, dbt views + lineage, semantic
   wizard v2, charts/dashboards v2, unified AI assistant + agent framework
+- `phase-8-widen-tail.md` — finish-off backlog: drop `local` mode, RBAC depth, REST/SaaS
+  connector, richer chart types, filter-tile values, retire legacy chat, AI-key check
 
 Golden rule reminder: **never hardcode configuration in the backend.** Every task that
 introduces a config value must add it to settings + `.env.example` + `docs/CONFIGURATION.md`.
